@@ -1,0 +1,25 @@
+package tui
+
+import "github.com/charmbracelet/lipgloss"
+
+var (
+	accent    = lipgloss.AdaptiveColor{Light: "#5A3FC0", Dark: "#A08CFF"}
+	subtle    = lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#6C6C6C"}
+	highlight = lipgloss.AdaptiveColor{Light: "#D97706", Dark: "#F5B041"}
+	danger    = lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#FF6B6B"}
+
+	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	dimStyle    = lipgloss.NewStyle().Foreground(subtle)
+	errorStyle  = lipgloss.NewStyle().Foreground(danger)
+	keyStyle    = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
+
+	columnHeaderStyle        = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(subtle)
+	focusedColumnHeaderStyle = columnHeaderStyle.Foreground(highlight)
+
+	cardStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(subtle).
+			Padding(0, 1)
+	selectedCardStyle = cardStyle.BorderForeground(highlight)
+)
