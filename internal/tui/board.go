@@ -38,19 +38,32 @@ func renderBoard(n boardNav, width, height int) string {
 
 	rendered := make([]string, 0, last-first)
 	for c := first; c < last; c++ {
-		rendered = append(rendered, renderColumn(cols[c], c == n.col, n.rowIn(c), colWidth, height))
+		rendered = append(rendered, renderColumn(cols[c], c == n.col, n.rowIn(c), colWidth, height, c == first && first > 0, c == last-1 && last < len(cols)))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }
 
-func renderColumn(col jira.Column, focused bool, row, width, height int) string {
+// headerText fits the column title into width, with arrows at the edges when
+// more columns exist off-screen in that direction.
+func headerText(col jira.Column, width int, moreLeft, moreRight bool) string {
+	left, right := "", ""
+	if moreLeft {
+		left = "◀ "
+	}
+	if moreRight {
+		right = " ▶"
+	}
+	title := ansi.Truncate(fmt.Sprintf("%s (%d)", col.Name, len(col.Issues)), max(0, width-lipgloss.Width(left)-lipgloss.Width(right)), "…")
+	gap := max(0, width-lipgloss.Width(left)-lipgloss.Width(title)-lipgloss.Width(right))
+	return left + title + strings.Repeat(" ", gap) + right
+}
+
+func renderColumn(col jira.Column, focused bool, row, width, height int, moreLeft, moreRight bool) string {
 	header := columnHeaderStyle
 	if focused {
 		header = focusedColumnHeaderStyle
 	}
-	lines := []string{
-		header.Width(width).Render(ansi.Truncate(fmt.Sprintf("%s (%d)", col.Name, len(col.Issues)), width-2, "…")),
-	}
+	lines := []string{header.Width(width).Render(headerText(col, width-2, moreLeft, moreRight))}
 
 	// Reserve the header and both scroll indicator lines.
 	perPage := max(1, (height-3)/cardHeight)

@@ -316,3 +316,21 @@ func TestViewRendersColumnsAndCards(t *testing.T) {
 		}
 	}
 }
+
+func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
+	fb := &fakeBackend{}
+	m := newTestModel(t, "TEST", fb)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
+	m = drain(t, next.(Model), m.Init())
+
+	v := m.View()
+	if strings.Contains(v, "Closed") || !strings.Contains(v, "▶") || strings.Contains(v, "◀") {
+		t.Fatalf("first page should hide Closed and only point right:\n%s", v)
+	}
+
+	m, _ = press(t, m, "l", "l")
+	v = m.View()
+	if !strings.Contains(v, "Closed") || !strings.Contains(v, "◀") || strings.Contains(v, "▶") {
+		t.Fatalf("last page should show Closed and only point left:\n%s", v)
+	}
+}
