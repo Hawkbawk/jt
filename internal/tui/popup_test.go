@@ -47,7 +47,7 @@ func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	}
 
 	m, _ = press(t, m, "j")
-	if m.nav.rows[0] != 0 {
+	if m.nav.row != 0 {
 		t.Fatal("board moved while popup was open")
 	}
 	m, _ = press(t, m, "esc")

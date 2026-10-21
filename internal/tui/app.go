@@ -309,6 +309,9 @@ func (m *Model) setDefaultProject(key string) {
 }
 
 func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "q" {
+		return m, tea.Quit
+	}
 	if !m.hasBoard {
 		return m, nil
 	}
@@ -321,6 +324,10 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.nav.up()
 	case "j", "down":
 		m.nav.down()
+	case "g":
+		m.nav.top()
+	case "G":
+		m.nav.bottom()
 	case "v":
 		if sel := m.nav.selected(); sel != nil {
 			return m, m.openPopup(newTextPopup("Details", sel.Key, renderDetail, m.md), loadIssue(m.backend, sel.Key))
@@ -385,7 +392,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · v view · c comments · m move · ctrl+p projects · ctrl+d quit"
+	help := "hjkl navigate · g/G top/bottom · v view · c comments · m move · ctrl+p projects · q quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}

@@ -38,7 +38,7 @@ func renderBoard(n boardNav, width, height int) string {
 
 	rendered := make([]string, 0, last-first)
 	for c := first; c < last; c++ {
-		rendered = append(rendered, renderColumn(cols[c], c == n.col, n.rows[c], colWidth, height))
+		rendered = append(rendered, renderColumn(cols[c], c == n.col, n.rowIn(c), colWidth, height))
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }

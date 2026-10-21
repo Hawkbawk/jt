@@ -181,6 +181,25 @@ func TestCtrlDQuitsImmediately(t *testing.T) {
 	}
 }
 
+func TestQQuitsFromBoard(t *testing.T) {
+	m, _ := loadedModel(t)
+	if _, cmd := press(t, m, "q"); !isQuit(cmd) {
+		t.Fatal("q did not quit from the board")
+	}
+}
+
+func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
+	m, _ := loadedModel(t)
+	m, _ = press(t, m, "v")
+	if m.popup == nil {
+		t.Fatal("v should open a popup")
+	}
+	m, cmd := press(t, m, "q")
+	if isQuit(cmd) || m.popup != nil {
+		t.Fatal("q in a popup should close it, not quit")
+	}
+}
+
 func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, cmd := press(t, m, "ctrl+c")
@@ -195,7 +214,7 @@ func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 func TestQuitPromptAnswers(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, _ = press(t, m, "ctrl+c", "j")
-	if !m.confirmQuit || m.nav.rows[0] != 0 {
+	if !m.confirmQuit || m.nav.row != 0 {
 		t.Fatal("keys other than y/n should be ignored while prompting")
 	}
 	m, _ = press(t, m, "n")
@@ -221,7 +240,7 @@ func TestBoardKeysMoveFocus(t *testing.T) {
 	if got := m.nav.selected(); got == nil || got.Key != "T-4" {
 		t.Fatalf("selected %v", got)
 	}
-	m, _ = press(t, m, "h", "h", "k")
+	m, _ = press(t, m, "h", "h", "j")
 	if got := m.nav.selected().Key; got != "T-2" {
 		t.Fatalf("selected %s", got)
 	}
