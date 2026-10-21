@@ -10,8 +10,8 @@ type boardNav struct {
 	row   int
 }
 
-func newBoardNav(b *jira.Board) boardNav {
-	return boardNav{board: b}
+func newBoardNav(b *jira.Board) *boardNav {
+	return &boardNav{board: b}
 }
 
 func (n *boardNav) left() {

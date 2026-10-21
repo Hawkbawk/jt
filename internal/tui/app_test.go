@@ -273,8 +273,8 @@ func TestQuitPromptAnswers(t *testing.T) {
 
 func TestStartupLoadsDefaultProjectBoard(t *testing.T) {
 	m, fb := loadedModel(t)
-	if !m.hasBoard || m.loading || len(fb.boardCalls) != 1 || fb.boardCalls[0] != "TEST" {
-		t.Fatalf("board not loaded: hasBoard=%v calls=%v", m.hasBoard, fb.boardCalls)
+	if m.nav == nil || m.loading || len(fb.boardCalls) != 1 || fb.boardCalls[0] != "TEST" {
+		t.Fatalf("board not loaded: board=%v calls=%v", m.nav != nil, fb.boardCalls)
 	}
 }
 
@@ -294,7 +294,7 @@ func TestBoardErrorIsShown(t *testing.T) {
 	fb := &fakeBackend{boardErr: errors.New("boom")}
 	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
-	if m.err == nil || m.hasBoard {
+	if m.err == nil || m.nav != nil {
 		t.Fatal("expected error state")
 	}
 }

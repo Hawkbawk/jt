@@ -56,8 +56,7 @@ type Model struct {
 	openURL  func(string) error
 
 	loading     bool
-	nav         boardNav
-	hasBoard    bool
+	nav         *boardNav
 	status      string
 	err         error
 	confirmQuit bool
@@ -97,7 +96,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m *Model) openPicker() tea.Cmd {
-	m.picker = newPicker(m.hasBoard)
+	m.picker = newPicker(m.nav != nil)
 	m.pickerOpen = true
 	m.resizePicker()
 	if m.projects != nil {
@@ -208,7 +207,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.nav = newBoardNav(msg.board)
-		m.hasBoard = true
 		if msg.focusKey != "" {
 			m.nav.focus(msg.focusKey)
 		}
@@ -297,7 +295,7 @@ func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.pickerOpen = false
 		m.project = p.Key
-		m.hasBoard = false
+		m.nav = nil
 		m.status = ""
 		return m, m.startLoadBoard(p.Key, "")
 	}
@@ -308,7 +306,7 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "q" {
 		return m, tea.Quit
 	}
-	if !m.hasBoard {
+	if m.nav == nil {
 		return m, nil
 	}
 	switch msg.String() {
@@ -378,7 +376,7 @@ func (m Model) headerView() string {
 	if m.project != "" {
 		parts = append(parts, m.project)
 	}
-	if m.hasBoard {
+	if m.nav != nil {
 		parts = append(parts, dimStyle.Render(m.nav.board.Name))
 	}
 	if m.loading {
@@ -392,7 +390,7 @@ func (m Model) bodyView(height int) string {
 	switch {
 	case m.err != nil:
 		body = errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
-	case m.hasBoard:
+	case m.nav != nil:
 		return renderBoard(m.nav, m.width, height)
 	case m.loading:
 		body = m.spinner.View() + " Loading board…"

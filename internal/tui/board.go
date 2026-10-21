@@ -25,7 +25,7 @@ func pageStart(cursor, perPage int) int {
 	return (cursor / perPage) * perPage
 }
 
-func renderBoard(n boardNav, width, height int) string {
+func renderBoard(n *boardNav, width, height int) string {
 	cols := n.board.Columns
 	if len(cols) == 0 || width <= 0 || height <= 0 {
 		return ""

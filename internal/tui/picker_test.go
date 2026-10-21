@@ -37,7 +37,7 @@ func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 
 	m, cmd := press(t, m, "j", "enter")
 	m = drain(t, m, cmd)
-	if m.pickerOpen || m.project != "BETA" || !m.hasBoard {
+	if m.pickerOpen || m.project != "BETA" || m.nav == nil {
 		t.Fatalf("project not opened: open=%v project=%s", m.pickerOpen, m.project)
 	}
 }
@@ -67,7 +67,7 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
 	m, _ = press(t, m, "esc")
-	if m.pickerOpen || !m.hasBoard || m.project != "TEST" {
+	if m.pickerOpen || m.nav == nil || m.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
