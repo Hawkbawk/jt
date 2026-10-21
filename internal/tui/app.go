@@ -20,6 +20,13 @@ type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(key string) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
+	IssueURL(key string) string
+}
+
+// actionDoneMsg reports the result of a yank or open.
+type actionDoneMsg struct {
+	status string
+	err    error
 }
 
 type boardLoadedMsg struct {
@@ -47,6 +54,9 @@ type Model struct {
 	popup popup
 	md    markdownRenderer
 
+	copyText func(string) error
+	openURL  func(string) error
+
 	loading     bool
 	nav         boardNav
 	hasBoard    bool
@@ -59,12 +69,14 @@ type Model struct {
 // opened on start.
 func New(backend Backend, cfg *config.Config, cfgPath string) Model {
 	m := Model{
-		backend: backend,
-		cfg:     cfg,
-		cfgPath: cfgPath,
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
-		project: cfg.DefaultProject,
-		md:      glamourRenderer(glamourStyle()),
+		backend:  backend,
+		cfg:      cfg,
+		cfgPath:  cfgPath,
+		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
+		project:  cfg.DefaultProject,
+		md:       glamourRenderer(glamourStyle()),
+		copyText: copyToClipboard,
+		openURL:  openInBrowser,
 	}
 	if m.project == "" {
 		m.picker = newPicker(false)
@@ -182,6 +194,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.popup = nil
 		m.status = "Moved " + msg.key + " to " + msg.to
 		return m, m.startLoadBoard(m.project, msg.key)
+
+	case actionDoneMsg:
+		if msg.err != nil {
+			m.status = errorStyle.Render(msg.err.Error())
+		} else {
+			m.status = msg.status
+		}
+		return m, nil
 
 	case boardLoadedMsg:
 		if msg.project != m.project {
@@ -340,8 +360,26 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if sel := m.nav.selected(); sel != nil {
 			return m, m.openPopup(newMovePopup(m.backend, sel.Key), loadTransitions(m.backend, sel.Key))
 		}
+	case "y":
+		if sel := m.nav.selected(); sel != nil {
+			return m, runAction(m.copyText, m.backend.IssueURL(sel.Key), "Copied URL for "+sel.Key, "copying URL")
+		}
+	case "o":
+		if sel := m.nav.selected(); sel != nil {
+			return m, runAction(m.openURL, m.backend.IssueURL(sel.Key), "Opened "+sel.Key, "opening browser")
+		}
 	}
 	return m, nil
+}
+
+// runAction calls fn with url off the update loop and reports the outcome.
+func runAction(fn func(string) error, url, status, doing string) tea.Cmd {
+	return func() tea.Msg {
+		if err := fn(url); err != nil {
+			return actionDoneMsg{err: fmt.Errorf("%s: %w", doing, err)}
+		}
+		return actionDoneMsg{status: status}
+	}
 }
 
 // View implements tea.Model.
@@ -392,7 +430,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · g/G top/bottom · v view · c comments · m move · ctrl+p projects · q quit"
+	help := "hjkl navigate · g/G top/bottom · v view · c comments · m move · y yank URL · o open · ctrl+p projects · q quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}

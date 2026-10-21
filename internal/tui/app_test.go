@@ -49,6 +49,8 @@ func (f *fakeBackend) Transition(key, id string) error {
 	return nil
 }
 
+func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
+
 func keyMsg(s string) tea.KeyMsg {
 	switch s {
 	case "ctrl+c":
@@ -197,6 +199,50 @@ func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 	m, cmd := press(t, m, "q")
 	if isQuit(cmd) || m.popup != nil {
 		t.Fatal("q in a popup should close it, not quit")
+	}
+}
+
+func TestYankCopiesIssueURL(t *testing.T) {
+	m, _ := loadedModel(t)
+	var copied string
+	m.copyText = func(s string) error { copied = s; return nil }
+	m, cmd := press(t, m, "j", "y")
+	m = drain(t, m, cmd)
+	if copied != "https://jira.example.com/browse/T-2" {
+		t.Fatalf("copied %q", copied)
+	}
+	if !strings.Contains(m.status, "T-2") {
+		t.Fatalf("status %q", m.status)
+	}
+}
+
+func TestOpenOpensIssueURL(t *testing.T) {
+	m, _ := loadedModel(t)
+	var opened string
+	m.openURL = func(s string) error { opened = s; return nil }
+	_, cmd := press(t, m, "o")
+	drain(t, m, cmd)
+	if opened != "https://jira.example.com/browse/T-1" {
+		t.Fatalf("opened %q", opened)
+	}
+}
+
+func TestActionErrorShowsInStatus(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.copyText = func(string) error { return errors.New("no clipboard") }
+	m, cmd := press(t, m, "y")
+	m = drain(t, m, cmd)
+	if !strings.Contains(m.status, "no clipboard") {
+		t.Fatalf("status %q", m.status)
+	}
+}
+
+func TestYankAndOpenIgnoreEmptyColumn(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.copyText = func(string) error { t.Fatal("copy called"); return nil }
+	m.openURL = func(string) error { t.Fatal("open called"); return nil }
+	if _, cmd := press(t, m, "l", "y", "o"); cmd != nil {
+		t.Fatal("expected no command in an empty column")
 	}
 }
 

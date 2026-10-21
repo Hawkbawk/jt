@@ -239,6 +239,11 @@ func (c *Client) Transition(key, transitionID string) error {
 	return err
 }
 
+// IssueURL returns the browser URL for an issue on the configured server.
+func (c *Client) IssueURL(key string) string {
+	return strings.TrimSuffix(viper.GetString("server"), "/") + "/browse/" + url.PathEscape(key)
+}
+
 type getFunc func(ctx context.Context, path string, headers jcli.Header) (*http.Response, error)
 
 func (c *Client) getJSON(get getFunc, path string, out any) error {
