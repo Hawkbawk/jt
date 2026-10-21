@@ -1,0 +1,280 @@
+package jira
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/ankitpokhrel/jira-cli/api"
+	"github.com/ankitpokhrel/jira-cli/pkg/adf"
+	jcli "github.com/ankitpokhrel/jira-cli/pkg/jira"
+	"github.com/ankitpokhrel/jira-cli/pkg/jira/filter/issue"
+	"github.com/ankitpokhrel/jira-cli/pkg/md"
+	"github.com/spf13/viper"
+)
+
+const (
+	pageSize  = 100
+	maxIssues = 1000
+
+	jiraTimeLayout = "2006-01-02T15:04:05.000-0700"
+	displayLayout  = "2006-01-02 15:04"
+)
+
+// Client talks to Jira using jira-cli's configuration and HTTP client.
+type Client struct {
+	jc    *jcli.Client
+	local bool
+}
+
+// CLIConfigPath mirrors jira-cli's lookup: $JIRA_CONFIG_FILE, then
+// $XDG_CONFIG_HOME/.jira/.config.yml (defaulting to ~/.config).
+func CLIConfigPath(configHome string) string {
+	if f := os.Getenv("JIRA_CONFIG_FILE"); f != "" {
+		return f
+	}
+	return filepath.Join(configHome, ".jira", ".config.yml")
+}
+
+// New loads jira-cli's config file and builds a client from it.
+func New(jiraConfigPath string) (*Client, error) {
+	viper.SetConfigFile(jiraConfigPath)
+	viper.SetEnvPrefix("jira")
+	viper.AutomaticEnv()
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("reading jira-cli config (run `jira init` first): %w", err)
+	}
+	return &Client{
+		jc:    api.DefaultClient(false),
+		local: viper.GetString("installation") == jcli.InstallationTypeLocal,
+	}, nil
+}
+
+// Projects lists the projects visible to the user.
+func (c *Client) Projects() ([]Project, error) {
+	ps, err := c.jc.Project()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Project, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, Project{Key: p.Key, Name: p.Name})
+	}
+	return out, nil
+}
+
+// Board loads the board for a project. A non-zero boardID pins the board;
+// otherwise jira-cli's configured board is used when it belongs to the
+// project, and failing that one is chosen from the project's boards.
+func (c *Client) Board(project string, boardID int) (*Board, error) {
+	if boardID == 0 && viper.GetString("project.key") == project {
+		boardID = viper.GetInt("board.id")
+	}
+
+	var info boardInfo
+	if boardID != 0 {
+		if err := c.getJSON(c.jc.GetV1, fmt.Sprintf("/board/%d", boardID), &info); err != nil {
+			return nil, err
+		}
+	} else {
+		var res struct {
+			Values []boardInfo `json:"values"`
+		}
+		if err := c.getJSON(c.jc.GetV1, "/board?projectKeyOrId="+url.QueryEscape(project), &res); err != nil {
+			return nil, err
+		}
+		var err error
+		if info, err = pickBoard(project, res.Values); err != nil {
+			return nil, err
+		}
+	}
+
+	var cfg boardConfig
+	if err := c.getJSON(c.jc.GetV1, fmt.Sprintf("/board/%d/configuration", info.ID), &cfg); err != nil {
+		return nil, err
+	}
+	cols, err := columnsFrom(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	issues, err := c.boardIssues(info.ID, boardJQL(info.Type))
+	if err != nil {
+		return nil, err
+	}
+	distribute(cols, issues)
+
+	return &Board{ID: info.ID, Name: info.Name, Type: info.Type, Project: project, Columns: cols}, nil
+}
+
+type issueFields struct {
+	Key    string `json:"key"`
+	Fields struct {
+		Summary string `json:"summary"`
+		Status  struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"status"`
+		Assignee *struct {
+			DisplayName string `json:"displayName"`
+		} `json:"assignee"`
+		IssueType struct {
+			Name string `json:"name"`
+		} `json:"issuetype"`
+		Priority *struct {
+			Name string `json:"name"`
+		} `json:"priority"`
+	} `json:"fields"`
+}
+
+func (f issueFields) toIssue() Issue {
+	iss := Issue{
+		Key:      f.Key,
+		Summary:  f.Fields.Summary,
+		StatusID: f.Fields.Status.ID,
+		Status:   f.Fields.Status.Name,
+		Type:     f.Fields.IssueType.Name,
+	}
+	if f.Fields.Assignee != nil {
+		iss.Assignee = f.Fields.Assignee.DisplayName
+	}
+	if f.Fields.Priority != nil {
+		iss.Priority = f.Fields.Priority.Name
+	}
+	return iss
+}
+
+func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
+	var out []Issue
+	for start := 0; start < maxIssues; start += pageSize {
+		path := fmt.Sprintf("/board/%d/issue?jql=%s&fields=summary,status,assignee,issuetype,priority&startAt=%d&maxResults=%d",
+			boardID, url.QueryEscape(jql), start, pageSize)
+		var page struct {
+			Total  int           `json:"total"`
+			Issues []issueFields `json:"issues"`
+		}
+		if err := c.getJSON(c.jc.GetV1, path, &page); err != nil {
+			return nil, err
+		}
+		for _, f := range page.Issues {
+			out = append(out, f.toIssue())
+		}
+		if len(page.Issues) == 0 || start+len(page.Issues) >= page.Total {
+			break
+		}
+	}
+	return out, nil
+}
+
+// Issue fetches an issue with its description and all comments.
+func (c *Client) Issue(key string) (*IssueDetail, error) {
+	iss, err := api.ProxyGetIssue(c.jc, key, issue.NewNumCommentsFilter(1<<16))
+	if err != nil {
+		return nil, err
+	}
+	f := iss.Fields
+	d := &IssueDetail{
+		Issue: Issue{
+			Key:      iss.Key,
+			Summary:  f.Summary,
+			Status:   f.Status.Name,
+			Assignee: f.Assignee.Name,
+			Type:     f.IssueType.Name,
+			Priority: f.Priority.Name,
+		},
+		Description: toMarkdown(f.Description),
+		Reporter:    f.Reporter.Name,
+		Labels:      f.Labels,
+		Created:     formatTime(f.Created),
+		Updated:     formatTime(f.Updated),
+	}
+	for _, cm := range f.Comment.Comments {
+		d.Comments = append(d.Comments, Comment{
+			Author:  cm.Author.DisplayName,
+			Created: formatTime(cm.Created),
+			Body:    toMarkdown(cm.Body),
+		})
+	}
+	return d, nil
+}
+
+// Transitions lists the transitions currently available for an issue.
+func (c *Client) Transitions(key string) ([]Transition, error) {
+	get := c.jc.Get
+	if c.local {
+		get = c.jc.GetV2
+	}
+	var res struct {
+		Transitions []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+			To   struct {
+				Name string `json:"name"`
+			} `json:"to"`
+		} `json:"transitions"`
+	}
+	if err := c.getJSON(get, "/issue/"+url.PathEscape(key)+"/transitions", &res); err != nil {
+		return nil, err
+	}
+	out := make([]Transition, 0, len(res.Transitions))
+	for _, t := range res.Transitions {
+		out = append(out, Transition{ID: t.ID, Name: t.Name, To: t.To.Name})
+	}
+	return out, nil
+}
+
+// Transition moves an issue through the given transition.
+func (c *Client) Transition(key, transitionID string) error {
+	_, err := c.jc.Transition(key, &jcli.TransitionRequest{
+		Transition: &jcli.TransitionRequestData{ID: transitionID},
+	})
+	return err
+}
+
+type getFunc func(ctx context.Context, path string, headers jcli.Header) (*http.Response, error)
+
+func (c *Client) getJSON(get getFunc, path string, out any) error {
+	res, err := get(context.Background(), path, nil)
+	if err != nil {
+		return err
+	}
+	if res == nil {
+		return jcli.ErrEmptyResponse
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != http.StatusOK {
+		var body jcli.Errors
+		_ = json.NewDecoder(res.Body).Decode(&body)
+		return &jcli.ErrUnexpectedResponse{Body: body, Status: res.Status, StatusCode: res.StatusCode}
+	}
+	return json.NewDecoder(res.Body).Decode(out)
+}
+
+// toMarkdown converts an ADF document (cloud) or Jira wiki markup (server) to markdown.
+func toMarkdown(v any) string {
+	switch v := v.(type) {
+	case *adf.ADF:
+		if v == nil {
+			return ""
+		}
+		return adf.NewTranslator(v, adf.NewMarkdownTranslator()).Translate()
+	case string:
+		return md.FromJiraMD(v)
+	default:
+		return ""
+	}
+}
+
+func formatTime(s string) string {
+	t, err := time.Parse(jiraTimeLayout, s)
+	if err != nil {
+		return s
+	}
+	return t.Local().Format(displayLayout)
+}
