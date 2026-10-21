@@ -40,3 +40,16 @@ func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
 	}
 	return b.String()
 }
+
+func renderComments(d *jira.IssueDetail, width int, md markdownRenderer) string {
+	if len(d.Comments) == 0 {
+		return dimStyle.Render("No comments.")
+	}
+	sep := dimStyle.Render(strings.Repeat("─", width))
+	parts := make([]string, 0, len(d.Comments))
+	for _, c := range d.Comments {
+		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + dimStyle.Render(" · "+c.Created)
+		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
+	}
+	return strings.Join(parts, "\n"+sep+"\n")
+}

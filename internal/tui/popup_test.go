@@ -91,3 +91,29 @@ func TestCtrlPClosesPopup(t *testing.T) {
 		t.Fatal("ctrl+p should replace the popup with the picker")
 	}
 }
+
+func TestCommentsPopupShowsAllComments(t *testing.T) {
+	m := loadedDetailModel(t)
+	m, cmd := press(t, m, "c")
+	m = drain(t, m, cmd)
+	p, ok := m.popup.(*textPopup)
+	if !ok || p.title != "Comments" {
+		t.Fatal("c should open the comments popup")
+	}
+	content := renderComments(p.detail, 40, plainMarkdown)
+	for _, want := range []string{"Ada", "first comment", "Grace", "second comment"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("comments missing %q", want)
+		}
+	}
+	m, _ = press(t, m, "q")
+	if m.popup != nil {
+		t.Fatal("q should close the popup")
+	}
+}
+
+func TestRenderCommentsEmpty(t *testing.T) {
+	if got := renderComments(&jira.IssueDetail{}, 40, plainMarkdown); !strings.Contains(got, "No comments") {
+		t.Fatalf("got %q", got)
+	}
+}

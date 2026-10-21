@@ -309,6 +309,10 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if sel := m.nav.selected(); sel != nil {
 			return m, m.openPopup(newTextPopup("Details", sel.Key, renderDetail, m.md), loadIssue(m.backend, sel.Key))
 		}
+	case "c":
+		if sel := m.nav.selected(); sel != nil {
+			return m, m.openPopup(newTextPopup("Comments", sel.Key, renderComments, m.md), loadIssue(m.backend, sel.Key))
+		}
 	}
 	return m, nil
 }
@@ -361,7 +365,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · v view · ctrl+p projects · ctrl+d quit"
+	help := "hjkl navigate · v view · c comments · ctrl+p projects · ctrl+d quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}
