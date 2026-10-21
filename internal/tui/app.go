@@ -44,6 +44,9 @@ type Model struct {
 	picker     picker
 	pickerOpen bool
 
+	popup popup
+	md    markdownRenderer
+
 	loading     bool
 	nav         boardNav
 	hasBoard    bool
@@ -61,12 +64,20 @@ func New(backend Backend, cfg *config.Config, cfgPath string) Model {
 		cfgPath: cfgPath,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
 		project: cfg.DefaultProject,
+		md:      glamourRenderer(glamourStyle()),
 	}
 	if m.project == "" {
 		m.picker = newPicker(false)
 		m.pickerOpen = true
 	}
 	return m
+}
+
+func glamourStyle() string {
+	if lipgloss.HasDarkBackground() {
+		return "dark"
+	}
+	return "light"
 }
 
 // Init implements tea.Model.
@@ -110,6 +121,9 @@ func (m Model) pickerSize() (int, int) {
 
 // busy reports whether anything is waiting on the network.
 func (m Model) busy() bool {
+	if p, ok := m.popup.(interface{ loading() bool }); ok && p.loading() {
+		return true
+	}
 	return m.loading || (m.pickerOpen && !m.picker.loaded && m.picker.err == nil)
 }
 
@@ -135,6 +149,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resizePicker()
+		if m.popup != nil {
+			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -156,6 +173,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.projects = msg.projects
 		m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
 		return m, nil
+
+	case issueLoadedMsg:
+		return m.forwardToPopup(msg)
 
 	case boardLoadedMsg:
 		if msg.project != m.project {
@@ -199,12 +219,31 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if msg.String() == "ctrl+p" && !m.pickerOpen {
+		m.popup = nil
 		return m, m.openPicker()
 	}
 	if m.pickerOpen {
 		return m.handlePickerKey(msg)
 	}
+	if m.popup != nil {
+		return m.forwardToPopup(msg)
+	}
 	return m.handleBoardKey(msg)
+}
+
+func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.popup == nil {
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.popup, cmd = m.popup.update(msg)
+	return m, cmd
+}
+
+func (m *Model) openPopup(p popup, load tea.Cmd) tea.Cmd {
+	p.setSize(popupSize(m.width, m.bodyHeight()))
+	m.popup = p
+	return tea.Batch(load, m.spinner.Tick)
 }
 
 func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -266,6 +305,10 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.nav.up()
 	case "j", "down":
 		m.nav.down()
+	case "v":
+		if sel := m.nav.selected(); sel != nil {
+			return m, m.openPopup(newTextPopup("Details", sel.Key, renderDetail, m.md), loadIssue(m.backend, sel.Key))
+		}
 	}
 	return m, nil
 }
@@ -279,6 +322,8 @@ func (m Model) View() string {
 	if m.pickerOpen {
 		w, h := m.pickerSize()
 		body = overlay(body, m.picker.view(w, h, m.spinner.View()), m.width)
+	} else if m.popup != nil {
+		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
 }
@@ -316,7 +361,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · ctrl+p projects · ctrl+d quit"
+	help := "hjkl navigate · v view · ctrl+p projects · ctrl+d quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}

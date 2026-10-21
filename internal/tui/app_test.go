@@ -123,10 +123,14 @@ func isQuit(cmd tea.Cmd) bool {
 	return ok
 }
 
+func testConfig() *config.Config {
+	return &config.Config{DefaultProject: "TEST"}
+}
+
 func loadedModel(t *testing.T) (Model, *fakeBackend) {
 	t.Helper()
 	fb := &fakeBackend{}
-	m := newTestModel(t, &config.Config{DefaultProject: "TEST"}, fb)
+	m := newTestModel(t, testConfig(), fb)
 	return drain(t, m, m.Init()), fb
 }
 
