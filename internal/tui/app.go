@@ -174,8 +174,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
 		return m, nil
 
-	case issueLoadedMsg:
+	case issueLoadedMsg, transitionsLoadedMsg:
 		return m.forwardToPopup(msg)
+
+	case transitionDoneMsg:
+		if msg.err != nil {
+			return m.forwardToPopup(msg)
+		}
+		m.popup = nil
+		m.status = "Moved " + msg.key + " to " + msg.to
+		return m, m.startLoadBoard(m.project, msg.key)
 
 	case boardLoadedMsg:
 		if msg.project != m.project {
@@ -313,6 +321,10 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if sel := m.nav.selected(); sel != nil {
 			return m, m.openPopup(newTextPopup("Comments", sel.Key, renderComments, m.md), loadIssue(m.backend, sel.Key))
 		}
+	case "m":
+		if sel := m.nav.selected(); sel != nil {
+			return m, m.openPopup(newMovePopup(m.backend, sel.Key), loadTransitions(m.backend, sel.Key))
+		}
 	}
 	return m, nil
 }
@@ -365,7 +377,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · v view · c comments · ctrl+p projects · ctrl+d quit"
+	help := "hjkl navigate · v view · c comments · m move · ctrl+p projects · ctrl+d quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}

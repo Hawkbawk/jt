@@ -19,6 +19,7 @@ type fakeBackend struct {
 	boardErr    error
 	detail      *jira.IssueDetail
 	transitions []jira.Transition
+	moveErr     error
 	moved       []string
 	boardCalls  []string
 }
@@ -40,6 +41,9 @@ func (f *fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail
 func (f *fakeBackend) Transitions(string) ([]jira.Transition, error) { return f.transitions, nil }
 
 func (f *fakeBackend) Transition(key, id string) error {
+	if f.moveErr != nil {
+		return f.moveErr
+	}
 	f.moved = append(f.moved, key+":"+id)
 	return nil
 }
