@@ -11,8 +11,22 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         go = pkgs.go_latest or pkgs.go;
+        buildGoModule = pkgs.buildGoModule.override { inherit go; };
       in
       {
+        packages.default = buildGoModule {
+          pname = "jt";
+          version = self.shortRev or self.dirtyShortRev or "dev";
+          src = self;
+          vendorHash = "sha256-w9Ax26+TgB/YQQ+n2BToXirycrwVv5hqOReQfcjuWEc=";
+          ldflags = [ "-s" "-w" ];
+          meta.mainProgram = "jt";
+        };
+
+        apps.default = flake-utils.lib.mkApp {
+          drv = self.packages.${system}.default;
+        };
+
         devShells.default = pkgs.mkShell {
           packages = [
             go
