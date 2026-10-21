@@ -94,6 +94,16 @@ func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// pressDrain sends keys in order, running each resulting command to completion.
+func pressDrain(t *testing.T, m Model, keys ...string) Model {
+	t.Helper()
+	for _, k := range keys {
+		next, cmd := m.Update(keyMsg(k))
+		m = drain(t, next.(Model), cmd)
+	}
+	return m
+}
+
 // cmdDeadline bounds how long drain waits on a single command. Timers such as
 // spinner ticks and cursor blinks take longer than this and are dropped, which
 // keeps self-rescheduling commands from looping forever.

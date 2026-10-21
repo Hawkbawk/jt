@@ -115,3 +115,21 @@ func TestQDoesNotQuitFromPicker(t *testing.T) {
 		t.Fatal("q quit the app from the picker")
 	}
 }
+
+func TestFilterThenOpen(t *testing.T) {
+	m := newTestModel(t, &config.Config{}, pickerBackend())
+	m = drain(t, m, m.Init())
+
+	m = pressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
+	if m.pickerOpen || m.project != "BETA" {
+		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.project)
+	}
+}
+
+func TestKeysIgnoredWhileProjectsLoad(t *testing.T) {
+	m := newTestModel(t, &config.Config{}, pickerBackend())
+	m, _ = press(t, m, "/", "x")
+	if m.picker.filtering() {
+		t.Fatal("filter started before projects loaded")
+	}
+}

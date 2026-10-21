@@ -65,13 +65,13 @@ func newPicker(cancellable bool) picker {
 	return picker{list: l, cancellable: cancellable}
 }
 
-func (p *picker) setProjects(projects []jira.Project, defaultKey string) {
+func (p *picker) setProjects(projects []jira.Project, defaultKey string) tea.Cmd {
 	items := make([]list.Item, len(projects))
 	for i, pr := range projects {
 		items[i] = projectItem{Project: pr, isDefault: pr.Key == defaultKey}
 	}
-	p.list.SetItems(items)
 	p.loaded = true
+	return p.list.SetItems(items)
 }
 
 // markDefault updates which item shows the default marker.

@@ -93,8 +93,7 @@ func (m *Model) openPicker() tea.Cmd {
 	m.pickerOpen = true
 	m.resizePicker()
 	if m.projects != nil {
-		m.picker.setProjects(m.projects, m.cfg.DefaultProject)
-		return nil
+		return m.picker.setProjects(m.projects, m.cfg.DefaultProject)
 	}
 	return tea.Batch(m.loadProjects(), m.spinner.Tick)
 }
@@ -171,8 +170,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.projects = msg.projects
-		m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
-		return m, nil
+		return m, m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
 
 	case issueLoadedMsg, transitionsLoadedMsg:
 		return m.forwardToPopup(msg)
@@ -200,6 +198,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nav.focus(msg.focusKey)
 		}
 		return m, nil
+	}
+	if m.pickerOpen {
+		// The list filters asynchronously and reports back with its own messages.
+		return m, m.picker.update(msg)
 	}
 	return m, nil
 }
@@ -255,6 +257,12 @@ func (m *Model) openPopup(p popup, load tea.Cmd) tea.Cmd {
 }
 
 func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if !m.picker.loaded {
+		if msg.String() == "esc" && m.picker.cancellable {
+			m.pickerOpen = false
+		}
+		return m, nil
+	}
 	if m.picker.filtering() {
 		return m, m.picker.update(msg)
 	}
