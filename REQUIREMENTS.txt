@@ -1,0 +1,13 @@
+We're going to build a Go TUI that utilizes the bubble-tea TUI framework (and any other packages from charm that might be useful) to build a JIRA TUI. Rather than interact with the JIRA API directly, we're going to  build on the wonderful https://github.com/ankitpokhrel/jira-cli jira-cli and use it as a package that we build into our TUI. we'll let it handle talking to the api, authorization, all that jazz. we're just trying to build a nice display. Here's some requirements:
+1. this project utilizes the XDG config specification to store any config that it needs. It stores its configuration as json.
+2. when opened with no arguments, `jt` opens up into a kanban board of the currently configured project. if no project is configured, it will open up a selector that the user can use to select a project.
+3. that kanban board has columns that depend on the project configuration. for an example, you can view the INTEROP all kanban board.
+4. the kanban board can be moved around using vim key bindings (hjkl). Some other keybindings to include:
+a) pressing c while focused on a ticket will let you view any comments. this should be a popup menu.
+b) pressing m while focused on a ticket will display a popup menu with a list of possible ways to move this ticket, for example, "Move to Closed (Done)", "Move to Closed (Won't Do)", "Move to In Progress", etc.
+c) pressing v while focused on a ticket will let you view it in more detail, showing the title, description, stuff like that, also in a popup menu. if the description is too long or too wide, the user can scroll it using the arrow keys.
+d) the user can press ctrl-p and then the project picker will re-appear. the picker let's them choose a different project to show in just this session, it doesn't change the default. to change the default, the user can press ctrl-p to open the project picker, then space to make it the default, while enter just opens the project.
+5. the tui must respond to ctrl-d and immediately close, while ctrl-c prompts the user. if ctrl-c is hit while the user is being prompted, then the TUI immediately closes.
+6. make sure to include tests wherever you can, particularly around things like state/model management. however, avoid excessive comments or needless/repetitive tests.
+
+Feel free to ask questions as you go to resolve any ambiguities that you run in to. however, for things like style/presentation, make your own decision. if i don't like it, i'll just have you change it in a follow up session.
