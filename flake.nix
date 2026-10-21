@@ -26,6 +26,8 @@
             pkgs.gomodifytags
             pkgs.impl
           ];
+
+          GOFLAGS = "-timeout=10s";
         };
       });
 }
