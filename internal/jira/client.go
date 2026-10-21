@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/ankitpokhrel/jira-cli/api"
@@ -55,7 +57,7 @@ func New(jiraConfigPath string) (*Client, error) {
 	}, nil
 }
 
-// Projects lists the projects visible to the user.
+// Projects lists the projects visible to the user, sorted by key.
 func (c *Client) Projects() ([]Project, error) {
 	ps, err := c.jc.Project()
 	if err != nil {
@@ -65,6 +67,7 @@ func (c *Client) Projects() ([]Project, error) {
 	for _, p := range ps {
 		out = append(out, Project{Key: p.Key, Name: p.Name})
 	}
+	slices.SortFunc(out, func(a, b Project) int { return strings.Compare(a.Key, b.Key) })
 	return out, nil
 }
 
