@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ryanhawkins/jt/internal/config"
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 func pickerBackend() *fakeBackend {

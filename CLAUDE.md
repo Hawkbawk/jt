@@ -31,4 +31,4 @@ Quit behavior: `ctrl-d` exits immediately. `ctrl-c` sets `confirmQuit`, and a se
 ## Conventions
 
 - Tests sit next to the code and focus on model and state transitions. Avoid excessive comments and repetitive tests.
-- Imports are grouped as stdlib, third-party, then `github.com/ryanhawkins/jt/...`.
+- Imports are grouped as stdlib, third-party, then `github.com/hawkbawk/jt/...`.

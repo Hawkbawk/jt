@@ -1,6 +1,6 @@
 package tui
 
-import "github.com/ryanhawkins/jt/internal/jira"
+import "github.com/hawkbawk/jt/internal/jira"
 
 // boardNav tracks the focused column and a row shared by every column, so
 // moving between columns behaves like moving across a grid.

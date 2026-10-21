@@ -7,9 +7,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ryanhawkins/jt/internal/config"
-	"github.com/ryanhawkins/jt/internal/jira"
-	"github.com/ryanhawkins/jt/internal/tui"
+	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui"
 )
 
 func main() {

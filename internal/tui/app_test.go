@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/ryanhawkins/jt/internal/config"
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 type fakeBackend struct {

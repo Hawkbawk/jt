@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 type projectsLoadedMsg struct {

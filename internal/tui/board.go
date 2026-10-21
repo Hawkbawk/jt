@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 const (

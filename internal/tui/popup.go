@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 // popup is a modal shown over the board. update returns nil to close it.

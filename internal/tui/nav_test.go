@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/ryanhawkins/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/jira"
 )
 
 func testBoard() *jira.Board {

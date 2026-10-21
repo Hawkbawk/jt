@@ -1,4 +1,4 @@
-module github.com/ryanhawkins/jt
+module github.com/hawkbawk/jt
 
 go 1.27.3
 
