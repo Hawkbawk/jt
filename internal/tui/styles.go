@@ -22,4 +22,9 @@ var (
 			BorderForeground(subtle).
 			Padding(0, 1)
 	selectedCardStyle = cardStyle.BorderForeground(highlight)
+
+	popupStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(accent).
+			Padding(0, 1)
 )

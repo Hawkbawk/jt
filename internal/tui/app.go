@@ -38,7 +38,12 @@ type Model struct {
 	width, height int
 	spinner       spinner.Model
 
-	project     string
+	project  string
+	projects []jira.Project
+
+	picker     picker
+	pickerOpen bool
+
 	loading     bool
 	nav         boardNav
 	hasBoard    bool
@@ -50,21 +55,66 @@ type Model struct {
 // New builds the root model. The configured default project, if any, is
 // opened on start.
 func New(backend Backend, cfg *config.Config, cfgPath string) Model {
-	return Model{
+	m := Model{
 		backend: backend,
 		cfg:     cfg,
 		cfgPath: cfgPath,
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
 		project: cfg.DefaultProject,
 	}
+	if m.project == "" {
+		m.picker = newPicker(false)
+		m.pickerOpen = true
+	}
+	return m
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	if m.project == "" {
-		return nil
+		return tea.Batch(m.loadProjects(), m.spinner.Tick)
 	}
 	return m.startLoadBoard(m.project, "")
+}
+
+func (m *Model) openPicker() tea.Cmd {
+	m.picker = newPicker(m.hasBoard)
+	m.pickerOpen = true
+	m.resizePicker()
+	if m.projects != nil {
+		m.picker.setProjects(m.projects, m.cfg.DefaultProject)
+		return nil
+	}
+	return tea.Batch(m.loadProjects(), m.spinner.Tick)
+}
+
+func (m Model) loadProjects() tea.Cmd {
+	backend := m.backend
+	return func() tea.Msg {
+		ps, err := backend.Projects()
+		return projectsLoadedMsg{projects: ps, err: err}
+	}
+}
+
+func (m *Model) resizePicker() {
+	if !m.pickerOpen {
+		return
+	}
+	m.picker.setSize(m.pickerSize())
+}
+
+func (m Model) pickerSize() (int, int) {
+	w, h := popupSize(m.width, m.bodyHeight())
+	return min(w, 80), h
+}
+
+// busy reports whether anything is waiting on the network.
+func (m Model) busy() bool {
+	return m.loading || (m.pickerOpen && !m.picker.loaded && m.picker.err == nil)
+}
+
+func (m Model) bodyHeight() int {
+	return max(0, m.height-2)
 }
 
 func (m *Model) startLoadBoard(project, focusKey string) tea.Cmd {
@@ -84,18 +134,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.resizePicker()
 		return m, nil
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if !m.loading {
+		if !m.busy() {
 			return m, nil
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+
+	case projectsLoadedMsg:
+		if msg.err != nil {
+			m.picker.err = msg.err
+			return m, nil
+		}
+		m.projects = msg.projects
+		m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
+		return m, nil
 
 	case boardLoadedMsg:
 		if msg.project != m.project {
@@ -138,7 +198,59 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if msg.String() == "ctrl+p" && !m.pickerOpen {
+		return m, m.openPicker()
+	}
+	if m.pickerOpen {
+		return m.handlePickerKey(msg)
+	}
 	return m.handleBoardKey(msg)
+}
+
+func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.picker.filtering() {
+		return m, m.picker.update(msg)
+	}
+	switch msg.String() {
+	case "esc":
+		if m.picker.list.IsFiltered() {
+			break
+		}
+		if m.picker.cancellable {
+			m.pickerOpen = false
+		}
+		return m, nil
+	case "enter":
+		p, ok := m.picker.selected()
+		if !ok {
+			return m, nil
+		}
+		m.pickerOpen = false
+		m.project = p.Key
+		m.hasBoard = false
+		m.status = ""
+		return m, m.startLoadBoard(p.Key, "")
+	case " ":
+		p, ok := m.picker.selected()
+		if !ok {
+			return m, nil
+		}
+		m.setDefaultProject(p.Key)
+		return m, nil
+	}
+	return m, m.picker.update(msg)
+}
+
+func (m *Model) setDefaultProject(key string) {
+	prev := m.cfg.DefaultProject
+	m.cfg.DefaultProject = key
+	if err := m.cfg.Save(m.cfgPath); err != nil {
+		m.cfg.DefaultProject = prev
+		m.status = errorStyle.Render("Saving config: " + err.Error())
+		return
+	}
+	m.picker.markDefault(key)
+	m.status = "Default project set to " + key
 }
 
 func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -163,10 +275,12 @@ func (m Model) View() string {
 	if m.width == 0 {
 		return ""
 	}
-	header := m.headerView()
-	footer := m.footerView()
-	bodyHeight := m.height - lipgloss.Height(header) - lipgloss.Height(footer)
-	return lipgloss.JoinVertical(lipgloss.Left, header, m.bodyView(bodyHeight), footer)
+	body := m.bodyView(m.bodyHeight())
+	if m.pickerOpen {
+		w, h := m.pickerSize()
+		body = overlay(body, m.picker.view(w, h, m.spinner.View()), m.width)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
 }
 
 func (m Model) headerView() string {
@@ -202,7 +316,7 @@ func (m Model) footerView() string {
 	if m.confirmQuit {
 		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 	}
-	help := "hjkl navigate · ctrl+d quit"
+	help := "hjkl navigate · ctrl+p projects · ctrl+d quit"
 	if m.status != "" {
 		help = m.status + dimStyle.Render(" · ") + help
 	}
