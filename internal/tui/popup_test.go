@@ -23,7 +23,7 @@ func detailBackend() *fakeBackend {
 func loadedDetailModel(t *testing.T) Model {
 	t.Helper()
 	fb := detailBackend()
-	m := newTestModel(t, testConfig(), fb)
+	m := newTestModel(t, "TEST", fb)
 	m.md = plainMarkdown
 	return drain(t, m, m.Init())
 }

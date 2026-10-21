@@ -9,14 +9,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
 // Backend is the Jira functionality the TUI depends on.
 type Backend interface {
+	DefaultProject() string
 	Projects() ([]jira.Project, error)
-	Board(project string, boardID int) (*jira.Board, error)
+	Board(project string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(key string) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
@@ -39,8 +39,6 @@ type boardLoadedMsg struct {
 // Model is the root bubbletea model.
 type Model struct {
 	backend Backend
-	cfg     *config.Config
-	cfgPath string
 
 	width, height int
 	spinner       spinner.Model
@@ -65,15 +63,13 @@ type Model struct {
 	confirmQuit bool
 }
 
-// New builds the root model. The configured default project, if any, is
+// New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend, cfg *config.Config, cfgPath string) Model {
+func New(backend Backend) Model {
 	m := Model{
 		backend:  backend,
-		cfg:      cfg,
-		cfgPath:  cfgPath,
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
-		project:  cfg.DefaultProject,
+		project:  backend.DefaultProject(),
 		md:       glamourRenderer(glamourStyle()),
 		copyText: copyToClipboard,
 		openURL:  openInBrowser,
@@ -105,7 +101,7 @@ func (m *Model) openPicker() tea.Cmd {
 	m.pickerOpen = true
 	m.resizePicker()
 	if m.projects != nil {
-		return m.picker.setProjects(m.projects, m.cfg.DefaultProject)
+		return m.picker.setProjects(m.projects, m.backend.DefaultProject())
 	}
 	return tea.Batch(m.loadProjects(), m.spinner.Tick)
 }
@@ -145,10 +141,9 @@ func (m Model) bodyHeight() int {
 func (m *Model) startLoadBoard(project, focusKey string) tea.Cmd {
 	m.loading = true
 	m.err = nil
-	boardID, _ := m.cfg.BoardFor(project)
 	backend := m.backend
 	load := func() tea.Msg {
-		b, err := backend.Board(project, boardID)
+		b, err := backend.Board(project)
 		return boardLoadedMsg{project: project, board: b, focusKey: focusKey, err: err}
 	}
 	return tea.Batch(load, m.spinner.Tick)
@@ -182,7 +177,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.projects = msg.projects
-		return m, m.picker.setProjects(msg.projects, m.cfg.DefaultProject)
+		return m, m.picker.setProjects(msg.projects, m.backend.DefaultProject())
 
 	case issueLoadedMsg, transitionsLoadedMsg:
 		return m.forwardToPopup(msg)
@@ -305,27 +300,8 @@ func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.hasBoard = false
 		m.status = ""
 		return m, m.startLoadBoard(p.Key, "")
-	case " ":
-		p, ok := m.picker.selected()
-		if !ok {
-			return m, nil
-		}
-		m.setDefaultProject(p.Key)
-		return m, nil
 	}
 	return m, m.picker.update(msg)
-}
-
-func (m *Model) setDefaultProject(key string) {
-	prev := m.cfg.DefaultProject
-	m.cfg.DefaultProject = key
-	if err := m.cfg.Save(m.cfgPath); err != nil {
-		m.cfg.DefaultProject = prev
-		m.status = errorStyle.Render("Saving config: " + err.Error())
-		return
-	}
-	m.picker.markDefault(key)
-	m.status = "Default project set to " + key
 }
 
 func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

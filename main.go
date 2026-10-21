@@ -7,7 +7,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui"
 )
@@ -20,17 +19,11 @@ func main() {
 }
 
 func run() error {
-	cfgPath := config.DefaultPath()
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading %s: %w", cfgPath, err)
-	}
-
-	client, err := jira.New(jira.CLIConfigPath(config.Home()))
+	client, err := jira.New()
 	if err != nil {
 		return err
 	}
 
-	_, err = tea.NewProgram(tui.New(client, cfg, cfgPath), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.New(client), tea.WithAltScreen()).Run()
 	return err
 }

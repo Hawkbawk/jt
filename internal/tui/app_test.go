@@ -2,7 +2,6 @@ package tui
 
 import (
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -10,24 +9,26 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
 type fakeBackend struct {
-	projects    []jira.Project
-	board       *jira.Board
-	boardErr    error
-	detail      *jira.IssueDetail
-	transitions []jira.Transition
-	moveErr     error
-	moved       []string
-	boardCalls  []string
+	defaultProject string
+	projects       []jira.Project
+	board          *jira.Board
+	boardErr       error
+	detail         *jira.IssueDetail
+	transitions    []jira.Transition
+	moveErr        error
+	moved          []string
+	boardCalls     []string
 }
+
+func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
 
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
 
-func (f *fakeBackend) Board(project string, _ int) (*jira.Board, error) {
+func (f *fakeBackend) Board(project string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)
 	if f.boardErr != nil {
 		return nil, f.boardErr
@@ -74,12 +75,13 @@ func keyMsg(s string) tea.KeyMsg {
 	}
 }
 
-func newTestModel(t *testing.T, cfg *config.Config, fb *fakeBackend) Model {
+func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) Model {
 	t.Helper()
+	fb.defaultProject = defaultProject
 	if fb.board == nil {
 		fb.board = testBoard()
 	}
-	m := New(fb, cfg, filepath.Join(t.TempDir(), "config.json"))
+	m := New(fb)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
@@ -165,14 +167,10 @@ func isQuit(cmd tea.Cmd) bool {
 	return ok
 }
 
-func testConfig() *config.Config {
-	return &config.Config{DefaultProject: "TEST"}
-}
-
 func loadedModel(t *testing.T) (Model, *fakeBackend) {
 	t.Helper()
 	fb := &fakeBackend{}
-	m := newTestModel(t, testConfig(), fb)
+	m := newTestModel(t, "TEST", fb)
 	return drain(t, m, m.Init()), fb
 }
 
@@ -294,7 +292,7 @@ func TestBoardKeysMoveFocus(t *testing.T) {
 
 func TestBoardErrorIsShown(t *testing.T) {
 	fb := &fakeBackend{boardErr: errors.New("boom")}
-	m := newTestModel(t, &config.Config{DefaultProject: "TEST"}, fb)
+	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
 	if m.err == nil || m.hasBoard {
 		t.Fatal("expected error state")

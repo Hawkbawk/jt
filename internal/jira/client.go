@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -34,18 +33,17 @@ type Client struct {
 	local bool
 }
 
-// CLIConfigPath mirrors jira-cli's lookup: $JIRA_CONFIG_FILE, then
-// $XDG_CONFIG_HOME/.jira/.config.yml (defaulting to ~/.config).
-func CLIConfigPath(configHome string) string {
+// New loads jira-cli's config file and builds a client from it. Uses the
+// same lookup logic as jira-cli itself.
+func New() (*Client, error) {
 	if f := os.Getenv("JIRA_CONFIG_FILE"); f != "" {
-		return f
+		viper.SetConfigFile(f)
+	} else {
+		viper.AddConfigPath("$XDG_CONFIG_HOME/.jira")
+		viper.AddConfigPath("$HOME/.config/.jira")
+		viper.SetConfigName(".config")
+		viper.SetConfigType("yml")
 	}
-	return filepath.Join(configHome, ".jira", ".config.yml")
-}
-
-// New loads jira-cli's config file and builds a client from it.
-func New(jiraConfigPath string) (*Client, error) {
-	viper.SetConfigFile(jiraConfigPath)
 	viper.SetEnvPrefix("jira")
 	viper.AutomaticEnv()
 	if err := viper.ReadInConfig(); err != nil {
@@ -55,6 +53,11 @@ func New(jiraConfigPath string) (*Client, error) {
 		jc:    api.DefaultClient(false),
 		local: viper.GetString("installation") == jcli.InstallationTypeLocal,
 	}, nil
+}
+
+// DefaultProject returns the project key set in jira-cli's config, if any.
+func (c *Client) DefaultProject() string {
+	return viper.GetString("project.key")
 }
 
 // Projects lists the projects visible to the user, sorted by key.
@@ -71,11 +74,12 @@ func (c *Client) Projects() ([]Project, error) {
 	return out, nil
 }
 
-// Board loads the board for a project. A non-zero boardID pins the board;
-// otherwise jira-cli's configured board is used when it belongs to the
-// project, and failing that one is chosen from the project's boards.
-func (c *Client) Board(project string, boardID int) (*Board, error) {
-	if boardID == 0 && viper.GetString("project.key") == project {
+// Board loads the board for a project. jira-cli's configured board is used
+// when it belongs to the project, otherwise one is chosen from the project's
+// boards.
+func (c *Client) Board(project string) (*Board, error) {
+	var boardID int
+	if c.DefaultProject() == project {
 		boardID = viper.GetInt("board.id")
 	}
 

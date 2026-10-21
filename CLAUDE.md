@@ -18,10 +18,9 @@ The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `G
 
 ## Architecture
 
-Three layers, wired together in `main.go`:
+Two layers, wired together in `main.go`:
 
-- `internal/config`: JSON config at `$XDG_CONFIG_HOME/jt/config.json` (default project, per-project board ID pins). A missing file yields an empty config.
-- `internal/jira`: wraps jira-cli's client. `New` loads jira-cli's own config (`$JIRA_CONFIG_FILE`, else `$XDG_CONFIG_HOME/.jira/.config.yml`) through the global viper instance. `board.go` picks the board for a project, builds the JQL, and maps board column config to `Column`s. Scrum boards load open sprints. Kanban boards load open work plus issues resolved in the last 14 days.
+- `internal/jira`: wraps jira-cli's client. `New` loads jira-cli's own config (`$JIRA_CONFIG_FILE`, else `$XDG_CONFIG_HOME/.jira/.config.yml`) through the global viper instance. jt has no config of its own: the default project is jira-cli's `project.key`, and its `board.id` is used when it belongs to the project. `board.go` picks the board otherwise, builds the JQL, and maps board column config to `Column`s. Scrum boards load open sprints. Kanban boards load open work plus issues resolved in the last 14 days.
 - `internal/tui`: the bubbletea UI. The root `Model` in `app.go` owns the board state (`boardNav` in `nav.go`), the project `picker`, and at most one `popup` (issue view, comments, move menu). It depends on the `Backend` interface defined in `app.go`, not on `*jira.Client`, so tests use fakes. Network calls run as `tea.Cmd`s that return `*LoadedMsg`/`*DoneMsg` types. `Update` routes them, and popups receive their results through `forwardToPopup`.
 
 `system.go` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into `Model` as `copyText` and `openURL` so tests can stub them.

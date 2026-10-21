@@ -30,9 +30,8 @@ func (i projectItem) Description() string { return i.Name }
 func (i projectItem) FilterValue() string { return i.Key + " " + i.Name }
 
 var (
-	pickerOpenKey    = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
-	pickerDefaultKey = key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "set default"))
-	pickerCloseKey   = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
+	pickerOpenKey  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
+	pickerCloseKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
 )
 
 // picker is the project selection popup.
@@ -56,7 +55,7 @@ func newPicker(cancellable bool) picker {
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		keys := []key.Binding{pickerOpenKey, pickerDefaultKey}
+		keys := []key.Binding{pickerOpenKey}
 		if cancellable {
 			keys = append(keys, pickerCloseKey)
 		}
@@ -72,15 +71,6 @@ func (p *picker) setProjects(projects []jira.Project, defaultKey string) tea.Cmd
 	}
 	p.loaded = true
 	return p.list.SetItems(items)
-}
-
-// markDefault updates which item shows the default marker.
-func (p *picker) markDefault(defaultKey string) {
-	for i, it := range p.list.Items() {
-		pi := it.(projectItem)
-		pi.isDefault = pi.Key == defaultKey
-		p.list.SetItem(i, pi)
-	}
 }
 
 func (p *picker) selected() (jira.Project, bool) {

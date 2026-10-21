@@ -8,17 +8,6 @@ import (
 	"github.com/ankitpokhrel/jira-cli/pkg/adf"
 )
 
-func TestCLIConfigPath(t *testing.T) {
-	t.Setenv("JIRA_CONFIG_FILE", "")
-	if got := CLIConfigPath("/cfg"); got != "/cfg/.jira/.config.yml" {
-		t.Errorf("got %s", got)
-	}
-	t.Setenv("JIRA_CONFIG_FILE", "/elsewhere.yml")
-	if got := CLIConfigPath("/cfg"); got != "/elsewhere.yml" {
-		t.Errorf("got %s", got)
-	}
-}
-
 func TestIssueFieldsToIssueHandlesNullFields(t *testing.T) {
 	var f issueFields
 	err := json.Unmarshal([]byte(`{"key": "A-1", "fields": {

@@ -14,7 +14,7 @@ func moveModel(t *testing.T) (Model, *fakeBackend) {
 		{ID: "11", Name: "Start Work", To: "In Progress"},
 		{ID: "12", Name: "Close - Won't Do", To: "Closed"},
 	}}
-	m := newTestModel(t, testConfig(), fb)
+	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
 	m, _ = press(t, m, "j")
 	m, cmd := press(t, m, "m")
