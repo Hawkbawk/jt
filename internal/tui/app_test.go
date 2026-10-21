@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -93,18 +94,43 @@ func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// cmdDeadline bounds how long drain waits on a single command. Timers such as
+// spinner ticks and cursor blinks take longer than this and are dropped, which
+// keeps self-rescheduling commands from looping forever.
+const (
+	cmdDeadline = 50 * time.Millisecond
+	maxSteps    = 1000
+)
+
+func runCmd(c tea.Cmd) (tea.Msg, bool) {
+	done := make(chan tea.Msg, 1)
+	go func() { done <- c() }()
+	select {
+	case msg := <-done:
+		return msg, true
+	case <-time.After(cmdDeadline):
+		return nil, false
+	}
+}
+
 // drain runs cmd and feeds resulting messages back into the model until
-// no more work is produced. Spinner ticks are skipped to avoid sleeping.
+// no more immediate work is produced.
 func drain(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
 	queue := []tea.Cmd{cmd}
-	for len(queue) > 0 {
+	for steps := 0; len(queue) > 0; steps++ {
+		if steps > maxSteps {
+			t.Fatal("drain: too many commands, likely a message loop")
+		}
 		c := queue[0]
 		queue = queue[1:]
 		if c == nil {
 			continue
 		}
-		msg := c()
+		msg, ok := runCmd(c)
+		if !ok {
+			continue
+		}
 		switch msg := msg.(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
