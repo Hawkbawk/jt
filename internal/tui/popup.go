@@ -117,6 +117,13 @@ func (p *textPopup) view(spin string) string {
 // markdownRenderer renders markdown wrapped to width.
 type markdownRenderer func(md string, width int) string
 
+func glamourStyle() string {
+	if lipgloss.HasDarkBackground() {
+		return "dark"
+	}
+	return "light"
+}
+
 func glamourRenderer(style string) markdownRenderer {
 	return func(md string, width int) string {
 		r, err := glamour.NewTermRenderer(

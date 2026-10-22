@@ -203,7 +203,7 @@ func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 func TestYankCopiesIssueURL(t *testing.T) {
 	m, _ := loadedModel(t)
 	var copied string
-	m.copyText = func(s string) error { copied = s; return nil }
+	m.actions.copyText = func(s string) error { copied = s; return nil }
 	m, cmd := press(t, m, "j", "y")
 	m = drain(t, m, cmd)
 	if copied != "https://jira.example.com/browse/T-2" {
@@ -217,7 +217,7 @@ func TestYankCopiesIssueURL(t *testing.T) {
 func TestOpenOpensIssueURL(t *testing.T) {
 	m, _ := loadedModel(t)
 	var opened string
-	m.openURL = func(s string) error { opened = s; return nil }
+	m.actions.openURL = func(s string) error { opened = s; return nil }
 	_, cmd := press(t, m, "o")
 	drain(t, m, cmd)
 	if opened != "https://jira.example.com/browse/T-1" {
@@ -227,7 +227,7 @@ func TestOpenOpensIssueURL(t *testing.T) {
 
 func TestActionErrorShowsInStatus(t *testing.T) {
 	m, _ := loadedModel(t)
-	m.copyText = func(string) error { return errors.New("no clipboard") }
+	m.actions.copyText = func(string) error { return errors.New("no clipboard") }
 	m, cmd := press(t, m, "y")
 	m = drain(t, m, cmd)
 	if !strings.Contains(m.status, "no clipboard") {
@@ -237,8 +237,8 @@ func TestActionErrorShowsInStatus(t *testing.T) {
 
 func TestYankAndOpenIgnoreEmptyColumn(t *testing.T) {
 	m, _ := loadedModel(t)
-	m.copyText = func(string) error { t.Fatal("copy called"); return nil }
-	m.openURL = func(string) error { t.Fatal("open called"); return nil }
+	m.actions.copyText = func(string) error { t.Fatal("copy called"); return nil }
+	m.actions.openURL = func(string) error { t.Fatal("open called"); return nil }
 	if _, cmd := press(t, m, "l", "y", "o"); cmd != nil {
 		t.Fatal("expected no command in an empty column")
 	}
@@ -247,7 +247,7 @@ func TestYankAndOpenIgnoreEmptyColumn(t *testing.T) {
 func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, cmd := press(t, m, "ctrl+c")
-	if isQuit(cmd) || !m.confirmQuit {
+	if isQuit(cmd) || !m.quit.confirming {
 		t.Fatal("first ctrl+c should prompt, not quit")
 	}
 	if _, cmd = press(t, m, "ctrl+c"); !isQuit(cmd) {
@@ -258,11 +258,11 @@ func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 func TestQuitPromptAnswers(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, _ = press(t, m, "ctrl+c", "j")
-	if !m.confirmQuit || m.nav.row != 0 {
+	if !m.quit.confirming || m.board.nav.row != 0 {
 		t.Fatal("keys other than y/n should be ignored while prompting")
 	}
 	m, _ = press(t, m, "n")
-	if m.confirmQuit {
+	if m.quit.confirming {
 		t.Fatal("n should dismiss the prompt")
 	}
 	m, _ = press(t, m, "ctrl+c")
@@ -273,19 +273,19 @@ func TestQuitPromptAnswers(t *testing.T) {
 
 func TestStartupLoadsDefaultProjectBoard(t *testing.T) {
 	m, fb := loadedModel(t)
-	if m.nav == nil || m.loading || len(fb.boardCalls) != 1 || fb.boardCalls[0] != "TEST" {
-		t.Fatalf("board not loaded: board=%v calls=%v", m.nav != nil, fb.boardCalls)
+	if m.board.nav == nil || m.board.loading || len(fb.boardCalls) != 1 || fb.boardCalls[0] != "TEST" {
+		t.Fatalf("board not loaded: board=%v calls=%v", m.board.nav != nil, fb.boardCalls)
 	}
 }
 
 func TestBoardKeysMoveFocus(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, _ = press(t, m, "j", "j", "l", "l")
-	if got := m.nav.selected(); got == nil || got.Key != "T-4" {
+	if got := m.board.nav.selected(); got == nil || got.Key != "T-4" {
 		t.Fatalf("selected %v", got)
 	}
 	m, _ = press(t, m, "h", "h", "j")
-	if got := m.nav.selected().Key; got != "T-2" {
+	if got := m.board.nav.selected().Key; got != "T-2" {
 		t.Fatalf("selected %s", got)
 	}
 }
@@ -294,7 +294,7 @@ func TestBoardErrorIsShown(t *testing.T) {
 	fb := &fakeBackend{boardErr: errors.New("boom")}
 	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
-	if m.err == nil || m.nav != nil {
+	if m.board.err == nil || m.board.nav != nil {
 		t.Fatal("expected error state")
 	}
 }
@@ -302,7 +302,7 @@ func TestBoardErrorIsShown(t *testing.T) {
 func TestStaleBoardIsIgnored(t *testing.T) {
 	m, _ := loadedModel(t)
 	next, _ := m.Update(boardLoadedMsg{project: "OTHER", board: &jira.Board{Name: "stale"}})
-	if next.(Model).nav.board.Name == "stale" {
+	if next.(Model).board.nav.board.Name == "stale" {
 		t.Fatal("board for a different project replaced the current one")
 	}
 }

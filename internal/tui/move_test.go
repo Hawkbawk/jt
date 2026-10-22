@@ -52,7 +52,7 @@ func TestMoveAppliesTransitionAndReloadsBoard(t *testing.T) {
 	if len(fb.boardCalls) != 2 {
 		t.Fatalf("board should reload, calls = %v", fb.boardCalls)
 	}
-	if sel := m.nav.selected(); sel == nil || sel.Key != "T-2" {
+	if sel := m.board.nav.selected(); sel == nil || sel.Key != "T-2" {
 		t.Fatalf("focus should follow the moved issue, got %v", sel)
 	}
 	if !strings.Contains(m.status, "Moved T-2 to Closed") {

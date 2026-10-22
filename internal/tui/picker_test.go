@@ -17,15 +17,15 @@ func TestStartupWithoutDefaultOpensPicker(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "", fb)
 	m = drain(t, m, m.Init())
-	if !m.pickerOpen || m.picker.cancellable || len(m.picker.list.Items()) != 2 {
-		t.Fatalf("picker not shown: open=%v items=%d", m.pickerOpen, len(m.picker.list.Items()))
+	if !m.picker.open || m.picker.cancellable || len(m.picker.list.Items()) != 2 {
+		t.Fatalf("picker not shown: open=%v items=%d", m.picker.open, len(m.picker.list.Items()))
 	}
 	if len(fb.boardCalls) != 0 {
 		t.Fatal("board loaded without a project")
 	}
 
 	m, _ = press(t, m, "esc")
-	if !m.pickerOpen {
+	if !m.picker.open {
 		t.Fatal("startup picker should not be dismissable without a board")
 	}
 }
@@ -37,8 +37,8 @@ func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 
 	m, cmd := press(t, m, "j", "enter")
 	m = drain(t, m, cmd)
-	if m.pickerOpen || m.project != "BETA" || m.nav == nil {
-		t.Fatalf("project not opened: open=%v project=%s", m.pickerOpen, m.project)
+	if m.picker.open || m.board.project != "BETA" || m.board.nav == nil {
+		t.Fatalf("project not opened: open=%v project=%s", m.picker.open, m.board.project)
 	}
 }
 
@@ -63,11 +63,11 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 
 	m, cmd := press(t, m, "ctrl+p")
 	m = drain(t, m, cmd)
-	if !m.pickerOpen || !m.picker.cancellable {
+	if !m.picker.open || !m.picker.cancellable {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
 	m, _ = press(t, m, "esc")
-	if m.pickerOpen || m.nav == nil || m.project != "TEST" {
+	if m.picker.open || m.board.nav == nil || m.board.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
@@ -90,8 +90,8 @@ func TestFilterThenOpen(t *testing.T) {
 	m = drain(t, m, m.Init())
 
 	m = pressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
-	if m.pickerOpen || m.project != "BETA" {
-		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.project)
+	if m.picker.open || m.board.project != "BETA" {
+		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.board.project)
 	}
 }
 

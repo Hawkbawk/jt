@@ -24,7 +24,7 @@ func loadedDetailModel(t *testing.T) Model {
 	t.Helper()
 	fb := detailBackend()
 	m := newTestModel(t, "TEST", fb)
-	m.md = plainMarkdown
+	m.actions.md = plainMarkdown
 	return drain(t, m, m.Init())
 }
 
@@ -47,7 +47,7 @@ func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	}
 
 	m, _ = press(t, m, "j")
-	if m.nav.row != 0 {
+	if m.board.nav.row != 0 {
 		t.Fatal("board moved while popup was open")
 	}
 	m, _ = press(t, m, "esc")
@@ -87,7 +87,7 @@ func TestStaleIssueLoadIsIgnored(t *testing.T) {
 func TestCtrlPClosesPopup(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "v", "ctrl+p")
-	if m.popup != nil || !m.pickerOpen {
+	if m.popup != nil || !m.picker.open {
 		t.Fatal("ctrl+p should replace the popup with the picker")
 	}
 }

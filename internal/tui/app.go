@@ -2,12 +2,8 @@
 package tui
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -23,106 +19,47 @@ type Backend interface {
 	IssueURL(key string) string
 }
 
-// actionDoneMsg reports the result of a yank or open.
-type actionDoneMsg struct {
-	status string
-	err    error
-}
-
-type boardLoadedMsg struct {
-	project  string
-	board    *jira.Board
-	focusKey string
-	err      error
-}
-
-// Model is the root bubbletea model.
+// Model is the root bubbletea model. It routes input and messages to the
+// board, project picker and at most one popup, and controls high-level
+// or broadly used state.
 type Model struct {
-	backend Backend
-
 	width, height int
 	spinner       spinner.Model
+	status        string
 
-	project  string
-	projects []jira.Project
-
-	picker     picker
-	pickerOpen bool
-
-	popup popup
-	md    markdownRenderer
-
-	copyText func(string) error
-	openURL  func(string) error
-
-	loading     bool
-	nav         *boardNav
-	status      string
-	err         error
-	confirmQuit bool
+	board   boardPane
+	picker  picker
+	popup   popup
+	actions issueActions
+	quit    quitGuard
 }
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
 func New(backend Backend) Model {
 	m := Model{
-		backend:  backend,
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
-		project:  backend.DefaultProject(),
-		md:       glamourRenderer(glamourStyle()),
-		copyText: copyToClipboard,
-		openURL:  openInBrowser,
+		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
+		board:   newBoardPane(backend),
+		picker:  newPicker(backend),
+		actions: newIssueActions(backend),
 	}
-	if m.project == "" {
-		m.picker = newPicker(false)
-		m.pickerOpen = true
+	if m.board.project == "" {
+		m.picker.show(false)
 	}
 	return m
 }
 
-func glamourStyle() string {
-	if lipgloss.HasDarkBackground() {
-		return "dark"
-	}
-	return "light"
-}
-
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	if m.project == "" {
-		return tea.Batch(m.loadProjects(), m.spinner.Tick)
+	if m.board.project == "" {
+		return m.startBusy(m.picker.fetch())
 	}
-	return m.startLoadBoard(m.project, "")
+	return m.startBusy(m.board.fetch(m.board.project, ""))
 }
 
-func (m *Model) openPicker() tea.Cmd {
-	m.picker = newPicker(m.nav != nil)
-	m.pickerOpen = true
-	m.resizePicker()
-	if m.projects != nil {
-		return m.picker.setProjects(m.projects, m.backend.DefaultProject())
-	}
-	return tea.Batch(m.loadProjects(), m.spinner.Tick)
-}
-
-func (m Model) loadProjects() tea.Cmd {
-	backend := m.backend
-	return func() tea.Msg {
-		ps, err := backend.Projects()
-		return projectsLoadedMsg{projects: ps, err: err}
-	}
-}
-
-func (m *Model) resizePicker() {
-	if !m.pickerOpen {
-		return
-	}
-	m.picker.setSize(m.pickerSize())
-}
-
-func (m Model) pickerSize() (int, int) {
-	w, h := popupSize(m.width, m.bodyHeight())
-	return min(w, 80), h
+// startBusy runs cmd alongside the spinner.
+func (m Model) startBusy(cmd tea.Cmd) tea.Cmd {
+	return tea.Batch(cmd, m.spinner.Tick)
 }
 
 // busy reports whether anything is waiting on the network.
@@ -130,22 +67,11 @@ func (m Model) busy() bool {
 	if p, ok := m.popup.(interface{ loading() bool }); ok && p.loading() {
 		return true
 	}
-	return m.loading || (m.pickerOpen && !m.picker.loaded && m.picker.err == nil)
+	return m.board.loading || m.picker.loading()
 }
 
 func (m Model) bodyHeight() int {
 	return max(0, m.height-2)
-}
-
-func (m *Model) startLoadBoard(project, focusKey string) tea.Cmd {
-	m.loading = true
-	m.err = nil
-	backend := m.backend
-	load := func() tea.Msg {
-		b, err := backend.Board(project)
-		return boardLoadedMsg{project: project, board: b, focusKey: focusKey, err: err}
-	}
-	return tea.Batch(load, m.spinner.Tick)
 }
 
 // Update implements tea.Model.
@@ -153,7 +79,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.resizePicker()
+		m.picker.setSize(m.width, m.bodyHeight())
 		if m.popup != nil {
 			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
 		}
@@ -170,13 +96,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
-	case projectsLoadedMsg:
-		if msg.err != nil {
-			m.picker.err = msg.err
-			return m, nil
-		}
-		m.projects = msg.projects
-		return m, m.picker.setProjects(msg.projects, m.backend.DefaultProject())
+	case projectSelectedMsg:
+		m.status = ""
+		return m, m.startBusy(m.board.open(msg.key))
+
+	case boardLoadedMsg:
+		m.board.update(msg)
+		return m, nil
 
 	case issueLoadedMsg, transitionsLoadedMsg:
 		return m.forwardToPopup(msg)
@@ -187,71 +113,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.popup = nil
 		m.status = "Moved " + msg.key + " to " + msg.to
-		return m, m.startLoadBoard(m.project, msg.key)
+		return m, m.startBusy(m.board.reload(msg.key))
 
 	case actionDoneMsg:
-		if msg.err != nil {
-			m.status = errorStyle.Render(msg.err.Error())
-		} else {
-			m.status = msg.status
-		}
-		return m, nil
-
-	case boardLoadedMsg:
-		if msg.project != m.project {
-			return m, nil
-		}
-		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		m.nav = newBoardNav(msg.board)
-		if msg.focusKey != "" {
-			m.nav.focus(msg.focusKey)
-		}
+		m.status = msg.display()
 		return m, nil
 	}
-	if m.pickerOpen {
-		// The list filters asynchronously and reports back with its own messages.
-		return m, m.picker.update(msg)
-	}
-	return m, nil
+	// The picker's list filters asynchronously and reports back with its own
+	// messages.
+	return m, m.picker.update(msg)
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+d":
-		return m, tea.Quit
-	case "ctrl+c":
-		if m.confirmQuit {
+	key := msg.String()
+	if consumed, quit := m.quit.handle(key); consumed {
+		if quit {
 			return m, tea.Quit
-		}
-		m.confirmQuit = true
-		return m, nil
-	}
-
-	if m.confirmQuit {
-		switch msg.String() {
-		case "y", "Y":
-			return m, tea.Quit
-		case "n", "N", "esc":
-			m.confirmQuit = false
 		}
 		return m, nil
 	}
 
-	if msg.String() == "ctrl+p" && !m.pickerOpen {
+	switch {
+	case key == "ctrl+p" && !m.picker.open:
 		m.popup = nil
-		return m, m.openPicker()
-	}
-	if m.pickerOpen {
-		return m.handlePickerKey(msg)
-	}
-	if m.popup != nil {
+		return m, m.startBusy(m.picker.show(m.board.nav != nil))
+	case m.picker.open:
+		return m, m.picker.update(msg)
+	case m.popup != nil:
 		return m.forwardToPopup(msg)
 	}
-	return m.handleBoardKey(msg)
+	return m.handleBoardKey(key)
+}
+
+func (m Model) handleBoardKey(key string) (tea.Model, tea.Cmd) {
+	if key == "q" {
+		return m, tea.Quit
+	}
+	if m.board.move(key) {
+		return m, nil
+	}
+	sel := m.board.selected()
+	if sel == nil {
+		return m, nil
+	}
+	p, cmd := m.actions.handle(key, sel.Key)
+	if p != nil {
+		return m, m.openPopup(p, cmd)
+	}
+	return m, cmd
 }
 
 func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -263,150 +172,9 @@ func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// openPopup shows p and runs load, the command that fills it.
 func (m *Model) openPopup(p popup, load tea.Cmd) tea.Cmd {
 	p.setSize(popupSize(m.width, m.bodyHeight()))
 	m.popup = p
-	return tea.Batch(load, m.spinner.Tick)
-}
-
-func (m Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if !m.picker.loaded {
-		if msg.String() == "esc" && m.picker.cancellable {
-			m.pickerOpen = false
-		}
-		return m, nil
-	}
-	if m.picker.filtering() {
-		return m, m.picker.update(msg)
-	}
-	switch msg.String() {
-	case "esc":
-		if m.picker.list.IsFiltered() {
-			break
-		}
-		if m.picker.cancellable {
-			m.pickerOpen = false
-		}
-		return m, nil
-	case "enter":
-		p, ok := m.picker.selected()
-		if !ok {
-			return m, nil
-		}
-		m.pickerOpen = false
-		m.project = p.Key
-		m.nav = nil
-		m.status = ""
-		return m, m.startLoadBoard(p.Key, "")
-	}
-	return m, m.picker.update(msg)
-}
-
-func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "q" {
-		return m, tea.Quit
-	}
-	if m.nav == nil {
-		return m, nil
-	}
-	switch msg.String() {
-	case "h", "left":
-		m.nav.left()
-	case "l", "right":
-		m.nav.right()
-	case "k", "up":
-		m.nav.up()
-	case "j", "down":
-		m.nav.down()
-	case "g":
-		m.nav.top()
-	case "G":
-		m.nav.bottom()
-	case "v":
-		if sel := m.nav.selected(); sel != nil {
-			return m, m.openPopup(newTextPopup("Details", sel.Key, renderDetail, m.md), loadIssue(m.backend, sel.Key))
-		}
-	case "c":
-		if sel := m.nav.selected(); sel != nil {
-			return m, m.openPopup(newTextPopup("Comments", sel.Key, renderComments, m.md), loadIssue(m.backend, sel.Key))
-		}
-	case "m":
-		if sel := m.nav.selected(); sel != nil {
-			return m, m.openPopup(newMovePopup(m.backend, sel.Key), loadTransitions(m.backend, sel.Key))
-		}
-	case "y":
-		if sel := m.nav.selected(); sel != nil {
-			return m, runAction(m.copyText, m.backend.IssueURL(sel.Key), "Copied URL for "+sel.Key, "copying URL")
-		}
-	case "o":
-		if sel := m.nav.selected(); sel != nil {
-			return m, runAction(m.openURL, m.backend.IssueURL(sel.Key), "Opened "+sel.Key, "opening browser")
-		}
-	}
-	return m, nil
-}
-
-// runAction calls fn with url off the update loop and reports the outcome.
-func runAction(fn func(string) error, url, status, doing string) tea.Cmd {
-	return func() tea.Msg {
-		if err := fn(url); err != nil {
-			return actionDoneMsg{err: fmt.Errorf("%s: %w", doing, err)}
-		}
-		return actionDoneMsg{status: status}
-	}
-}
-
-// View implements tea.Model.
-func (m Model) View() string {
-	if m.width == 0 {
-		return ""
-	}
-	body := m.bodyView(m.bodyHeight())
-	if m.pickerOpen {
-		w, h := m.pickerSize()
-		body = overlay(body, m.picker.view(w, h, m.spinner.View()), m.width)
-	} else if m.popup != nil {
-		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.footerView())
-}
-
-func (m Model) headerView() string {
-	parts := []string{titleStyle.Render("jt")}
-	if m.project != "" {
-		parts = append(parts, m.project)
-	}
-	if m.nav != nil {
-		parts = append(parts, dimStyle.Render(m.nav.board.Name))
-	}
-	if m.loading {
-		parts = append(parts, m.spinner.View())
-	}
-	return headerStyle.Width(m.width).Render(strings.Join(parts, dimStyle.Render(" · ")))
-}
-
-func (m Model) bodyView(height int) string {
-	var body string
-	switch {
-	case m.err != nil:
-		body = errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
-	case m.nav != nil:
-		return renderBoard(m.nav, m.width, height)
-	case m.loading:
-		body = m.spinner.View() + " Loading board…"
-	default:
-		body = dimStyle.Render("No project selected.")
-	}
-	return lipgloss.Place(m.width, height, lipgloss.Center, lipgloss.Center, body)
-}
-
-func (m Model) footerView() string {
-	if m.confirmQuit {
-		return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
-	}
-	help := "hjkl navigate · g/G top/bottom · v view · c comments · m move · y yank URL · o open · ctrl+p projects · q quit"
-	if m.status != "" {
-		help = m.status + dimStyle.Render(" · ") + help
-	}
-	return dimStyle.Padding(0, 1).Width(m.width).Render(help)
+	return m.startBusy(load)
 }
