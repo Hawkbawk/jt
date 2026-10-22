@@ -23,7 +23,7 @@
           pname = "jt";
           version = self.shortRev or self.dirtyShortRev or "dev";
           src = self;
-          vendorHash = "sha256-w9Ax26+TgB/YQQ+n2BToXirycrwVv5hqOReQfcjuWEc=";
+          vendorHash = "sha256-/nuwjVoi2n6wRG1j2ap14py9nfnAuMZXI3JwyZveC5g=";
           ldflags = [ "-s" "-w" ];
           checkFlags = [ "-timeout=10s" ];
           meta.mainProgram = "jt";
