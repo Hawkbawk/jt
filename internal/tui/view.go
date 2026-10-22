@@ -6,8 +6,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const helpText = "hjkl navigate · g/G top/bottom · v view · c comments · m move · y yank URL · o open · ctrl+p projects · q quit"
-
 // View implements tea.Model.
 func (m Model) View() string {
 	if m.width == 0 {
@@ -32,9 +30,11 @@ func (m Model) footerView() string {
 	if m.quit.confirming {
 		return m.quit.view()
 	}
-	help := helpText
+	prefix := ""
 	if m.status != "" {
-		help = m.status + dimStyle.Render(" · ") + help
+		prefix = m.status + dimStyle.Render(" · ")
 	}
-	return dimStyle.Padding(0, 1).Width(m.width).Render(help)
+	h := m.help
+	h.Width = max(0, m.width-2-lipgloss.Width(prefix))
+	return dimStyle.Padding(0, 1).Width(m.width).Render(prefix + h.View(keys))
 }

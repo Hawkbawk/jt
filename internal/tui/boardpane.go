@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -72,22 +73,22 @@ func (b *boardPane) update(msg boardLoadedMsg) {
 }
 
 // move applies a navigation key and reports whether it was one.
-func (b *boardPane) move(key string) bool {
+func (b *boardPane) move(msg tea.KeyMsg) bool {
 	if b.nav == nil {
 		return false
 	}
-	switch key {
-	case "h", "left":
+	switch {
+	case key.Matches(msg, keys.left):
 		b.nav.left()
-	case "l", "right":
+	case key.Matches(msg, keys.right):
 		b.nav.right()
-	case "k", "up":
+	case key.Matches(msg, keys.up):
 		b.nav.up()
-	case "j", "down":
+	case key.Matches(msg, keys.down):
 		b.nav.down()
-	case "g":
+	case key.Matches(msg, keys.top):
 		b.nav.top()
-	case "G":
+	case key.Matches(msg, keys.bottom):
 		b.nav.bottom()
 	default:
 		return false

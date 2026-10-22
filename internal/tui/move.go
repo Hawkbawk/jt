@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -22,10 +23,10 @@ type transitionDoneMsg struct {
 	err error
 }
 
-func loadTransitions(b Backend, key string) tea.Cmd {
+func loadTransitions(b Backend, issueKey string) tea.Cmd {
 	return func() tea.Msg {
-		ts, err := b.Transitions(key)
-		return transitionsLoadedMsg{key: key, transitions: ts, err: err}
+		ts, err := b.Transitions(issueKey)
+		return transitionsLoadedMsg{key: issueKey, transitions: ts, err: err}
 	}
 }
 
@@ -42,8 +43,8 @@ type movePopup struct {
 	width       int
 }
 
-func newMovePopup(b Backend, key string) *movePopup {
-	return &movePopup{key: key, backend: b}
+func newMovePopup(b Backend, issueKey string) *movePopup {
+	return &movePopup{key: issueKey, backend: b}
 }
 
 func (p *movePopup) setSize(width, _ int) {
@@ -65,26 +66,26 @@ func (p *movePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 			p.applying, p.err = false, msg.err
 		}
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "q":
+		switch {
+		case key.Matches(msg, keys.close):
 			return nil, nil
-		case "j", "down":
+		case key.Matches(msg, keys.down):
 			if p.cursor < len(p.transitions)-1 {
 				p.cursor++
 			}
-		case "k", "up":
+		case key.Matches(msg, keys.up):
 			if p.cursor > 0 {
 				p.cursor--
 			}
-		case "enter":
+		case key.Matches(msg, keys.accept):
 			if p.applying || p.cursor >= len(p.transitions) {
 				break
 			}
 			p.applying, p.err = true, nil
 			t := p.transitions[p.cursor]
-			b, key := p.backend, p.key
+			b, issueKey := p.backend, p.key
 			return p, func() tea.Msg {
-				return transitionDoneMsg{key: key, to: t.To, err: b.Transition(key, t.ID)}
+				return transitionDoneMsg{key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
 			}
 		}
 	}

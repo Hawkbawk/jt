@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -37,19 +38,19 @@ func newIssueActions(b Backend) issueActions {
 	}
 }
 
-// handle returns the command for key on the given issue. Keys that open a
+// handle returns the command for msg on the given issue. Keys that open a
 // popup also return it, with the command that loads its content.
-func (a issueActions) handle(key, issueKey string) (popup, tea.Cmd) {
-	switch key {
-	case "v":
+func (a issueActions) handle(msg tea.KeyMsg, issueKey string) (popup, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.view):
 		return newTextPopup("Details", issueKey, renderDetail, a.md), loadIssue(a.backend, issueKey)
-	case "c":
+	case key.Matches(msg, keys.comments):
 		return newTextPopup("Comments", issueKey, renderComments, a.md), loadIssue(a.backend, issueKey)
-	case "m":
+	case key.Matches(msg, keys.move):
 		return newMovePopup(a.backend, issueKey), loadTransitions(a.backend, issueKey)
-	case "y":
+	case key.Matches(msg, keys.yank):
 		return nil, runAction(a.copyText, a.backend.IssueURL(issueKey), "Copied URL for "+issueKey, "copying URL")
-	case "o":
+	case key.Matches(msg, keys.open):
 		return nil, runAction(a.openURL, a.backend.IssueURL(issueKey), "Opened "+issueKey, "opening browser")
 	}
 	return nil, nil

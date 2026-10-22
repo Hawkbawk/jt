@@ -161,7 +161,7 @@ func (p *picker) update(msg tea.Msg) tea.Cmd {
 
 func (p *picker) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if !p.loaded {
-		if msg.String() == "esc" && p.cancellable {
+		if key.Matches(msg, pickerCloseKey) && p.cancellable {
 			p.open = false
 		}
 		return nil
@@ -169,8 +169,8 @@ func (p *picker) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if p.filtering() {
 		return p.forward(msg)
 	}
-	switch msg.String() {
-	case "esc":
+	switch {
+	case key.Matches(msg, pickerCloseKey):
 		if p.list.IsFiltered() {
 			break
 		}
@@ -178,7 +178,7 @@ func (p *picker) handleKey(msg tea.KeyMsg) tea.Cmd {
 			p.open = false
 		}
 		return nil
-	case "enter":
+	case key.Matches(msg, pickerOpenKey):
 		sel, ok := p.selected()
 		if !ok {
 			return nil

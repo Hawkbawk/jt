@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
@@ -24,10 +25,10 @@ type issueLoadedMsg struct {
 	err    error
 }
 
-func loadIssue(b Backend, key string) tea.Cmd {
+func loadIssue(b Backend, issueKey string) tea.Cmd {
 	return func() tea.Msg {
-		d, err := b.Issue(key)
-		return issueLoadedMsg{key: key, detail: d, err: err}
+		d, err := b.Issue(issueKey)
+		return issueLoadedMsg{key: issueKey, detail: d, err: err}
 	}
 }
 
@@ -48,10 +49,10 @@ type textPopup struct {
 	height int
 }
 
-func newTextPopup(title, key string, render issueRenderer, md markdownRenderer) *textPopup {
+func newTextPopup(title, issueKey string, render issueRenderer, md markdownRenderer) *textPopup {
 	vp := viewport.New(0, 0)
 	vp.SetHorizontalStep(4)
-	return &textPopup{title: title, key: key, render: render, md: md, vp: vp}
+	return &textPopup{title: title, key: issueKey, render: render, md: md, vp: vp}
 }
 
 func (p *textPopup) setSize(width, height int) {
@@ -78,8 +79,7 @@ func (p *textPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		p.refresh()
 		return p, nil
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "q":
+		if key.Matches(msg, keys.close) {
 			return nil, nil
 		}
 	}

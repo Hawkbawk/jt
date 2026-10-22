@@ -2,6 +2,8 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -26,6 +28,7 @@ type Model struct {
 	width, height int
 	spinner       spinner.Model
 	status        string
+	help          help.Model
 
 	board   boardPane
 	picker  picker
@@ -39,6 +42,7 @@ type Model struct {
 func New(backend Backend) Model {
 	m := Model{
 		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
+		help:    newHelp(),
 		board:   newBoardPane(backend),
 		picker:  newPicker(backend),
 		actions: newIssueActions(backend),
@@ -125,8 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	if consumed, quit := m.quit.handle(key); consumed {
+	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
 		}
@@ -134,7 +137,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
-	case key == "ctrl+p" && !m.picker.open:
+	case key.Matches(msg, keys.projects) && !m.picker.open:
 		m.popup = nil
 		return m, m.startBusy(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
@@ -142,21 +145,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case m.popup != nil:
 		return m.forwardToPopup(msg)
 	}
-	return m.handleBoardKey(key)
+	return m.handleBoardKey(msg)
 }
 
-func (m Model) handleBoardKey(key string) (tea.Model, tea.Cmd) {
-	if key == "q" {
+func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, keys.quit) {
 		return m, tea.Quit
 	}
-	if m.board.move(key) {
+	if m.board.move(msg) {
 		return m, nil
 	}
 	sel := m.board.selected()
 	if sel == nil {
 		return m, nil
 	}
-	p, cmd := m.actions.handle(key, sel.Key)
+	p, cmd := m.actions.handle(msg, sel.Key)
 	if p != nil {
 		return m, m.openPopup(p, cmd)
 	}
