@@ -3,6 +3,8 @@ package jira
 import (
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 )
 
 const (
@@ -19,6 +21,13 @@ type boardInfo struct {
 	Location struct {
 		ProjectKey string `json:"projectKey"`
 	} `json:"location"`
+}
+
+type quickFilterList struct {
+	Values []struct {
+		Name string `json:"name"`
+		JQL  string `json:"jql"`
+	} `json:"values"`
 }
 
 type boardConfig struct {
@@ -53,6 +62,47 @@ func boardJQL(boardType string) string {
 		return scrumJQL
 	}
 	return kanbanJQL
+}
+
+// combineJQL narrows base with an extra condition.
+func combineJQL(base, extra string) string {
+	if extra == "" {
+		return base
+	}
+	return "(" + base + ") AND (" + extra + ")"
+}
+
+// quickFilters maps the board's configured quick filters to Filters.
+func quickFilters(res quickFilterList) []Filter {
+	out := make([]Filter, 0, len(res.Values))
+	for _, q := range res.Values {
+		out = append(out, Filter{Name: q.Name, JQL: q.JQL})
+	}
+	return out
+}
+
+// assigneeFilters builds one filter per distinct assignee, sorted by name,
+// with unassigned issues last.
+func assigneeFilters(issues []Issue) []Filter {
+	seen := make(map[string]bool)
+	var out []Filter
+	unassigned := false
+	for _, iss := range issues {
+		if iss.AssigneeID == "" {
+			unassigned = true
+			continue
+		}
+		if seen[iss.AssigneeID] {
+			continue
+		}
+		seen[iss.AssigneeID] = true
+		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID)})
+	}
+	slices.SortFunc(out, func(a, b Filter) int { return strings.Compare(a.Name, b.Name) })
+	if unassigned {
+		out = append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})
+	}
+	return out
 }
 
 func columnsFrom(cfg boardConfig) ([]Column, error) {

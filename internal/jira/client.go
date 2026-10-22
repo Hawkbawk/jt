@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -76,8 +77,8 @@ func (c *Client) Projects() ([]Project, error) {
 
 // Board loads the board for a project. jira-cli's configured board is used
 // when it belongs to the project, otherwise one is chosen from the project's
-// boards.
-func (c *Client) Board(project string) (*Board, error) {
+// boards. filterJQL, when set, narrows the issues loaded.
+func (c *Client) Board(project, filterJQL string) (*Board, error) {
 	var boardID int
 	if c.DefaultProject() == project {
 		boardID = viper.GetInt("board.id")
@@ -110,13 +111,24 @@ func (c *Client) Board(project string) (*Board, error) {
 		return nil, err
 	}
 
-	issues, err := c.boardIssues(info.ID, boardJQL(info.Type))
+	issues, err := c.boardIssues(info.ID, combineJQL(boardJQL(info.Type), filterJQL))
 	if err != nil {
 		return nil, err
 	}
 	distribute(cols, issues)
 
-	return &Board{ID: info.ID, Name: info.Name, Type: info.Type, Project: project, Columns: cols}, nil
+	// Quick filters are optional, so a failed lookup leaves the list empty
+	// instead of failing the load.
+	var qf quickFilterList
+	var quick []Filter
+	if err := c.getJSON(c.jc.GetV1, fmt.Sprintf("/board/%d/quickfilter", info.ID), &qf); err == nil {
+		quick = quickFilters(qf)
+	}
+
+	return &Board{
+		ID: info.ID, Name: info.Name, Type: info.Type, Project: project, Columns: cols,
+		QuickFilters: quick, Assignees: assigneeFilters(issues),
+	}, nil
 }
 
 type issueFields struct {
@@ -129,6 +141,8 @@ type issueFields struct {
 		} `json:"status"`
 		Assignee *struct {
 			DisplayName string `json:"displayName"`
+			AccountID   string `json:"accountId"`
+			Name        string `json:"name"`
 		} `json:"assignee"`
 		IssueType struct {
 			Name string `json:"name"`
@@ -149,6 +163,7 @@ func (f issueFields) toIssue() Issue {
 	}
 	if f.Fields.Assignee != nil {
 		iss.Assignee = f.Fields.Assignee.DisplayName
+		iss.AssigneeID = cmp.Or(f.Fields.Assignee.AccountID, f.Fields.Assignee.Name)
 	}
 	if f.Fields.Priority != nil {
 		iss.Priority = f.Fields.Priority.Name

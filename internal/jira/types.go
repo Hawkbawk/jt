@@ -16,8 +16,11 @@ type Issue struct {
 	StatusID string
 	Status   string
 	Assignee string
-	Type     string
-	Priority string
+	// AssigneeID identifies the assignee in JQL: the account ID on cloud, the
+	// username on server.
+	AssigneeID string
+	Type       string
+	Priority   string
 }
 
 // Column is a board column and the issues whose status maps to it.
@@ -34,6 +37,16 @@ type Board struct {
 	Type    string
 	Project string
 	Columns []Column
+	// QuickFilters are the board's configured quick filters. Assignees has one
+	// filter per person on the loaded issues.
+	QuickFilters []Filter
+	Assignees    []Filter
+}
+
+// Filter narrows a board to the issues matching JQL.
+type Filter struct {
+	Name string
+	JQL  string
 }
 
 // Comment is a single issue comment rendered as markdown.

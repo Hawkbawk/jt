@@ -11,6 +11,7 @@ type boardKeys struct {
 	left, right, up, down, top, bottom key.Binding
 	view, comments, move, yank, open   key.Binding
 	refresh, projects, quit, close     key.Binding
+	filter, nextTab, prevTab           key.Binding
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
 
@@ -30,6 +31,7 @@ var keys = boardKeys{
 	move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
 	yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
 	open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
+	filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 	refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	projects: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "projects")),
 	quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
@@ -43,6 +45,8 @@ var keys = boardKeys{
 	accept:    key.NewBinding(key.WithKeys("enter")),
 	send:      key.NewBinding(key.WithKeys("ctrl+s")),
 	blur:      key.NewBinding(key.WithKeys("esc")),
+	nextTab:   key.NewBinding(key.WithKeys("tab")),
+	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),
 
 	navigate:  key.NewBinding(key.WithHelp("hjkl", "navigate")),
 	topBottom: key.NewBinding(key.WithHelp("g/G", "top/bottom")),
@@ -50,7 +54,7 @@ var keys = boardKeys{
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.yank, k.open, k.refresh, k.projects, k.quit}
+	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.yank, k.open, k.filter, k.refresh, k.projects, k.quit}
 }
 
 // FullHelp implements help.KeyMap.

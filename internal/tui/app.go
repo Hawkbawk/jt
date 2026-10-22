@@ -14,7 +14,7 @@ import (
 type Backend interface {
 	DefaultProject() string
 	Projects() ([]jira.Project, error)
-	Board(project string) (*jira.Board, error)
+	Board(project, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(key string) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
@@ -112,6 +112,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case issueLoadedMsg, transitionsLoadedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
+	case filterSelectedMsg:
+		m.status = ""
+		return m, m.startBusy(m.board.setFilter(msg.filter))
+
 	case transitionDoneMsg:
 		if msg.err != nil {
 			return m.forwardToPopup(msg)
@@ -164,6 +168,9 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = ""
 		return m, m.startBusy(m.board.reload(focusKey))
+	}
+	if key.Matches(msg, keys.filter) && m.board.nav != nil {
+		return m, m.openPopup(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter), nil)
 	}
 	if sel == nil {
 		return m, nil

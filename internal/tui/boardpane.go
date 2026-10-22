@@ -20,11 +20,14 @@ type boardLoadedMsg struct {
 // boardPane owns the current project's board: loading it, tracking focus and
 // rendering the body of the screen.
 type boardPane struct {
-	backend Backend
-	project string
-	nav     *boardNav
-	loading bool
-	err     error
+	backend   Backend
+	project   string
+	nav       *boardNav
+	filter    *jira.Filter
+	quick     []jira.Filter
+	assignees []jira.Filter
+	loading   bool
+	err       error
 }
 
 func newBoardPane(b Backend) boardPane {
@@ -35,8 +38,12 @@ func newBoardPane(b Backend) boardPane {
 // fetch loads project's board without touching the pane's state.
 func (b boardPane) fetch(project, focusKey string) tea.Cmd {
 	backend := b.backend
+	filterJQL := ""
+	if b.filter != nil {
+		filterJQL = b.filter.JQL
+	}
 	return func() tea.Msg {
-		board, err := backend.Board(project)
+		board, err := backend.Board(project, filterJQL)
 		return boardLoadedMsg{project: project, board: board, focusKey: focusKey, err: err}
 	}
 }
@@ -45,6 +52,13 @@ func (b boardPane) fetch(project, focusKey string) tea.Cmd {
 func (b *boardPane) open(project string) tea.Cmd {
 	b.project = project
 	b.nav = nil
+	b.filter, b.quick, b.assignees = nil, nil, nil
+	return b.reload("")
+}
+
+// setFilter narrows the board to f, or shows everything when f is nil.
+func (b *boardPane) setFilter(f *jira.Filter) tea.Cmd {
+	b.filter = f
 	return b.reload("")
 }
 
@@ -65,6 +79,11 @@ func (b *boardPane) update(msg boardLoadedMsg) {
 	if msg.err != nil {
 		b.err = msg.err
 		return
+	}
+	// A filtered board only knows its own assignees, so the options come from
+	// the unfiltered load.
+	if b.filter == nil {
+		b.quick, b.assignees = msg.board.QuickFilters, msg.board.Assignees
 	}
 	b.nav = newBoardNav(msg.board)
 	if msg.focusKey != "" {
@@ -112,6 +131,9 @@ func (b boardPane) headerParts(spin string) []string {
 	}
 	if b.nav != nil {
 		parts = append(parts, dimStyle.Render(b.nav.board.Name))
+	}
+	if b.filter != nil {
+		parts = append(parts, "filter: "+b.filter.Name)
 	}
 	if b.loading {
 		parts = append(parts, spin)

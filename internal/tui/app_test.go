@@ -24,14 +24,16 @@ type fakeBackend struct {
 	comments       []string
 	commentErr     error
 	boardCalls     []string
+	filterCalls    []string
 }
 
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
 
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
 
-func (f *fakeBackend) Board(project string) (*jira.Board, error) {
+func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)
+	f.filterCalls = append(f.filterCalls, filterJQL)
 	if f.boardErr != nil {
 		return nil, f.boardErr
 	}
@@ -74,6 +76,10 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlS}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "shift+tab":
+		return tea.KeyMsg{Type: tea.KeyShiftTab}
 	case "enter":
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case " ":

@@ -91,3 +91,34 @@ func TestTransitionLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestCombineJQL(t *testing.T) {
+	if got := combineJQL("a OR b", ""); got != "a OR b" {
+		t.Fatalf("got %q", got)
+	}
+	if got := combineJQL("a OR b", "c"); got != "(a OR b) AND (c)" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestAssigneeFilters(t *testing.T) {
+	got := assigneeFilters([]Issue{
+		{Assignee: "Zed", AssigneeID: "z1"},
+		{},
+		{Assignee: "Amy", AssigneeID: "a1"},
+		{Assignee: "Amy", AssigneeID: "a1"},
+	})
+	want := []Filter{
+		{Name: "Amy", JQL: `assignee = "a1"`},
+		{Name: "Zed", JQL: `assignee = "z1"`},
+		{Name: "Unassigned", JQL: "assignee is EMPTY"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("filter %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
