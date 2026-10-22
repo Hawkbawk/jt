@@ -1,0 +1,26 @@
+name: Cachix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v16
+        with:
+          name: hawkbawk-jt
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build
+        run: nix build
