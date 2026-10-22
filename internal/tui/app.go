@@ -18,6 +18,7 @@ type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(key string) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
+	AddComment(key, body string) error
 	IssueURL(key string) string
 }
 
@@ -108,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg:
+	case issueLoadedMsg, transitionsLoadedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
 	case transitionDoneMsg:

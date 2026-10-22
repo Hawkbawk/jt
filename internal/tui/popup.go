@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/hawkbawk/jt/internal/jira"
@@ -47,6 +49,10 @@ type textPopup struct {
 	vp     viewport.Model
 	width  int
 	height int
+
+	// reserved is the number of lines an embedding popup draws below the
+	// viewport.
+	reserved int
 }
 
 func newTextPopup(title, issueKey string, render issueRenderer, md markdownRenderer) *textPopup {
@@ -59,7 +65,7 @@ func (p *textPopup) setSize(width, height int) {
 	p.width, p.height = width, height
 	p.vp.Width = width - popupStyle.GetHorizontalFrameSize()
 	// Title and hint lines sit above and below the viewport.
-	p.vp.Height = max(1, height-popupStyle.GetVerticalFrameSize()-2)
+	p.vp.Height = max(1, height-popupStyle.GetVerticalFrameSize()-2-p.reserved)
 	p.refresh()
 }
 
@@ -93,41 +99,55 @@ func (p *textPopup) loading() bool {
 }
 
 func (p *textPopup) view(spin string) string {
+	return p.compose(spin, "", dimStyle.Render(fmt.Sprintf("%3.f%% · ↑↓←→ scroll · esc close", p.vp.ScrollPercent()*100)))
+}
+
+// compose lays out the title, content, optional below block and hint. The hint
+// only shows once the content has loaded.
+func (p *textPopup) compose(spin, below, hint string) string {
 	innerW := p.width - popupStyle.GetHorizontalFrameSize()
 	title := titleStyle.Render(p.title + " · " + p.key)
 
-	var body, hint string
+	var body string
 	switch {
 	case p.err != nil:
 		body = errorStyle.Render("Error: " + p.err.Error())
+		hint = ""
 	case p.loading():
 		body = spin + " Loading…"
+		hint = ""
 	default:
 		body = p.vp.View()
-		hint = fmt.Sprintf("%3.f%% · ↑↓←→ scroll · esc close", p.vp.ScrollPercent()*100)
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		title,
-		lipgloss.NewStyle().Height(p.vp.Height).MaxHeight(p.vp.Height).Render(body),
-		dimStyle.Render(hint),
-	)
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(content)
+	parts := []string{title, lipgloss.NewStyle().Height(p.vp.Height).MaxHeight(p.vp.Height).Render(body)}
+	if below != "" {
+		parts = append(parts, below)
+	}
+	parts = append(parts, hint)
+	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 // markdownRenderer renders markdown wrapped to width.
 type markdownRenderer func(md string, width int) string
 
-func glamourStyle() string {
+// glamourStyleConfig returns the standard style matching the terminal
+// background, minus the document text color so body text uses the terminal's
+// own foreground. That keeps it readable even when background detection is
+// wrong.
+func glamourStyleConfig() ansi.StyleConfig {
+	cfg := styles.LightStyleConfig
 	if lipgloss.HasDarkBackground() {
-		return "dark"
+		cfg = styles.DarkStyleConfig
 	}
-	return "light"
+	cfg.Document.Color = nil
+	return cfg
 }
 
-func glamourRenderer(style string) markdownRenderer {
+func glamourRenderer() markdownRenderer {
+	cfg := glamourStyleConfig()
 	return func(md string, width int) string {
 		r, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(style),
+			glamour.WithStyles(cfg),
 			glamour.WithWordWrap(width),
 		)
 		if err != nil {

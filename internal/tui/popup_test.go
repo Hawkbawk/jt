@@ -96,8 +96,8 @@ func TestCommentsPopupShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := press(t, m, "c")
 	m = drain(t, m, cmd)
-	p, ok := m.popup.(*textPopup)
-	if !ok || p.title != "Comments" {
+	p, ok := m.popup.(*commentsPopup)
+	if !ok {
 		t.Fatal("c should open the comments popup")
 	}
 	content := renderComments(p.detail, 40, plainMarkdown)

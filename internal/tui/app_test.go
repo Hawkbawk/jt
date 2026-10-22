@@ -21,6 +21,8 @@ type fakeBackend struct {
 	transitions    []jira.Transition
 	moveErr        error
 	moved          []string
+	comments       []string
+	commentErr     error
 	boardCalls     []string
 }
 
@@ -50,6 +52,14 @@ func (f *fakeBackend) Transition(key, id string) error {
 	return nil
 }
 
+func (f *fakeBackend) AddComment(key, body string) error {
+	if f.commentErr != nil {
+		return f.commentErr
+	}
+	f.comments = append(f.comments, key+":"+body)
+	return nil
+}
+
 func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
 
 func keyMsg(s string) tea.KeyMsg {
@@ -60,6 +70,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlD}
 	case "ctrl+p":
 		return tea.KeyMsg{Type: tea.KeyCtrlP}
+	case "ctrl+s":
+		return tea.KeyMsg{Type: tea.KeyCtrlS}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
 	case "enter":

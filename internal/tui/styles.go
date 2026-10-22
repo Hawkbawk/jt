@@ -6,6 +6,7 @@ var (
 	accent    = lipgloss.AdaptiveColor{Light: "#5A3FC0", Dark: "#A08CFF"}
 	subtle    = lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#6C6C6C"}
 	highlight = lipgloss.AdaptiveColor{Light: "#D97706", Dark: "#F5B041"}
+	muted     = lipgloss.AdaptiveColor{Light: "#4A4A4A", Dark: "#B0B0B0"}
 	danger    = lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#FF6B6B"}
 
 	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(accent)
@@ -28,3 +29,7 @@ var (
 			BorderForeground(accent).
 			Padding(0, 1)
 )
+
+var inputBorder = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(subtle)

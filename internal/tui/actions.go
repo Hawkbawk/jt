@@ -32,7 +32,7 @@ type issueActions struct {
 func newIssueActions(b Backend) issueActions {
 	return issueActions{
 		backend:  b,
-		md:       glamourRenderer(glamourStyle()),
+		md:       glamourRenderer(),
 		copyText: copyToClipboard,
 		openURL:  openInBrowser,
 	}
@@ -45,7 +45,7 @@ func (a issueActions) handle(msg tea.KeyMsg, issueKey string) (popup, tea.Cmd) {
 	case key.Matches(msg, keys.view):
 		return newTextPopup("Details", issueKey, renderDetail, a.md), loadIssue(a.backend, issueKey)
 	case key.Matches(msg, keys.comments):
-		return newTextPopup("Comments", issueKey, renderComments, a.md), loadIssue(a.backend, issueKey)
+		return newCommentsPopup(a.backend, issueKey, a.md), loadIssue(a.backend, issueKey)
 	case key.Matches(msg, keys.move):
 		return newMovePopup(a.backend, issueKey), loadTransitions(a.backend, issueKey)
 	case key.Matches(msg, keys.yank):

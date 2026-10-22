@@ -243,6 +243,11 @@ func (c *Client) Transition(key, transitionID string) error {
 	return err
 }
 
+// AddComment posts a new comment on an issue.
+func (c *Client) AddComment(key, body string) error {
+	return c.jc.AddIssueComment(key, body, false)
+}
+
 // IssueURL returns the browser URL for an issue on the configured server.
 func (c *Client) IssueURL(key string) string {
 	return strings.TrimSuffix(viper.GetString("server"), "/") + "/browse/" + url.PathEscape(key)

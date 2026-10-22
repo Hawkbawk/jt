@@ -12,7 +12,7 @@ type boardKeys struct {
 	view, comments, move, yank, open   key.Binding
 	refresh, projects, quit, close     key.Binding
 	forceQuit, interrupt, confirm      key.Binding
-	deny, accept                       key.Binding
+	deny, accept, send, blur           key.Binding
 
 	navigate, topBottom key.Binding
 }
@@ -41,6 +41,8 @@ var keys = boardKeys{
 	confirm:   key.NewBinding(key.WithKeys("y", "Y")),
 	deny:      key.NewBinding(key.WithKeys("n", "N", "esc")),
 	accept:    key.NewBinding(key.WithKeys("enter")),
+	send:      key.NewBinding(key.WithKeys("ctrl+s")),
+	blur:      key.NewBinding(key.WithKeys("esc")),
 
 	navigate:  key.NewBinding(key.WithHelp("hjkl", "navigate")),
 	topBottom: key.NewBinding(key.WithHelp("g/G", "top/bottom")),
