@@ -334,3 +334,27 @@ func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
 		t.Fatalf("last page should show Closed and only point left:\n%s", v)
 	}
 }
+
+func TestRefreshReloadsBoardAndKeepsFocus(t *testing.T) {
+	m, fb := loadedModel(t)
+	m, cmd := press(t, m, "j", "r")
+	if !m.board.loading || m.board.nav == nil {
+		t.Fatal("r should reload while keeping the current board visible")
+	}
+	fb.board.Columns[0].Issues = append([]jira.Issue{{Key: "T-0", Summary: "new"}}, fb.board.Columns[0].Issues...)
+	m = drain(t, m, cmd)
+	if len(fb.boardCalls) != 2 {
+		t.Fatalf("expected 2 board fetches, got %v", fb.boardCalls)
+	}
+	if got := m.board.nav.selected().Key; got != "T-2" {
+		t.Fatalf("focus should stay on T-2 after refresh, got %s", got)
+	}
+}
+
+func TestRefreshIgnoredWithoutProject(t *testing.T) {
+	m := newTestModel(t, "", &fakeBackend{})
+	m.picker.open = false
+	if _, cmd := press(t, m, "r"); cmd != nil {
+		t.Fatal("r without a project should do nothing")
+	}
+}

@@ -156,6 +156,14 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	sel := m.board.selected()
+	if key.Matches(msg, keys.refresh) && m.board.project != "" && !m.board.loading {
+		focusKey := ""
+		if sel != nil {
+			focusKey = sel.Key
+		}
+		m.status = ""
+		return m, m.startBusy(m.board.reload(focusKey))
+	}
 	if sel == nil {
 		return m, nil
 	}
