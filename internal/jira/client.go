@@ -258,6 +258,17 @@ func (c *Client) Transition(key, transitionID string) error {
 	return err
 }
 
+// Assign sets an issue's assignee. An empty assigneeID unassigns it.
+func (c *Client) Assign(key, assigneeID string) error {
+	if assigneeID == "" {
+		assigneeID = jcli.AssigneeNone
+	}
+	if c.local {
+		return c.jc.AssignIssueV2(key, assigneeID)
+	}
+	return c.jc.AssignIssue(key, assigneeID)
+}
+
 // AddComment posts a new comment on an issue.
 func (c *Client) AddComment(key, body string) error {
 	return c.jc.AddIssueComment(key, body, false)

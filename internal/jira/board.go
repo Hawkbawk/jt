@@ -82,27 +82,22 @@ func quickFilters(res quickFilterList) []Filter {
 }
 
 // assigneeFilters builds one filter per distinct assignee, sorted by name,
-// with unassigned issues last.
+// with Unassigned always last.
 func assigneeFilters(issues []Issue) []Filter {
 	seen := make(map[string]bool)
 	var out []Filter
-	unassigned := false
 	for _, iss := range issues {
 		if iss.AssigneeID == "" {
-			unassigned = true
 			continue
 		}
 		if seen[iss.AssigneeID] {
 			continue
 		}
 		seen[iss.AssigneeID] = true
-		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID)})
+		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID), AssigneeID: iss.AssigneeID})
 	}
 	slices.SortFunc(out, func(a, b Filter) int { return strings.Compare(a.Name, b.Name) })
-	if unassigned {
-		out = append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})
-	}
-	return out
+	return append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})
 }
 
 func columnsFrom(cfg boardConfig) ([]Column, error) {
