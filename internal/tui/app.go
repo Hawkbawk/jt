@@ -186,8 +186,14 @@ func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.popup == nil {
 		return m, nil
 	}
+	wasBusy := m.busy()
 	var cmd tea.Cmd
 	m.popup, cmd = m.popup.update(msg)
+	// Popups start their own loads (sending or reloading a comment), so the
+	// spinner has to be started here once they become busy.
+	if !wasBusy && m.busy() {
+		cmd = m.startBusy(cmd)
+	}
 	return m, cmd
 }
 
