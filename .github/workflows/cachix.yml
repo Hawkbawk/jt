@@ -1,7 +1,9 @@
 name: Cachix
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -9,12 +11,15 @@ permissions:
 
 jobs:
   push:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: DeterminateSystems/nix-installer-action@main
 
       - uses: cachix/cachix-action@v17

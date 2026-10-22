@@ -25,7 +25,7 @@
           src = self;
           vendorHash = "sha256-/nuwjVoi2n6wRG1j2ap14py9nfnAuMZXI3JwyZveC5g=";
           ldflags = [ "-s" "-w" ];
-          checkFlags = [ "-timeout=10s" ];
+          doCheck = false;
           meta.mainProgram = "jt";
         };
 

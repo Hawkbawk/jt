@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -25,6 +25,9 @@ jobs:
 
       - name: Vet
         run: nix develop --command go vet ./...
+
+      - name: Test
+        run: nix develop --command go test ./...
 
       - name: Lint
         run: nix develop --command golangci-lint run
