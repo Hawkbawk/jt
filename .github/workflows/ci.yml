@@ -13,7 +13,19 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
+  lint:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Vet
+        run: nix develop --command go vet ./...
+
+      - name: Lint
+        run: nix develop --command golangci-lint run
+
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -23,14 +35,18 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@main
 
-      - name: Vet
-        run: nix develop --command go vet ./...
-
       - name: Test
         run: nix develop --command go test ./...
 
-      - name: Lint
-        run: nix develop --command golangci-lint run
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, ubuntu-26.04-arm, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@main
 
       - name: Nix build
         run: nix build
