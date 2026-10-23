@@ -1,10 +1,11 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to agents when working with code in this repository.
 
 ## Overview
 
 `jt` is a Go terminal kanban board for Jira, built with bubbletea/lipgloss/bubbles/glamour. It does not talk to Jira directly. It imports `github.com/ankitpokhrel/jira-cli` as a library and reuses its config and auth, so `jira init` must have been run first.
+
 ## Commands
 
 The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `GOFLAGS=-timeout=10s`.
