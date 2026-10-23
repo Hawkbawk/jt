@@ -2,6 +2,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -20,6 +22,8 @@ type Backend interface {
 	Transition(key, transitionID string) error
 	Assign(key, assigneeID string) error
 	AddComment(key, body string) error
+	EditFields(iss jira.Issue) ([]jira.EditField, error)
+	Edit(key string, fields []jira.EditField) error
 	IssueURL(key string) string
 }
 
@@ -110,7 +114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg, commentSentMsg:
+	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
 	case filterSelectedMsg:
@@ -126,6 +130,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			status = "Unassigned " + msg.issueKey
 		}
 		return m.finishEdit(msg, msg.err, msg.issueKey, status)
+
+	case fieldsSavedMsg:
+		return m.finishEdit(msg, msg.err, msg.key, fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key))
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -146,7 +153,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, keys.projects) && !m.picker.open:
-		m.popup = nil
+		// A popup may hold unsaved work, so it has to be closed first.
+		if m.popup != nil {
+			return m, nil
+		}
 		return m, m.startBusy(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
@@ -179,7 +189,8 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if key.Matches(msg, keys.edit) {
-		return m, m.openPopup(newEditPopup(m.actions.backend, *sel, m.board.assignees), loadTransitions(m.actions.backend, sel.Key))
+		b := m.actions.backend
+		return m, m.openPopup(newEditPopup(b, *sel, m.board.assignees), tea.Batch(loadTransitions(b, sel.Key), loadFields(b, *sel)))
 	}
 	p, cmd := m.actions.handle(msg, sel.Key)
 	if p != nil {

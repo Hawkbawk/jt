@@ -15,6 +15,7 @@ func editModel(t *testing.T) (Model, *fakeBackend) {
 	fb := &fakeBackend{
 		board:       testBoard(),
 		transitions: []jira.Transition{{ID: "11", Name: "Start Work", To: "In Progress"}},
+		editFields:  testFields(),
 	}
 	fb.board.Assignees = []jira.Filter{
 		{Name: "Alice", AssigneeID: "a"},

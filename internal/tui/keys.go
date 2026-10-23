@@ -14,6 +14,7 @@ type boardKeys struct {
 	filter, nextTab, prevTab           key.Binding
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
+	toggle, undo                       key.Binding
 
 	navigate, topBottom key.Binding
 }
@@ -45,6 +46,8 @@ var keys = boardKeys{
 	accept:    key.NewBinding(key.WithKeys("enter")),
 	send:      key.NewBinding(key.WithKeys("ctrl+s")),
 	blur:      key.NewBinding(key.WithKeys("esc")),
+	toggle:    key.NewBinding(key.WithKeys(" ")),
+	undo:      key.NewBinding(key.WithKeys("u")),
 	nextTab:   key.NewBinding(key.WithKeys("tab")),
 	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),
 

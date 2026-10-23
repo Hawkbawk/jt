@@ -84,11 +84,11 @@ func TestStaleIssueLoadIsIgnored(t *testing.T) {
 	}
 }
 
-func TestCtrlPClosesPopup(t *testing.T) {
+func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "v", "ctrl+p")
-	if m.popup != nil || !m.picker.open {
-		t.Fatal("ctrl+p should replace the popup with the picker")
+	if m.popup == nil || m.picker.open {
+		t.Fatal("ctrl+p should do nothing while a popup is open")
 	}
 }
 

@@ -63,7 +63,7 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (p *assignPane) view(spin string, innerW int, hint string) []string {
+func (p *assignPane) view(spin string, innerW, _ int, hint string) []string {
 	var lines []string
 	if len(p.people) == 0 {
 		lines = append(lines, dimStyle.Render("No assignees on this board."))
