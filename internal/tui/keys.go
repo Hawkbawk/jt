@@ -8,12 +8,12 @@ import (
 // boardKeys holds the key bindings jt matches against. navigate and topBottom
 // only appear in the help footer; the bindings next to them do the matching.
 type boardKeys struct {
-	left, right, up, down, top, bottom     key.Binding
-	view, comments, move, edit, yank, open key.Binding
-	refresh, projects, quit, close         key.Binding
-	filter, nextTab, prevTab               key.Binding
-	forceQuit, interrupt, confirm          key.Binding
-	deny, accept, send, blur               key.Binding
+	left, right, up, down, top, bottom key.Binding
+	view, comments, edit, yank, open   key.Binding
+	refresh, projects, quit, close     key.Binding
+	filter, nextTab, prevTab           key.Binding
+	forceQuit, interrupt, confirm      key.Binding
+	deny, accept, send, blur           key.Binding
 
 	navigate, topBottom key.Binding
 }
@@ -28,7 +28,6 @@ var keys = boardKeys{
 
 	view:     key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "view")),
 	comments: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comments")),
-	move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
 	edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 	yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
 	open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
@@ -55,7 +54,7 @@ var keys = boardKeys{
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.edit, k.yank, k.open, k.filter, k.refresh, k.projects, k.quit}
+	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.edit, k.yank, k.open, k.filter, k.refresh, k.projects, k.quit}
 }
 
 // FullHelp implements help.KeyMap.

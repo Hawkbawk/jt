@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -19,18 +20,44 @@ type editTab struct {
 	pane pane
 }
 
+// editKeys is the help footer for the edit popup. The bindings only carry help
+// text; the matching happens against the shared keys.
+type editKeys struct {
+	tabs, choose, apply, cancel key.Binding
+}
+
+var editHelpKeys = editKeys{
+	tabs:   key.NewBinding(key.WithHelp("h/l", "switch tab")),
+	choose: key.NewBinding(key.WithHelp("j/k", "select")),
+	apply:  key.NewBinding(key.WithHelp("enter", "apply")),
+	cancel: key.NewBinding(key.WithHelp("esc", "cancel")),
+}
+
+// ShortHelp implements help.KeyMap.
+func (k editKeys) ShortHelp() []key.Binding {
+	return []key.Binding{k.tabs, k.choose, k.apply, k.cancel}
+}
+
+// FullHelp implements help.KeyMap.
+func (k editKeys) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
 // editPopup edits an issue, with a tab for each kind of change.
 type editPopup struct {
 	issueKey   string
 	tabs       []editTab
 	currentTab int
 	width      int
+	height     int
+	help       help.Model
 }
 
 func newEditPopup(b Backend, iss jira.Issue, assignees []jira.Filter) *editPopup {
 	move := newMovePane(b, iss.Key)
 	assign := newAssignPane(b, iss, assignees)
 	return &editPopup{
+		help:     newHelp(),
 		issueKey: iss.Key,
 		tabs: []editTab{
 			{name: "Move", pane: &move},
@@ -39,8 +66,8 @@ func newEditPopup(b Backend, iss jira.Issue, assignees []jira.Filter) *editPopup
 	}
 }
 
-func (p *editPopup) setSize(width, _ int) {
-	p.width = min(width, 64)
+func (p *editPopup) setSize(width, height int) {
+	p.width, p.height = width, height
 }
 
 func (p *editPopup) loading() bool {
@@ -75,12 +102,13 @@ func (p *editPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 }
 
 func (p *editPopup) view(spin string) string {
-	innerW := p.width - popupStyle.GetHorizontalFrameSize()
+	innerW, _ := popupInner(p.width, p.height)
 	names := make([]string, len(p.tabs))
 	for i, t := range p.tabs {
 		names[i] = t.name
 	}
-	lines := []string{titleStyle.Render("Edit · " + p.issueKey), renderTabs(names, p.currentTab), ""}
-	lines = append(lines, p.tabs[p.currentTab].pane.view(spin, innerW, "tab switch · j/k select · enter apply · esc cancel")...)
-	return renderPopup(innerW, lines)
+	p.help.Width = innerW
+	header := []string{titleStyle.Render("Edit · " + p.issueKey), renderTabs(names, p.currentTab), ""}
+	body := p.tabs[p.currentTab].pane.view(spin, innerW, "")
+	return renderPopup(p.width, p.height, header, body, p.help.View(editHelpKeys))
 }

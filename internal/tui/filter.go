@@ -22,10 +22,10 @@ type filterTab struct {
 // Each tab starts with an entry that clears the filter.
 type filterPopup struct {
 	choiceList
-	tabs   []filterTab
-	tab    int
-	active *jira.Filter
-	width  int
+	tabs          []filterTab
+	tab           int
+	active        *jira.Filter
+	width, height int
 }
 
 func newFilterPopup(quick, assignees []jira.Filter, active *jira.Filter) *filterPopup {
@@ -68,8 +68,8 @@ func (p *filterPopup) activeRow() int {
 	return p.activeIn(p.tabs[p.tab])
 }
 
-func (p *filterPopup) setSize(width, _ int) {
-	p.width = min(width, 64)
+func (p *filterPopup) setSize(width, height int) {
+	p.width, p.height = width, height
 }
 
 func (p *filterPopup) switchTab(delta int) {
@@ -102,20 +102,20 @@ func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 }
 
 func (p *filterPopup) view(string) string {
-	innerW := p.width - popupStyle.GetHorizontalFrameSize()
+	innerW, _ := popupInner(p.width, p.height)
 	t := p.tabs[p.tab]
 	names := make([]string, len(p.tabs))
 	for i, t := range p.tabs {
 		names[i] = t.name
 	}
-	lines := []string{renderTabs(names, p.tab), ""}
+	header := []string{renderTabs(names, p.tab), ""}
+	var body []string
 	if len(t.filters) == 0 {
-		lines = append(lines, dimStyle.Render(t.empty))
+		body = []string{dimStyle.Render(t.empty)}
 	} else {
-		lines = append(lines, p.render(append([]string{"All issues"}, filterNames(t.filters)...), innerW)...)
+		body = p.render(append([]string{"All issues"}, filterNames(t.filters)...), innerW)
 	}
-	lines = append(lines, "", dimStyle.Render("tab switch · j/k select · enter apply · esc cancel"))
-	return renderPopup(innerW, lines)
+	return renderPopup(p.width, p.height, header, body, dimStyle.Render("tab switch · j/k select · enter apply · esc cancel"))
 }
 
 func filterNames(fs []jira.Filter) []string {

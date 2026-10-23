@@ -46,8 +46,6 @@ func (a issueActions) handle(msg tea.KeyMsg, issueKey string) (popup, tea.Cmd) {
 		return newTextPopup("Details", issueKey, renderDetail, a.md), loadIssue(a.backend, issueKey)
 	case key.Matches(msg, keys.comments):
 		return newCommentsPopup(a.backend, issueKey, a.md), loadIssue(a.backend, issueKey)
-	case key.Matches(msg, keys.move):
-		return newMovePopup(a.backend, issueKey), loadTransitions(a.backend, issueKey)
 	case key.Matches(msg, keys.yank):
 		return nil, runAction(a.copyText, a.backend.IssueURL(issueKey), "Copied URL for "+issueKey, "copying URL")
 	case key.Matches(msg, keys.open):
