@@ -26,8 +26,8 @@ func loadTransitions(b Backend, issueKey string) tea.Cmd {
 	}
 }
 
-// movePane lists the transitions available for an issue. It's shared by the
-// move popup and the edit popup.
+// movePane lists the transitions available for an issue. It lives in the edit
+// popup.
 type movePane struct {
 	choiceList
 	key     string
@@ -100,32 +100,4 @@ func statusLine(spin string, innerW int, err error, applying bool, progress, hin
 		return spin + " " + progress
 	}
 	return dimStyle.Render(hint)
-}
-
-// movePopup is the standalone move menu.
-type movePopup struct {
-	movePane
-	width int
-}
-
-func newMovePopup(b Backend, issueKey string) *movePopup {
-	return &movePopup{movePane: newMovePane(b, issueKey)}
-}
-
-func (p *movePopup) setSize(width, _ int) {
-	p.width = min(width, 64)
-}
-
-func (p *movePopup) update(msg tea.Msg) (popup, tea.Cmd) {
-	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, keys.close) {
-		return nil, nil
-	}
-	return p, p.movePane.update(msg)
-}
-
-func (p *movePopup) view(spin string) string {
-	innerW := p.width - popupStyle.GetHorizontalFrameSize()
-	lines := append([]string{titleStyle.Render("Move · " + p.key), ""},
-		p.movePane.view(spin, innerW, "j/k select · enter move · esc cancel")...)
-	return renderPopup(innerW, lines)
 }

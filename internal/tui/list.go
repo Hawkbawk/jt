@@ -55,7 +55,18 @@ func renderTabs(names []string, active int) string {
 	return strings.Join(parts, "")
 }
 
-// renderPopup draws lines inside the popup frame, innerW columns wide.
-func renderPopup(innerW int, lines []string) string {
+// popupInner returns the content area of a popup with the given outer size.
+func popupInner(width, height int) (int, int) {
+	return width - popupStyle.GetHorizontalFrameSize(), height - popupStyle.GetVerticalFrameSize()
+}
+
+// renderPopup draws a popup of the given outer size. The body is padded or
+// clipped to fill the space between header and footer, so the popup never
+// changes size.
+func renderPopup(width, height int, header, body []string, footer string) string {
+	innerW, innerH := popupInner(width, height)
+	bodyH := max(1, innerH-len(header)-1)
+	content := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(strings.Join(body, "\n"))
+	lines := append(append([]string{}, header...), content, footer)
 	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(strings.Join(lines, "\n"))
 }
