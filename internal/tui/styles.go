@@ -12,6 +12,7 @@ var (
 	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(accent)
 	dimStyle    = lipgloss.NewStyle().Foreground(subtle)
 	errorStyle  = lipgloss.NewStyle().Foreground(danger)
+	warnStyle   = lipgloss.NewStyle().Foreground(highlight)
 	keyStyle    = lipgloss.NewStyle().Bold(true).Foreground(accent)
 	headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
 

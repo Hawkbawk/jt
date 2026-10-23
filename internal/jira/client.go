@@ -34,8 +34,9 @@ type Client struct {
 	jc    *jcli.Client
 	local bool
 
-	mu    sync.Mutex
-	quick map[int][]Filter
+	mu        sync.Mutex
+	quick     map[int][]Filter
+	fieldMeta map[fieldsKey]map[string]fieldMeta
 }
 
 // New loads jira-cli's config file and builds a client from it. Uses the

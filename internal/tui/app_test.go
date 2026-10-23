@@ -27,6 +27,9 @@ type fakeBackend struct {
 	commentErr     error
 	boardCalls     []string
 	filterCalls    []string
+	editFields     []jira.EditField
+	editErr        error
+	edited         [][]jira.EditField
 }
 
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
@@ -72,6 +75,16 @@ func (f *fakeBackend) AddComment(key, body string) error {
 	return nil
 }
 
+func (f *fakeBackend) EditFields(jira.Issue) ([]jira.EditField, error) { return f.editFields, nil }
+
+func (f *fakeBackend) Edit(_ string, fields []jira.EditField) error {
+	if f.editErr != nil {
+		return f.editErr
+	}
+	f.edited = append(f.edited, fields)
+	return nil
+}
+
 func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
 
 func keyMsg(s string) tea.KeyMsg {
@@ -98,6 +111,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyUp}
 	case "down":
 		return tea.KeyMsg{Type: tea.KeyDown}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}

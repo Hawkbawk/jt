@@ -74,7 +74,7 @@ func (p *movePane) update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (p *movePane) view(spin string, innerW int, hint string) []string {
+func (p *movePane) view(spin string, innerW, _ int, hint string) []string {
 	var lines []string
 	switch {
 	case !p.loaded && p.err == nil:

@@ -75,6 +75,41 @@ type Transition struct {
 	To   string
 }
 
+// FieldKind is how an editable field's value is entered.
+type FieldKind int
+
+// The field kinds jt can edit.
+const (
+	FieldText FieldKind = iota
+	FieldTextArea
+	FieldNumber
+	FieldDate
+	FieldDateTime
+	FieldSelect
+	FieldMultiSelect
+	// FieldLabels holds free-form words rather than options.
+	FieldLabels
+)
+
+// Option is one of a select field's allowed values.
+type Option struct {
+	ID   string
+	Name string
+}
+
+// EditField is a field that can be edited on an issue, with its current value.
+// Text holds the value of text, number and date kinds. Chosen holds the option
+// IDs of select kinds, or the labels of a labels field.
+type EditField struct {
+	ID       string
+	Name     string
+	Kind     FieldKind
+	Required bool
+	Options  []Option
+	Text     string
+	Chosen   []string
+}
+
 // Label describes the transition as a menu entry.
 func (t Transition) Label() string {
 	if t.To == "" || t.To == t.Name {

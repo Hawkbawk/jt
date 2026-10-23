@@ -1,0 +1,218 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/hawkbawk/jt/internal/jira"
+)
+
+func testFields() []jira.EditField {
+	return []jira.EditField{
+		{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true, Text: "Fix it"},
+		{ID: "description", Name: "Description", Kind: jira.FieldTextArea, Text: "Steps"},
+		{
+			ID: "priority", Name: "Priority", Kind: jira.FieldSelect, Chosen: []string{"3"},
+			Options: []jira.Option{{ID: "1", Name: "High"}, {ID: "3", Name: "Medium"}},
+		},
+		{ID: "labels", Name: "Labels", Kind: jira.FieldLabels, Chosen: []string{"api"}},
+		{
+			ID: "components", Name: "Components", Kind: jira.FieldMultiSelect,
+			Options: []jira.Option{{ID: "c1", Name: "API"}, {ID: "c2", Name: "UI"}},
+		},
+	}
+}
+
+// fieldsModel opens the edit popup on its fields tab.
+func fieldsModel(t *testing.T) (Model, *fakeBackend) {
+	t.Helper()
+	m, fb := editModel(t)
+	return pressDrain(t, m, "tab", "tab"), fb
+}
+
+func typeText(t *testing.T, m Model, s string) Model {
+	t.Helper()
+	for _, r := range s {
+		m = pressDrain(t, m, string(r))
+	}
+	return m
+}
+
+// savedField returns the field with id from the only edit saved.
+func savedField(t *testing.T, fb *fakeBackend, id string) jira.EditField {
+	t.Helper()
+	if len(fb.edited) != 1 {
+		t.Fatalf("expected one save, got %d", len(fb.edited))
+	}
+	i := slices.IndexFunc(fb.edited[0], func(f jira.EditField) bool { return f.ID == id })
+	if i < 0 {
+		t.Fatalf("%s not saved", id)
+	}
+	return fb.edited[0][i]
+}
+
+func TestFieldsSaveChangesTogether(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, " now")
+	m = pressDrain(t, m, "enter", "j", "j", "enter", "k", "enter", "j", "enter")
+	m = typeText(t, m, " ui")
+	m = pressDrain(t, m, "enter", "j", "enter", " ", "enter")
+	if len(fb.edited) != 0 {
+		t.Fatal("nothing should be saved before ctrl+s")
+	}
+	m = pressDrain(t, m, "ctrl+s")
+
+	if len(fb.edited[0]) != 4 {
+		t.Errorf("only changed fields should be sent, got %d", len(fb.edited[0]))
+	}
+	if got := savedField(t, fb, "summary").Text; got != "Fix it now" {
+		t.Errorf("summary = %q", got)
+	}
+	if got := savedField(t, fb, "priority").Chosen; !slices.Equal(got, []string{"1"}) {
+		t.Errorf("priority = %v", got)
+	}
+	if got := savedField(t, fb, "labels").Chosen; !slices.Equal(got, []string{"api", "ui"}) {
+		t.Errorf("labels = %v", got)
+	}
+	if got := savedField(t, fb, "components").Chosen; !slices.Equal(got, []string{"c1"}) {
+		t.Errorf("components = %v", got)
+	}
+	if m.popup != nil || len(fb.boardCalls) != 2 || !strings.Contains(m.status, "Updated 4 fields on T-2") {
+		t.Fatalf("popup should close and the board reload, status = %q", m.status)
+	}
+}
+
+func TestFieldsUndoLeavesNothingToSave(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "xyz")
+	m = pressDrain(t, m, "esc", "j", "enter")
+	m = typeText(t, m, "more")
+	m = pressDrain(t, m, "esc")
+	if strings.Count(m.View(), "(edited)") != 2 {
+		t.Fatal("esc should keep what was typed")
+	}
+	m = pressDrain(t, m, "u", "k", "u", "ctrl+s")
+	if len(fb.edited) != 0 || m.popup == nil {
+		t.Fatalf("nothing should be saved, got %v", fb.edited)
+	}
+}
+
+func TestFieldsEditorKeepsKeysThatWouldCloseOrSwitchTabs(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "qhl")
+	m = pressDrain(t, m, "tab")
+	if m.popup == nil || m.popup.(*editPopup).currentTab != 2 {
+		t.Fatal("typing should stay in the editor")
+	}
+	m = pressDrain(t, m, "enter", "ctrl+s")
+	if got := savedField(t, fb, "summary").Text; got != "Fix itqhl" {
+		t.Errorf("summary = %q", got)
+	}
+}
+
+func TestFieldsTextAreaTakesNewlinesAndSavesFromEditor(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "j", "enter", "enter")
+	m = typeText(t, m, "two")
+	pressDrain(t, m, "ctrl+s")
+	if got := savedField(t, fb, "description").Text; got != "Steps\ntwo" {
+		t.Errorf("description = %q", got)
+	}
+}
+
+func TestFieldsSelectCanClearOptionalField(t *testing.T) {
+	m, fb := fieldsModel(t)
+	pressDrain(t, m, "j", "j", "enter", "k", "k", "enter", "ctrl+s")
+	if got := savedField(t, fb, "priority").Chosen; len(got) != 0 {
+		t.Errorf("priority = %v", got)
+	}
+}
+
+func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
+	m, fb := fieldsModel(t)
+	fb.editErr = errors.New("summary: too long")
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "enter", "ctrl+s")
+	if m.popup == nil || !strings.Contains(m.View(), "summary: too long") || len(fb.boardCalls) != 1 {
+		t.Fatal("failed save should leave the popup open with the error")
+	}
+	fb.editErr = nil
+	m = pressDrain(t, m, "ctrl+s")
+	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.popup != nil {
+		t.Errorf("retry should save the kept change, got %q", got)
+	}
+}
+
+func TestFieldsListScrollsToCursor(t *testing.T) {
+	m, fb := editModel(t)
+	fb.editFields = nil
+	for i := range 40 {
+		fb.editFields = append(fb.editFields, jira.EditField{ID: fmt.Sprint(i), Name: fmt.Sprintf("Field %02d", i), Kind: jira.FieldText})
+	}
+	m = pressDrain(t, m, "esc", "e", "tab", "tab")
+	if v := m.View(); !strings.Contains(v, "Field 00") || strings.Contains(v, "Field 39") {
+		t.Fatal("list should start at the top")
+	}
+	for range 39 {
+		m, _ = press(t, m, "j")
+	}
+	if v := m.View(); !strings.Contains(v, "Field 39") || strings.Contains(v, "Field 00") {
+		t.Fatal("list should scroll to keep the cursor visible")
+	}
+}
+
+func TestFieldsCloseWithoutChangesNeedsNoConfirm(t *testing.T) {
+	m, _ := fieldsModel(t)
+	if m, _ = press(t, m, "esc"); m.popup != nil {
+		t.Fatal("esc should close a popup with nothing to save")
+	}
+}
+
+func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "enter")
+	if !strings.Contains(m.View(), "1 unsaved change") {
+		t.Fatal("unsaved changes should be called out")
+	}
+	m, _ = press(t, m, "esc")
+	if m.popup == nil || !strings.Contains(m.View(), "Discard 1 unsaved change?") {
+		t.Fatal("esc should ask before dropping changes")
+	}
+	m, _ = press(t, m, "n")
+	if m.popup == nil || m.popup.(*editPopup).unsaved() != 1 {
+		t.Fatal("n should keep editing with the changes intact")
+	}
+	m, _ = press(t, m, "q", "y")
+	if m.popup != nil || len(fb.edited) != 0 {
+		t.Fatal("y should close without saving")
+	}
+}
+
+func TestFieldsSaveFromCloseConfirmOnAnotherTab(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "enter", "tab", "esc", "ctrl+s")
+	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.popup != nil {
+		t.Fatalf("ctrl+s should save from any tab, got %q", got)
+	}
+}
+
+func TestFieldsCtrlDQuitsWithoutAsking(t *testing.T) {
+	m, _ := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "enter")
+	if _, cmd := press(t, m, "ctrl+d"); !isQuit(cmd) {
+		t.Fatal("ctrl+d must quit immediately, unsaved changes or not")
+	}
+}
