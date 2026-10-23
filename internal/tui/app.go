@@ -24,6 +24,7 @@ type Backend interface {
 	AddComment(key, body string) error
 	EditFields(iss jira.Issue) ([]jira.EditField, error)
 	Edit(key string, fields []jira.EditField) error
+	SearchUsers(issueKey, query string) ([]jira.Option, error)
 	IssueURL(key string) string
 }
 
@@ -114,7 +115,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
+	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, userSearchedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
 	case filterSelectedMsg:

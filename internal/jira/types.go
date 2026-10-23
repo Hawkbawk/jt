@@ -89,9 +89,15 @@ const (
 	FieldMultiSelect
 	// FieldLabels holds free-form words rather than options.
 	FieldLabels
+	// FieldUser and FieldMultiUser pick people. Their options aren't known up
+	// front, so they are searched for. Options holds only the people already
+	// set on the issue.
+	FieldUser
+	FieldMultiUser
 )
 
-// Option is one of a select field's allowed values.
+// Option is one of a select field's allowed values, or a person for user
+// fields, where ID is the account ID (the username on Jira Server).
 type Option struct {
 	ID   string
 	Name string
@@ -99,7 +105,7 @@ type Option struct {
 
 // EditField is a field that can be edited on an issue, with its current value.
 // Text holds the value of text, number and date kinds. Chosen holds the option
-// IDs of select kinds, or the labels of a labels field.
+// IDs of select and user kinds, or the labels of a labels field.
 type EditField struct {
 	ID       string
 	Name     string

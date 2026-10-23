@@ -30,6 +30,9 @@ type fakeBackend struct {
 	editFields     []jira.EditField
 	editErr        error
 	edited         [][]jira.EditField
+	users          []jira.Option
+	searches       []string
+	searchErr      error
 }
 
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
@@ -83,6 +86,11 @@ func (f *fakeBackend) Edit(_ string, fields []jira.EditField) error {
 	}
 	f.edited = append(f.edited, fields)
 	return nil
+}
+
+func (f *fakeBackend) SearchUsers(_, query string) ([]jira.Option, error) {
+	f.searches = append(f.searches, query)
+	return f.users, f.searchErr
 }
 
 func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }

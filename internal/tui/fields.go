@@ -44,13 +44,16 @@ type fieldInput interface {
 	value() jira.EditField
 }
 
-func newFieldInput(f jira.EditField) fieldInput {
+func newFieldInput(f jira.EditField, b Backend, issueKey string) fieldInput {
 	f.Chosen = slices.Clone(f.Chosen)
+	f.Options = slices.Clone(f.Options)
 	switch f.Kind {
 	case jira.FieldTextArea:
 		return newAreaField(f)
 	case jira.FieldSelect, jira.FieldMultiSelect:
 		return newSelectField(f)
+	case jira.FieldUser, jira.FieldMultiUser:
+		return newUserField(f, b, issueKey)
 	}
 	return newTextField(f)
 }
@@ -91,12 +94,16 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 			p.loaded, p.err, p.orig = true, msg.err, msg.fields
 			p.fields = make([]fieldInput, len(msg.fields))
 			for i, f := range msg.fields {
-				p.fields[i] = newFieldInput(f)
+				p.fields[i] = newFieldInput(f, p.backend, p.key)
 			}
 		}
 	case fieldsSavedMsg:
 		if msg.key == p.key {
 			p.saving, p.err = false, msg.err
+		}
+	case userSearchedMsg:
+		if u, ok := p.editing.(*userField); ok {
+			u.receive(msg)
 		}
 	case tea.KeyMsg:
 		if key.Matches(msg, keys.send) {
@@ -117,7 +124,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, keys.accept):
 			p.editing, p.err = p.fields[p.cursor], nil
 		case key.Matches(msg, keys.undo):
-			p.fields[p.cursor] = newFieldInput(p.orig[p.cursor])
+			p.fields[p.cursor] = newFieldInput(p.orig[p.cursor], p.backend, p.key)
 		}
 	}
 	return nil
@@ -366,7 +373,7 @@ func (f *selectField) hint() string {
 func displayValue(f jira.EditField) string {
 	var s string
 	switch f.Kind {
-	case jira.FieldSelect, jira.FieldMultiSelect:
+	case jira.FieldSelect, jira.FieldMultiSelect, jira.FieldUser, jira.FieldMultiUser:
 		names := make([]string, len(f.Chosen))
 		for i, id := range f.Chosen {
 			names[i] = id
