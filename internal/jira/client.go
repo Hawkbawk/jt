@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankitpokhrel/jira-cli/api"
@@ -32,6 +33,9 @@ const (
 type Client struct {
 	jc    *jcli.Client
 	local bool
+
+	mu    sync.Mutex
+	quick map[int][]Filter
 }
 
 // New loads jira-cli's config file and builds a client from it. Uses the
@@ -117,18 +121,36 @@ func (c *Client) Board(project, filterJQL string) (*Board, error) {
 	}
 	distribute(cols, issues)
 
-	// Quick filters are optional, so a failed lookup leaves the list empty
-	// instead of failing the load.
-	var qf quickFilterList
-	var quick []Filter
-	if err := c.getJSON(c.jc.GetV1, fmt.Sprintf("/board/%d/quickfilter", info.ID), &qf); err == nil {
-		quick = quickFilters(qf)
-	}
+	quick := c.quickFilters(info.ID)
 
 	return &Board{
 		ID: info.ID, Name: info.Name, Type: info.Type, Project: project, Columns: cols,
 		QuickFilters: quick, Assignees: assigneeFilters(issues),
 	}, nil
+}
+
+// quickFilters returns a board's quick filters, fetching them once per board
+// since they rarely change. They're optional, so a failed lookup yields none
+// and isn't cached.
+func (c *Client) quickFilters(boardID int) []Filter {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cached, ok := c.quick[boardID]
+	if ok {
+		return cached
+	}
+
+	var qf quickFilterList
+	if err := c.getJSON(c.jc.GetV1, fmt.Sprintf("/board/%d/quickfilter", boardID), &qf); err != nil {
+		return nil
+	}
+	quick := quickFilters(qf)
+
+	if c.quick == nil {
+		c.quick = make(map[int][]Filter)
+	}
+	c.quick[boardID] = quick
+	return quick
 }
 
 type issueFields struct {
