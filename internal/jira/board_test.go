@@ -109,8 +109,8 @@ func TestAssigneeFilters(t *testing.T) {
 		{Assignee: "Amy", AssigneeID: "a1"},
 	})
 	want := []Filter{
-		{Name: "Amy", JQL: `assignee = "a1"`},
-		{Name: "Zed", JQL: `assignee = "z1"`},
+		{Name: "Amy", JQL: `assignee = "a1"`, AssigneeID: "a1"},
+		{Name: "Zed", JQL: `assignee = "z1"`, AssigneeID: "z1"},
 		{Name: "Unassigned", JQL: "assignee is EMPTY"},
 	}
 	if len(got) != len(want) {
@@ -120,5 +120,12 @@ func TestAssigneeFilters(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("filter %d = %v, want %v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestAssigneeFiltersAlwaysIncludeUnassigned(t *testing.T) {
+	got := assigneeFilters([]Issue{{Assignee: "Amy", AssigneeID: "a1"}})
+	if len(got) != 2 || got[1].Name != "Unassigned" {
+		t.Fatalf("got %v", got)
 	}
 }

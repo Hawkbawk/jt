@@ -18,6 +18,7 @@ type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(key string) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
+	Assign(key, assigneeID string) error
 	AddComment(key, body string) error
 	IssueURL(key string) string
 }
@@ -117,12 +118,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.startBusy(m.board.setFilter(msg.filter))
 
 	case transitionDoneMsg:
-		if msg.err != nil {
-			return m.forwardToPopup(msg)
+		return m.finishEdit(msg, msg.err, msg.key, "Moved "+msg.key+" to "+msg.to)
+
+	case assignDoneMsg:
+		status := "Assigned " + msg.issueKey + " to " + msg.to
+		if msg.cleared {
+			status = "Unassigned " + msg.issueKey
 		}
-		m.popup = nil
-		m.status = "Moved " + msg.key + " to " + msg.to
-		return m, m.startBusy(m.board.reload(msg.key))
+		return m.finishEdit(msg, msg.err, msg.issueKey, status)
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -175,11 +178,25 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
+	if key.Matches(msg, keys.edit) {
+		return m, m.openPopup(newEditPopup(m.actions.backend, *sel, m.board.assignees), loadTransitions(m.actions.backend, sel.Key))
+	}
 	p, cmd := m.actions.handle(msg, sel.Key)
 	if p != nil {
 		return m, m.openPopup(p, cmd)
 	}
 	return m, cmd
+}
+
+// finishEdit closes the popup and reloads the board after a successful change.
+// A failure goes back to the popup to show.
+func (m Model) finishEdit(msg tea.Msg, err error, issueKey, status string) (tea.Model, tea.Cmd) {
+	if err != nil {
+		return m.forwardToPopup(msg)
+	}
+	m.popup = nil
+	m.status = status
+	return m, m.startBusy(m.board.reload(issueKey))
 }
 
 func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {

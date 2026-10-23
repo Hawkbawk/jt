@@ -21,6 +21,8 @@ type fakeBackend struct {
 	transitions    []jira.Transition
 	moveErr        error
 	moved          []string
+	assignErr      error
+	assigned       []string
 	comments       []string
 	commentErr     error
 	boardCalls     []string
@@ -51,6 +53,14 @@ func (f *fakeBackend) Transition(key, id string) error {
 		return f.moveErr
 	}
 	f.moved = append(f.moved, key+":"+id)
+	return nil
+}
+
+func (f *fakeBackend) Assign(key, id string) error {
+	if f.assignErr != nil {
+		return f.assignErr
+	}
+	f.assigned = append(f.assigned, key+":"+id)
 	return nil
 }
 

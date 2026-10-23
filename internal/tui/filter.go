@@ -1,12 +1,8 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -25,9 +21,9 @@ type filterTab struct {
 // filterPopup lists the board's quick filters and assignees on separate tabs.
 // Each tab starts with an entry that clears the filter.
 type filterPopup struct {
+	choiceList
 	tabs   []filterTab
 	tab    int
-	cursor int
 	active *jira.Filter
 	width  int
 }
@@ -94,10 +90,7 @@ func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		p.switchTab(1)
 	case key.Matches(km, keys.prevTab, keys.left):
 		p.switchTab(-1)
-	case key.Matches(km, keys.down):
-		p.cursor = min(p.cursor+1, len(filters))
-	case key.Matches(km, keys.up):
-		p.cursor = max(p.cursor-1, 0)
+	case p.handle(km, len(filters)+1):
 	case key.Matches(km, keys.accept):
 		var sel *jira.Filter
 		if p.cursor > 0 {
@@ -108,37 +101,21 @@ func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	return p, nil
 }
 
-func (p *filterPopup) tabBar() string {
-	parts := make([]string, len(p.tabs))
-	for i, t := range p.tabs {
-		style := dimStyle.Padding(0, 1)
-		if i == p.tab {
-			style = titleStyle.Padding(0, 1).Underline(true)
-		}
-		parts[i] = style.Render(t.name)
-	}
-	return strings.Join(parts, "")
-}
-
 func (p *filterPopup) view(string) string {
 	innerW := p.width - popupStyle.GetHorizontalFrameSize()
 	t := p.tabs[p.tab]
-	lines := []string{p.tabBar(), ""}
+	names := make([]string, len(p.tabs))
+	for i, t := range p.tabs {
+		names[i] = t.name
+	}
+	lines := []string{renderTabs(names, p.tab), ""}
 	if len(t.filters) == 0 {
 		lines = append(lines, dimStyle.Render(t.empty))
 	} else {
-		labels := append([]string{"All issues"}, filterNames(t.filters)...)
-		for i, l := range labels {
-			l = ansi.Truncate(l, innerW-2, "…")
-			if i == p.cursor {
-				lines = append(lines, lipgloss.NewStyle().Foreground(highlight).Bold(true).Render("› "+l))
-			} else {
-				lines = append(lines, "  "+l)
-			}
-		}
+		lines = append(lines, p.render(append([]string{"All issues"}, filterNames(t.filters)...), innerW)...)
 	}
 	lines = append(lines, "", dimStyle.Render("tab switch · j/k select · enter apply · esc cancel"))
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(strings.Join(lines, "\n"))
+	return renderPopup(innerW, lines)
 }
 
 func filterNames(fs []jira.Filter) []string {
