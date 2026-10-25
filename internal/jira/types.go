@@ -89,11 +89,6 @@ const (
 	FieldMultiSelect
 	// FieldLabels holds free-form words rather than options.
 	FieldLabels
-	// FieldUser and FieldMultiUser pick people. Their options aren't known up
-	// front, so they are searched for. Options holds only the people already
-	// set on the issue.
-	FieldUser
-	FieldMultiUser
 )
 
 // Option is one of a select field's allowed values, or a person for user

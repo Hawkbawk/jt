@@ -24,7 +24,6 @@ type Backend interface {
 	AddComment(key, body string) error
 	EditFields(iss jira.Issue) ([]jira.EditField, error)
 	Edit(key string, fields []jira.EditField) error
-	SearchUsers(issueKey, query string) ([]jira.Option, error)
 	IssueURL(key string) string
 }
 
@@ -115,7 +114,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, userSearchedMsg, commentSentMsg:
+	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
 	case filterSelectedMsg:
@@ -139,9 +138,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.display()
 		return m, nil
 	}
-	// The picker's list filters asynchronously and reports back with its own
-	// messages.
-	return m, m.picker.update(msg)
+	// The picker's list filters asynchronously and a popup's form runs on its
+	// own messages, so both get what's left.
+	pm, popupCmd := m.forwardToPopup(msg)
+	m = pm.(Model)
+	return m, tea.Batch(popupCmd, m.picker.update(msg))
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

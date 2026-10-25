@@ -1,14 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textarea"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -32,46 +32,108 @@ func loadFields(b Backend, iss jira.Issue) tea.Cmd {
 	}
 }
 
-// fieldInput edits one field. It updates its value with every key, so the
-// value is always current.
-type fieldInput interface {
-	// update handles a key while the field is being edited, and reports
-	// whether editing is done.
-	update(tea.KeyPressMsg) (tea.Cmd, bool)
-	view(innerW, height int) []string
-	hint() string
-	value() jira.EditField
+// fieldValue holds what a form field is bound to, next to the field as it
+// loaded.
+type fieldValue struct {
+	jira.EditField
+	text   string
+	single string
+	multi  []string
+	input  huh.Field
 }
 
-func newFieldInput(f jira.EditField, b Backend, issueKey string) fieldInput {
-	f.Chosen = slices.Clone(f.Chosen)
-	f.Options = slices.Clone(f.Options)
-	switch f.Kind {
-	case jira.FieldTextArea:
-		return newAreaField(f)
-	case jira.FieldSelect, jira.FieldMultiSelect:
-		return newSelectField(f)
-	case jira.FieldUser, jira.FieldMultiUser:
-		return newUserField(f, b, issueKey)
+func newFieldValue(f jira.EditField) *fieldValue {
+	v := &fieldValue{EditField: f, multi: slices.Clone(f.Chosen)}
+	if f.Kind == jira.FieldLabels {
+		v.text = strings.Join(f.Chosen, " ")
+	} else {
+		v.text = f.Text
 	}
-	return newTextField(f)
+	if len(f.Chosen) > 0 {
+		v.single = f.Chosen[0]
+	}
+	return v
 }
 
-// fieldsPane lists an issue's editable fields and edits one at a time. Changes
-// are kept until they're all saved together.
+// current returns the field with the values entered so far.
+func (v *fieldValue) current() jira.EditField {
+	f := v.EditField
+	switch f.Kind {
+	case jira.FieldLabels:
+		f.Chosen = strings.Fields(v.text)
+	case jira.FieldSelect:
+		f.Chosen = nil
+		if v.single != "" {
+			f.Chosen = []string{v.single}
+		}
+	case jira.FieldMultiSelect:
+		f.Chosen = slices.Clone(v.multi)
+	default:
+		f.Text = v.text
+	}
+	return f
+}
+
+func (v *fieldValue) changed() bool {
+	f := v.current()
+	return f.Text != v.Text || !sameSet(f.Chosen, v.Chosen)
+}
+
+// huhField builds the form field that edits v.
+func (v *fieldValue) huhField() huh.Field {
+	switch v.Kind {
+	case jira.FieldTextArea:
+		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).Value(&v.text)
+	case jira.FieldSelect:
+		var opts []huh.Option[string]
+		if !v.Required {
+			opts = append(opts, huh.NewOption("(none)", ""))
+		}
+		for _, o := range v.Options {
+			opts = append(opts, huh.NewOption(o.Name, o.ID))
+		}
+		return huh.NewSelect[string]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.single)
+	case jira.FieldMultiSelect:
+		opts := make([]huh.Option[string], len(v.Options))
+		for i, o := range v.Options {
+			opts[i] = huh.NewOption(o.Name, o.ID).Selected(slices.Contains(v.Chosen, o.ID))
+		}
+		return huh.NewMultiSelect[string]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.multi)
+	}
+	in := huh.NewInput().Title(v.Name).Value(&v.text)
+	switch v.Kind {
+	case jira.FieldLabels:
+		in.Placeholder("separate labels with spaces")
+	case jira.FieldDate:
+		in.Placeholder("YYYY-MM-DD")
+	}
+	return in
+}
+
+// scrollStyle makes the position indicator stand out from the dim hints.
+var scrollStyle = lipgloss.NewStyle().Foreground(highlight).Bold(true)
+
+// minTextLines is the height of a text area that isn't being edited.
+const minTextLines = 5
+
+// listHeight is the height of a select with n options and its title.
+func listHeight(n int) int {
+	return min(n, 6) + 1
+}
+
+// fieldsPane edits all of an issue's editable fields in one form. Changes are
+// kept until they're all saved together.
 type fieldsPane struct {
-	choiceList
 	key     string
 	backend Backend
 
-	// orig holds the values as loaded, to tell which fields changed.
-	orig   []jira.EditField
-	fields []fieldInput
-	// editing is the field being edited, if any.
-	editing fieldInput
-	loaded  bool
-	saving  bool
-	err     error
+	vals   []*fieldValue
+	form   *huh.Form
+	loaded bool
+	saving bool
+	err    error
+	// formH is the height the form was last drawn at.
+	formH int
 }
 
 func newFieldsPane(b Backend, issueKey string) fieldsPane {
@@ -82,51 +144,63 @@ func (p *fieldsPane) loading() bool {
 	return (!p.loaded && p.err == nil) || p.saving
 }
 
-func (p *fieldsPane) capturing() bool { return p.editing != nil }
+// capturing is true while the form is up, since it takes typed text.
+func (p *fieldsPane) capturing() bool { return p.form != nil }
 
 func (p *fieldsPane) unsaved() int { return len(p.changed()) }
+
+// newForm builds the form from the values entered so far.
+func (p *fieldsPane) newForm() *huh.Form {
+	fields := make([]huh.Field, len(p.vals))
+	for i, v := range p.vals {
+		v.input = v.huhField()
+		fields[i] = v.input
+	}
+	km := huh.NewDefaultKeyMap()
+	// ctrl+c is the app's to handle.
+	km.Quit = key.NewBinding(key.WithDisabled())
+	return huh.NewForm(huh.NewGroup(fields...)).
+		WithTheme(huh.ThemeFunc(huh.ThemeBase16)).
+		WithKeyMap(km).
+		WithShowHelp(false)
+}
 
 func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case fieldsLoadedMsg:
-		if msg.key == p.key {
-			p.loaded, p.err, p.orig = true, msg.err, msg.fields
-			p.fields = make([]fieldInput, len(msg.fields))
-			for i, f := range msg.fields {
-				p.fields[i] = newFieldInput(f, p.backend, p.key)
-			}
+		if msg.key != p.key {
+			break
 		}
+		p.loaded, p.err = true, msg.err
+		for _, f := range msg.fields {
+			p.vals = append(p.vals, newFieldValue(f))
+		}
+		if len(p.vals) > 0 {
+			p.form = p.newForm()
+			return p.form.Init()
+		}
+		return nil
 	case fieldsSavedMsg:
 		if msg.key == p.key {
 			p.saving, p.err = false, msg.err
 		}
-	case userSearchedMsg:
-		if u, ok := p.editing.(*userField); ok {
-			u.receive(msg)
-		}
-	case tea.KeyPressMsg:
-		if key.Matches(msg, keys.send) {
-			p.editing = nil
-			return p.save()
-		}
-		if p.editing != nil {
-			cmd, done := p.editing.update(msg)
-			if done {
-				p.editing = nil
-			}
-			return cmd
-		}
-		if p.handle(msg, len(p.fields)) || p.cursor >= len(p.fields) {
-			break
-		}
-		switch {
-		case key.Matches(msg, keys.accept):
-			p.editing, p.err = p.fields[p.cursor], nil
-		case key.Matches(msg, keys.undo):
-			p.fields[p.cursor] = newFieldInput(p.orig[p.cursor], p.backend, p.key)
-		}
+		return nil
 	}
-	return nil
+	if p.form == nil || p.saving {
+		return nil
+	}
+	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, keys.send) {
+		return p.save()
+	}
+	_, cmd := p.form.Update(msg)
+	p.growFocusedText()
+	// Submitting the form ends it, so the form is rebuilt to stay editable
+	// if the save fails.
+	if p.form.State == huh.StateCompleted {
+		p.form = p.newForm()
+		return tea.Batch(p.save(), p.form.Init())
+	}
+	return cmd
 }
 
 func (p *fieldsPane) save() tea.Cmd {
@@ -144,260 +218,69 @@ func (p *fieldsPane) save() tea.Cmd {
 // changed returns the fields that differ from how they loaded.
 func (p *fieldsPane) changed() []jira.EditField {
 	var out []jira.EditField
-	for i, f := range p.fields {
-		if p.isChanged(i) {
-			out = append(out, f.value())
+	for _, v := range p.vals {
+		if v.changed() {
+			out = append(out, v.current())
 		}
 	}
 	return out
 }
 
-func (p *fieldsPane) isChanged(i int) bool {
-	f, o := p.fields[i].value(), p.orig[i]
-	return f.Text != o.Text || !sameSet(f.Chosen, o.Chosen)
-}
-
 func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 	var lines []string
+	resized := p.formH != max(1, height-2)
+	p.formH = max(1, height-2)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
-	case p.loaded && len(p.fields) == 0 && p.err == nil:
+	case p.loaded && len(p.vals) == 0 && p.err == nil:
 		lines = append(lines, dimStyle.Render("No editable fields."))
-	case p.editing != nil:
-		lines = append([]string{titleStyle.Render(p.editing.value().Name)}, p.editing.view(innerW, height-3)...)
-	default:
-		lines = p.renderWindow(p.rows(innerW), innerW, height-2)
+	case p.form != nil:
+		p.form.WithWidth(innerW).WithHeight(p.formH)
+		if resized {
+			p.growFocusedText()
+		}
+		lines = strings.Split(p.form.View(), "\n")
 	}
 	return append(lines, "", statusLine(spin, innerW, p.err, p.saving, "Saving…", p.hint()))
 }
 
-func (p *fieldsPane) rows(innerW int) []string {
-	nameW := 0
-	for _, f := range p.fields {
-		nameW = max(nameW, ansi.StringWidth(f.value().Name))
-	}
-	nameW = min(nameW, innerW/3)
-	rows := make([]string, len(p.fields))
-	for i, f := range p.fields {
-		name := ansi.Truncate(f.value().Name, nameW, "…")
-		rows[i] = name + strings.Repeat(" ", nameW-ansi.StringWidth(name)) + "  " + displayValue(f.value())
-		if p.isChanged(i) {
-			rows[i] += " (edited)"
+// refreshMsg makes the form redraw its content, which it only does on updates.
+type refreshMsg struct{}
+
+// growFocusedText gives the text area being edited most of the form's height,
+// leaving the other fields at their usual size.
+func (p *fieldsPane) growFocusedText() {
+	for _, v := range p.vals {
+		if t, ok := v.input.(*huh.Text); ok {
+			t.Lines(minTextLines)
+			if v.input == p.form.GetFocusedField() {
+				t.Lines(max(minTextLines, p.formH-3))
+			}
 		}
 	}
-	return rows
+	p.form.Update(refreshMsg{})
 }
 
+// hint shows where the focused field sits in the form, with arrows for the
+// fields out of view above or below it.
 func (p *fieldsPane) hint() string {
-	switch {
-	case p.editing != nil:
-		return p.editing.hint()
-	case p.unsaved() > 0:
-		return "enter edit · u undo"
+	if p.form == nil {
+		return ""
 	}
-	return "enter edit"
-}
-
-// textField edits a one-line value. A labels field is typed as words separated
-// by spaces.
-type textField struct {
-	jira.EditField
-	input textinput.Model
-}
-
-func newTextField(f jira.EditField) *textField {
-	ti := textinput.New()
-	ti.Prompt = ""
-	tis := textinput.DefaultStyles(darkBackground)
-	tis.Cursor.Blink = false
-	ti.SetStyles(tis)
-	if f.Kind == jira.FieldLabels {
-		ti.SetValue(strings.Join(f.Chosen, " "))
-	} else {
-		ti.SetValue(f.Text)
-	}
-	ti.Focus()
-	return &textField{EditField: f, input: ti}
-}
-
-func (f *textField) value() jira.EditField { return f.EditField }
-
-func (f *textField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	if key.Matches(msg, keys.accept, keys.blur) {
-		return nil, true
-	}
-	var cmd tea.Cmd
-	f.input, cmd = f.input.Update(msg)
-	if f.Kind == jira.FieldLabels {
-		f.Chosen = strings.Fields(f.input.Value())
-	} else {
-		f.Text = f.input.Value()
-	}
-	return cmd, false
-}
-
-func (f *textField) view(innerW, _ int) []string {
-	border := inputBorder.BorderForeground(highlight)
-	f.input.SetWidth(innerW - border.GetHorizontalFrameSize() - 1)
-	return []string{border.Render(f.input.View())}
-}
-
-func (f *textField) hint() string {
-	switch f.Kind {
-	case jira.FieldLabels:
-		return "separate labels with spaces · enter done"
-	case jira.FieldDate:
-		return "YYYY-MM-DD · enter done"
-	}
-	return "enter done · ctrl+s save"
-}
-
-// areaField edits multi-line text.
-type areaField struct {
-	jira.EditField
-	area textarea.Model
-}
-
-func newAreaField(f jira.EditField) *areaField {
-	ta := textarea.New()
-	ta.Prompt = ""
-	ta.ShowLineNumbers = false
-	// The default caps the value at 99 lines, which would cut long
-	// descriptions short.
-	ta.MaxHeight = 0
-	tas := textarea.DefaultStyles(darkBackground)
-	tas.Cursor.Blink = false
-	ta.SetStyles(tas)
-	ta.SetValue(f.Text)
-	ta.Focus()
-	return &areaField{EditField: f, area: ta}
-}
-
-func (f *areaField) value() jira.EditField { return f.EditField }
-
-func (f *areaField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	// enter adds a line, so only esc finishes.
-	if key.Matches(msg, keys.blur) {
-		return nil, true
-	}
-	var cmd tea.Cmd
-	f.area, cmd = f.area.Update(msg)
-	f.Text = f.area.Value()
-	return cmd, false
-}
-
-func (f *areaField) view(innerW, height int) []string {
-	border := inputBorder.BorderForeground(highlight)
-	f.area.SetWidth(innerW - border.GetHorizontalFrameSize())
-	f.area.SetHeight(max(1, height-border.GetVerticalFrameSize()))
-	return []string{border.Render(f.area.View())}
-}
-
-func (f *areaField) hint() string { return "esc done · ctrl+s save" }
-
-// selectField picks one of a field's options, or several for a multi-select.
-type selectField struct {
-	jira.EditField
-	list choiceList
-}
-
-func newSelectField(f jira.EditField) *selectField {
-	s := &selectField{EditField: f}
-	if f.Kind == jira.FieldSelect {
-		s.list.cursor = max(0, slices.IndexFunc(s.rows(), func(o jira.Option) bool {
-			return o.ID == "" && len(f.Chosen) == 0 || slices.Contains(f.Chosen, o.ID)
-		}))
-	}
-	return s
-}
-
-func (f *selectField) value() jira.EditField { return f.EditField }
-
-// rows lists the choices, with a way to clear a single select that isn't
-// required.
-func (f *selectField) rows() []jira.Option {
-	if f.Kind == jira.FieldSelect && !f.Required {
-		return append([]jira.Option{{Name: "(none)"}}, f.Options...)
-	}
-	return f.Options
-}
-
-func (f *selectField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	rows := f.rows()
-	if f.list.handle(msg, len(rows)) {
-		return nil, false
-	}
-	id := rows[f.list.cursor].ID
-	switch {
-	case key.Matches(msg, keys.blur):
-		return nil, true
-	case f.Kind == jira.FieldMultiSelect && key.Matches(msg, keys.toggle):
-		if i := slices.Index(f.Chosen, id); i >= 0 {
-			f.Chosen = slices.Delete(f.Chosen, i, i+1)
-		} else {
-			f.Chosen = append(f.Chosen, id)
+	i := slices.IndexFunc(p.vals, func(v *fieldValue) bool { return v.input == p.form.GetFocusedField() })
+	pos := ""
+	if i >= 0 {
+		up, down := " ", " "
+		if i > 0 {
+			up = "▲"
 		}
-	case key.Matches(msg, keys.accept):
-		if f.Kind == jira.FieldSelect {
-			f.Chosen = nil
-			if id != "" {
-				f.Chosen = []string{id}
-			}
+		if i < len(p.vals)-1 {
+			down = "▼"
 		}
-		return nil, true
+		pos = scrollStyle.Render(fmt.Sprintf("%s%s %d/%d", up, down, i+1, len(p.vals))) + dimStyle.Render(" · ")
 	}
-	return nil, false
-}
-
-func (f *selectField) view(innerW, height int) []string {
-	rows := f.rows()
-	labels := make([]string, len(rows))
-	for i, o := range rows {
-		labels[i] = o.Name
-		if f.Kind == jira.FieldMultiSelect {
-			mark := "[ ] "
-			if slices.Contains(f.Chosen, o.ID) {
-				mark = "[x] "
-			}
-			labels[i] = mark + o.Name
-		}
-	}
-	return f.list.renderWindow(labels, innerW, height)
-}
-
-func (f *selectField) hint() string {
-	if f.Kind == jira.FieldMultiSelect {
-		return "space toggle · enter done"
-	}
-	return "enter choose · esc cancel"
-}
-
-func displayValue(f jira.EditField) string {
-	var s string
-	switch f.Kind {
-	case jira.FieldSelect, jira.FieldMultiSelect, jira.FieldUser, jira.FieldMultiUser:
-		names := make([]string, len(f.Chosen))
-		for i, id := range f.Chosen {
-			names[i] = id
-			if j := slices.IndexFunc(f.Options, func(o jira.Option) bool { return o.ID == id }); j >= 0 {
-				names[i] = f.Options[j].Name
-			}
-		}
-		s = strings.Join(names, ", ")
-	case jira.FieldLabels:
-		s = strings.Join(f.Chosen, " ")
-	default:
-		first, rest, more := strings.Cut(strings.TrimSpace(f.Text), "\n")
-		s = first
-		if more && strings.TrimSpace(rest) != "" {
-			s += " …"
-		}
-	}
-	if s == "" {
-		return "—"
-	}
-	return s
+	return pos + dimStyle.Render("tab/enter next · shift+tab back · ctrl+j new line · ctrl+s save")
 }
 
 // sameSet reports whether a and b hold the same values in any order.

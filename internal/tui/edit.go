@@ -17,8 +17,7 @@ type pane interface {
 	loading() bool
 }
 
-// capturer is a pane that can take over every key, such as while text is
-// being typed into it.
+// capturer is a pane that takes typed text, so only esc closes it.
 type capturer interface {
 	capturing() bool
 }
@@ -98,10 +97,11 @@ func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	if p.confirmClose {
 		return p.updateConfirm(km)
 	}
+	closes := keys.close
 	if c, ok := p.pane.(capturer); ok && c.capturing() {
-		return p, p.pane.update(km)
+		closes = keys.blur
 	}
-	if key.Matches(km, keys.close) {
+	if key.Matches(km, closes) {
 		if p.unsaved() > 0 {
 			p.confirmClose = true
 			return p, nil
