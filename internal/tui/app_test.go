@@ -52,7 +52,7 @@ func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
 
 func (f *fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, nil }
 
-func (f *fakeBackend) Transitions(string) ([]jira.Transition, error) { return f.transitions, nil }
+func (f *fakeBackend) Transitions(jira.Issue) ([]jira.Transition, error) { return f.transitions, nil }
 
 func (f *fakeBackend) Transition(key, id string) error {
 	if f.moveErr != nil {

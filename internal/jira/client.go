@@ -37,6 +37,7 @@ type Client struct {
 	mu        sync.Mutex
 	quick     map[int][]Filter
 	fieldMeta map[fieldsKey]map[string]fieldMeta
+	moves     map[fieldsKey][]Transition
 }
 
 // New loads jira-cli's config file and builds a client from it. Uses the
@@ -248,8 +249,20 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 	return d, nil
 }
 
-// Transitions lists the transitions currently available for an issue.
-func (c *Client) Transitions(key string) ([]Transition, error) {
+// Transitions lists the transitions available for an issue. They're fetched
+// once per project, issue type and status.
+func (c *Client) Transitions(iss Issue) ([]Transition, error) {
+	project, _, _ := strings.Cut(iss.Key, "-")
+	k := fieldsKey{project, iss.Type, iss.StatusID}
+	cacheable := iss.Type != "" && iss.StatusID != ""
+	if cacheable {
+		c.mu.Lock()
+		cached, ok := c.moves[k]
+		c.mu.Unlock()
+		if ok {
+			return slices.Clone(cached), nil
+		}
+	}
 	get := c.jc.Get
 	if c.local {
 		get = c.jc.GetV2
@@ -263,12 +276,20 @@ func (c *Client) Transitions(key string) ([]Transition, error) {
 			} `json:"to"`
 		} `json:"transitions"`
 	}
-	if err := c.getJSON(get, "/issue/"+url.PathEscape(key)+"/transitions", &res); err != nil {
+	if err := c.getJSON(get, "/issue/"+url.PathEscape(iss.Key)+"/transitions", &res); err != nil {
 		return nil, err
 	}
 	out := make([]Transition, 0, len(res.Transitions))
 	for _, t := range res.Transitions {
 		out = append(out, Transition{ID: t.ID, Name: t.Name, To: t.To.Name})
+	}
+	if cacheable {
+		c.mu.Lock()
+		if c.moves == nil {
+			c.moves = make(map[fieldsKey][]Transition)
+		}
+		c.moves[k] = slices.Clone(out)
+		c.mu.Unlock()
 	}
 	return out, nil
 }

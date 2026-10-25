@@ -34,11 +34,11 @@ func testFields() []jira.EditField {
 	}
 }
 
-// fieldsModel opens the edit popup on its fields tab.
+// fieldsModel opens the edit popup.
 func fieldsModel(t *testing.T) (Model, *fakeBackend) {
 	t.Helper()
-	m, fb := editModel(t)
-	return pressDrain(t, m, "tab", "tab"), fb
+	m, fb := issueModel(t)
+	return pressDrain(t, m, "e"), fb
 }
 
 func typeText(t *testing.T, m Model, s string) Model {
@@ -110,12 +110,11 @@ func TestFieldsUndoLeavesNothingToSave(t *testing.T) {
 	}
 }
 
-func TestFieldsEditorKeepsKeysThatWouldCloseOrSwitchTabs(t *testing.T) {
+func TestFieldsEditorKeepsKeysThatWouldClose(t *testing.T) {
 	m, fb := fieldsModel(t)
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "qhl")
-	m = pressDrain(t, m, "tab")
-	if m.popup == nil || m.popup.(*editPopup).currentTab != 2 {
+	if m.popup == nil {
 		t.Fatal("typing should stay in the editor")
 	}
 	m = pressDrain(t, m, "enter", "ctrl+s")
@@ -159,12 +158,12 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 }
 
 func TestFieldsListScrollsToCursor(t *testing.T) {
-	m, fb := editModel(t)
+	m, fb := issueModel(t)
 	fb.editFields = nil
 	for i := range 40 {
 		fb.editFields = append(fb.editFields, jira.EditField{ID: fmt.Sprint(i), Name: fmt.Sprintf("Field %02d", i), Kind: jira.FieldText})
 	}
-	m = pressDrain(t, m, "esc", "e", "tab", "tab")
+	m = pressDrain(t, m, "e")
 	if v := m.View(); !strings.Contains(v, "Field 00") || strings.Contains(v, "Field 39") {
 		t.Fatal("list should start at the top")
 	}
@@ -196,22 +195,12 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 		t.Fatal("esc should ask before dropping changes")
 	}
 	m, _ = press(t, m, "n")
-	if m.popup == nil || m.popup.(*editPopup).unsaved() != 1 {
+	if m.popup == nil || m.popup.(*panePopup).unsaved() != 1 {
 		t.Fatal("n should keep editing with the changes intact")
 	}
 	m, _ = press(t, m, "q", "y")
 	if m.popup != nil || len(fb.edited) != 0 {
 		t.Fatal("y should close without saving")
-	}
-}
-
-func TestFieldsSaveFromCloseConfirmOnAnotherTab(t *testing.T) {
-	m, fb := fieldsModel(t)
-	m = pressDrain(t, m, "enter")
-	m = typeText(t, m, "!")
-	m = pressDrain(t, m, "enter", "tab", "esc", "ctrl+s")
-	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.popup != nil {
-		t.Fatalf("ctrl+s should save from any tab, got %q", got)
 	}
 }
 

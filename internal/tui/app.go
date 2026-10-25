@@ -18,7 +18,7 @@ type Backend interface {
 	Projects() ([]jira.Project, error)
 	Board(project, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
-	Transitions(key string) ([]jira.Transition, error)
+	Transitions(iss jira.Issue) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
 	Assign(key, assigneeID string) error
 	AddComment(key, body string) error
@@ -189,9 +189,14 @@ func (m Model) handleBoardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	if key.Matches(msg, keys.edit) {
-		b := m.actions.backend
-		return m, m.openPopup(newEditPopup(b, *sel, m.board.assignees), tea.Batch(loadTransitions(b, sel.Key), loadFields(b, *sel)))
+	b := m.actions.backend
+	switch {
+	case key.Matches(msg, keys.move):
+		return m, m.openPopup(newMovePopup(b, *sel), loadTransitions(b, *sel))
+	case key.Matches(msg, keys.assign):
+		return m, m.openPopup(newAssignPopup(b, *sel, m.board.assignees), nil)
+	case key.Matches(msg, keys.edit):
+		return m, m.openPopup(newEditPopup(b, *sel), loadFields(b, *sel))
 	}
 	p, cmd := m.actions.handle(msg, sel.Key)
 	if p != nil {

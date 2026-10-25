@@ -19,15 +19,14 @@ type transitionDoneMsg struct {
 	err error
 }
 
-func loadTransitions(b Backend, issueKey string) tea.Cmd {
+func loadTransitions(b Backend, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
-		ts, err := b.Transitions(issueKey)
-		return transitionsLoadedMsg{key: issueKey, transitions: ts, err: err}
+		ts, err := b.Transitions(iss)
+		return transitionsLoadedMsg{key: iss.Key, transitions: ts, err: err}
 	}
 }
 
-// movePane lists the transitions available for an issue. It lives in the edit
-// popup.
+// movePane lists the transitions available for an issue. It fills a pane popup.
 type movePane struct {
 	choiceList
 	key     string

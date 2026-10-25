@@ -177,3 +177,45 @@ func TestEditFieldsCachesDefinitionsPerTypeAndStatus(t *testing.T) {
 		t.Errorf("values request should ask for just the editable fields, got %v", ids)
 	}
 }
+
+func TestTransitionsCachedPerTypeAndStatus(t *testing.T) {
+	cached := Issue{Key: "A-1", Type: "Bug", StatusID: "1"}
+	tests := []struct {
+		name        string
+		cached      Issue
+		issue       Issue
+		wantRequest bool
+	}{
+		{"same project, type and status", cached, Issue{Key: "A-2", Type: "Bug", StatusID: "1"}, false},
+		{"different status", cached, Issue{Key: "A-2", Type: "Bug", StatusID: "2"}, true},
+		{"different project", cached, Issue{Key: "B-1", Type: "Bug", StatusID: "1"}, true},
+		{"different issue type", cached, Issue{Key: "A-2", Type: "Story", StatusID: "1"}, true},
+		{"nothing cached", Issue{}, cached, true},
+		{"no status is never cached", Issue{Key: "A-2", Type: "Bug"}, Issue{Key: "A-2", Type: "Bug"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests := 0
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				_, _ = w.Write([]byte(`{"transitions": [{"id": "11", "name": "Start", "to": {"name": "Doing"}}]}`))
+			}))
+			defer ts.Close()
+			c := &Client{jc: jcli.NewClient(jcli.Config{Server: ts.URL})}
+
+			if tt.cached.Key != "" {
+				if _, err := c.Transitions(tt.cached); err != nil {
+					t.Fatal(err)
+				}
+			}
+			requests = 0
+			got, err := c.Transitions(tt.issue)
+			if err != nil || len(got) != 1 || got[0].To != "Doing" {
+				t.Fatalf("Transitions(%v) = %v, %v", tt.issue, got, err)
+			}
+			if made := requests > 0; made != tt.wantRequest {
+				t.Errorf("made request = %v, want %v", made, tt.wantRequest)
+			}
+		})
+	}
+}
