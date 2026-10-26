@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 )
 
 // boardKeys holds the key bindings jt matches against. navigate and topBottom
@@ -49,7 +49,7 @@ var keys = boardKeys{
 	accept:    key.NewBinding(key.WithKeys("enter")),
 	send:      key.NewBinding(key.WithKeys("ctrl+s")),
 	blur:      key.NewBinding(key.WithKeys("esc")),
-	toggle:    key.NewBinding(key.WithKeys(" ")),
+	toggle:    key.NewBinding(key.WithKeys("space")),
 	undo:      key.NewBinding(key.WithKeys("u")),
 	nextTab:   key.NewBinding(key.WithKeys("tab")),
 	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),

@@ -4,11 +4,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
@@ -38,7 +37,7 @@ func loadFields(b Backend, iss jira.Issue) tea.Cmd {
 type fieldInput interface {
 	// update handles a key while the field is being edited, and reports
 	// whether editing is done.
-	update(tea.KeyMsg) (tea.Cmd, bool)
+	update(tea.KeyPressMsg) (tea.Cmd, bool)
 	view(innerW, height int) []string
 	hint() string
 	value() jira.EditField
@@ -105,7 +104,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		if u, ok := p.editing.(*userField); ok {
 			u.receive(msg)
 		}
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.send) {
 			p.editing = nil
 			return p.save()
@@ -210,7 +209,9 @@ type textField struct {
 func newTextField(f jira.EditField) *textField {
 	ti := textinput.New()
 	ti.Prompt = ""
-	ti.Cursor.SetMode(cursor.CursorStatic)
+	tis := textinput.DefaultStyles(darkBackground)
+	tis.Cursor.Blink = false
+	ti.SetStyles(tis)
 	if f.Kind == jira.FieldLabels {
 		ti.SetValue(strings.Join(f.Chosen, " "))
 	} else {
@@ -222,7 +223,7 @@ func newTextField(f jira.EditField) *textField {
 
 func (f *textField) value() jira.EditField { return f.EditField }
 
-func (f *textField) update(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (f *textField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if key.Matches(msg, keys.accept, keys.blur) {
 		return nil, true
 	}
@@ -238,7 +239,7 @@ func (f *textField) update(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 func (f *textField) view(innerW, _ int) []string {
 	border := inputBorder.BorderForeground(highlight)
-	f.input.Width = innerW - border.GetHorizontalFrameSize() - 1
+	f.input.SetWidth(innerW - border.GetHorizontalFrameSize() - 1)
 	return []string{border.Render(f.input.View())}
 }
 
@@ -265,7 +266,9 @@ func newAreaField(f jira.EditField) *areaField {
 	// The default caps the value at 99 lines, which would cut long
 	// descriptions short.
 	ta.MaxHeight = 0
-	ta.Cursor.SetMode(cursor.CursorStatic)
+	tas := textarea.DefaultStyles(darkBackground)
+	tas.Cursor.Blink = false
+	ta.SetStyles(tas)
 	ta.SetValue(f.Text)
 	ta.Focus()
 	return &areaField{EditField: f, area: ta}
@@ -273,7 +276,7 @@ func newAreaField(f jira.EditField) *areaField {
 
 func (f *areaField) value() jira.EditField { return f.EditField }
 
-func (f *areaField) update(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (f *areaField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	// enter adds a line, so only esc finishes.
 	if key.Matches(msg, keys.blur) {
 		return nil, true
@@ -320,7 +323,7 @@ func (f *selectField) rows() []jira.Option {
 	return f.Options
 }
 
-func (f *selectField) update(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (f *selectField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	rows := f.rows()
 	if f.list.handle(msg, len(rows)) {
 		return nil, false

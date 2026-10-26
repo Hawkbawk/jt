@@ -3,9 +3,9 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -91,7 +91,7 @@ func (p *panePopup) loading() bool {
 }
 
 func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, p.pane.update(msg)
 	}
@@ -111,7 +111,7 @@ func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	return p, p.pane.update(km)
 }
 
-func (p *panePopup) updateConfirm(km tea.KeyMsg) (popup, tea.Cmd) {
+func (p *panePopup) updateConfirm(km tea.KeyPressMsg) (popup, tea.Cmd) {
 	switch {
 	case key.Matches(km, keys.confirm):
 		return nil, nil
@@ -133,7 +133,7 @@ func (p *panePopup) unsaved() int {
 
 func (p *panePopup) view(spin string) string {
 	innerW, innerH := popupInner(p.width, p.height)
-	p.help.Width = innerW
+	p.help.SetWidth(innerW)
 	title := titleStyle.Render(p.title + " · " + p.issueKey)
 	footer := p.help.View(paneHelpKeys)
 	if n := p.unsaved(); n > 0 {

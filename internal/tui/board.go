@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
@@ -101,7 +101,7 @@ func renderCard(iss jira.Issue, selected bool, width int) string {
 	gap := max(1, inner-keyWidth-lipgloss.Width(assignee))
 	top := keyStyle.Render(iss.Key) + strings.Repeat(" ", gap) + dimStyle.Render(assignee)
 
-	return style.Width(width - 2).Render(top + "\n" + clampLines(iss.Summary, inner, summaryLines))
+	return style.Width(width).Render(top + "\n" + clampLines(iss.Summary, inner, summaryLines))
 }
 
 // clampLines word-wraps s to width and keeps at most n lines, padding short

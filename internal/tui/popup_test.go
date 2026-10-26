@@ -37,13 +37,13 @@ func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	}
 	m = drain(t, m, cmd)
 	p = m.popup.(*textPopup)
-	if p.detail == nil || !strings.Contains(m.View(), "T-1") {
+	if p.detail == nil || !strings.Contains(m.View().Content, "T-1") {
 		t.Fatal("detail not loaded into popup")
 	}
 
 	m, _ = press(t, m, "down", "down")
-	if p := m.popup.(*textPopup); p.vp.YOffset != 2 {
-		t.Fatalf("down arrow should scroll, YOffset=%d", p.vp.YOffset)
+	if p := m.popup.(*textPopup); p.vp.YOffset() != 2 {
+		t.Fatalf("down arrow should scroll, YOffset=%d", p.vp.YOffset())
 	}
 
 	m, _ = press(t, m, "j")

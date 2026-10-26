@@ -3,10 +3,9 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 )
 
 const commentInputHeight = 5
@@ -32,10 +31,12 @@ func newCommentsPopup(b Backend, issueKey string, md markdownRenderer) *comments
 	ta.Prompt = ""
 	ta.ShowLineNumbers = false
 	ta.Placeholder = "Write a comment…"
-	ta.FocusedStyle.Placeholder = ta.FocusedStyle.Placeholder.Foreground(muted)
-	ta.BlurredStyle.Placeholder = ta.BlurredStyle.Placeholder.Foreground(muted)
-	ta.BlurredStyle.Text = ta.BlurredStyle.Text.Foreground(muted)
-	ta.Cursor.SetMode(cursor.CursorStatic)
+	ts := textarea.DefaultStyles(darkBackground)
+	ts.Cursor.Blink = false
+	ts.Focused.Placeholder = ts.Focused.Placeholder.Foreground(muted)
+	ts.Blurred.Placeholder = ts.Blurred.Placeholder.Foreground(muted)
+	ts.Blurred.Text = ts.Blurred.Text.Foreground(muted)
+	ta.SetStyles(ts)
 	ta.SetHeight(commentInputHeight)
 
 	tp := newTextPopup("Comments", issueKey, renderComments, md)
@@ -73,7 +74,7 @@ func (p *commentsPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		p.input.Blur()
 		p.jumpToEnd = true
 		return p, loadIssue(p.backend, p.key)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if p.input.Focused() {
 			return p.updateInput(msg)
 		}
@@ -89,7 +90,7 @@ func (p *commentsPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	return p, cmd
 }
 
-func (p *commentsPopup) updateInput(msg tea.KeyMsg) (popup, tea.Cmd) {
+func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.blur):
 		p.input.Blur()

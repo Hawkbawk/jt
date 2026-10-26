@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -46,7 +46,7 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 		if msg.issueKey == p.issueKey {
 			p.applying, p.err = false, msg.err
 		}
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if p.handle(msg, len(p.people)) {
 			break
 		}

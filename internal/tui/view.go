@@ -3,11 +3,18 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // View implements tea.Model.
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) render() string {
 	if m.width == 0 {
 		return ""
 	}
@@ -35,6 +42,6 @@ func (m Model) footerView() string {
 		prefix = m.status + dimStyle.Render(" · ")
 	}
 	h := m.help
-	h.Width = max(0, m.width-2-lipgloss.Width(prefix))
+	h.SetWidth(max(0, m.width-2-lipgloss.Width(prefix)))
 	return dimStyle.Padding(0, 1).Width(m.width).Render(prefix + h.View(keys))
 }

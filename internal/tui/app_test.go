@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -95,34 +95,34 @@ func (f *fakeBackend) SearchUsers(_, query string) ([]jira.Option, error) {
 
 func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
 
-func keyMsg(s string) tea.KeyMsg {
+func keyMsg(s string) tea.KeyPressMsg {
 	switch s {
 	case "ctrl+c":
-		return tea.KeyMsg{Type: tea.KeyCtrlC}
+		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	case "ctrl+d":
-		return tea.KeyMsg{Type: tea.KeyCtrlD}
+		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 	case "ctrl+p":
-		return tea.KeyMsg{Type: tea.KeyCtrlP}
+		return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
 	case "ctrl+s":
-		return tea.KeyMsg{Type: tea.KeyCtrlS}
+		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	case "esc":
-		return tea.KeyMsg{Type: tea.KeyEsc}
+		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "tab":
-		return tea.KeyMsg{Type: tea.KeyTab}
+		return tea.KeyPressMsg{Code: tea.KeyTab}
 	case "shift+tab":
-		return tea.KeyMsg{Type: tea.KeyShiftTab}
+		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case " ":
-		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	case "up":
-		return tea.KeyMsg{Type: tea.KeyUp}
+		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
-		return tea.KeyMsg{Type: tea.KeyDown}
+		return tea.KeyPressMsg{Code: tea.KeyDown}
 	case "backspace":
-		return tea.KeyMsg{Type: tea.KeyBackspace}
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	default:
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+		return tea.KeyPressMsg{Code: []rune(s)[0], Text: s}
 	}
 }
 
@@ -360,7 +360,7 @@ func TestStaleBoardIsIgnored(t *testing.T) {
 
 func TestViewRendersColumnsAndCards(t *testing.T) {
 	m, _ := loadedModel(t)
-	v := m.View()
+	v := m.View().Content
 	for _, want := range []string{"Open (3)", "In Progress (0)", "T-1", "Test Board"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q", want)
@@ -374,13 +374,13 @@ func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
 	m = drain(t, next.(Model), m.Init())
 
-	v := m.View()
+	v := m.View().Content
 	if strings.Contains(v, "Closed") || !strings.Contains(v, "▶") || strings.Contains(v, "◀") {
 		t.Fatalf("first page should hide Closed and only point right:\n%s", v)
 	}
 
 	m, _ = press(t, m, "l", "l")
-	v = m.View()
+	v = m.View().Content
 	if !strings.Contains(v, "Closed") || !strings.Contains(v, "◀") || strings.Contains(v, "▶") {
 		t.Fatalf("last page should show Closed and only point left:\n%s", v)
 	}
