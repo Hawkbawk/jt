@@ -1,14 +1,13 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -43,16 +42,21 @@ type fieldValue struct {
 }
 
 func newFieldValue(f jira.EditField) *fieldValue {
-	v := &fieldValue{EditField: f, multi: slices.Clone(f.Chosen)}
-	if f.Kind == jira.FieldLabels {
-		v.text = strings.Join(f.Chosen, " ")
-	} else {
-		v.text = f.Text
-	}
-	if len(f.Chosen) > 0 {
-		v.single = f.Chosen[0]
-	}
+	v := &fieldValue{EditField: f}
+	v.reset()
 	return v
+}
+
+// reset puts the entered values back to how the field loaded.
+func (v *fieldValue) reset() {
+	v.multi = slices.Clone(v.Chosen)
+	v.text, v.single = v.Text, ""
+	if v.Kind == jira.FieldLabels {
+		v.text = strings.Join(v.Chosen, " ")
+	}
+	if len(v.Chosen) > 0 {
+		v.single = v.Chosen[0]
+	}
 }
 
 // current returns the field with the values entered so far.
@@ -79,6 +83,46 @@ func (v *fieldValue) changed() bool {
 	return f.Text != v.Text || !sameSet(f.Chosen, v.Chosen)
 }
 
+// FilterValue implements list.Item.
+func (v *fieldValue) FilterValue() string { return v.Name }
+
+// Title implements list.DefaultItem.
+func (v *fieldValue) Title() string {
+	title := v.Name
+	if v.Required {
+		title += " *"
+	}
+	if v.changed() {
+		title += " ●"
+	}
+	return title
+}
+
+// Description implements list.DefaultItem, showing the value entered so far.
+func (v *fieldValue) Description() string {
+	f := v.current()
+	var s string
+	switch f.Kind {
+	case jira.FieldSelect, jira.FieldMultiSelect:
+		var names []string
+		for _, id := range f.Chosen {
+			i := slices.IndexFunc(f.Options, func(o jira.Option) bool { return o.ID == id })
+			if i >= 0 {
+				names = append(names, f.Options[i].Name)
+			}
+		}
+		s = strings.Join(names, ", ")
+	case jira.FieldLabels:
+		s = strings.Join(f.Chosen, ", ")
+	default:
+		s, _, _ = strings.Cut(f.Text, "\n")
+	}
+	if s == "" {
+		return "(empty)"
+	}
+	return s
+}
+
 // huhField builds the form field that edits v.
 func (v *fieldValue) huhField() huh.Field {
 	switch v.Kind {
@@ -96,7 +140,7 @@ func (v *fieldValue) huhField() huh.Field {
 	case jira.FieldMultiSelect:
 		opts := make([]huh.Option[string], len(v.Options))
 		for i, o := range v.Options {
-			opts[i] = huh.NewOption(o.Name, o.ID).Selected(slices.Contains(v.Chosen, o.ID))
+			opts[i] = huh.NewOption(o.Name, o.ID).Selected(slices.Contains(v.multi, o.ID))
 		}
 		return huh.NewMultiSelect[string]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.multi)
 	}
@@ -110,9 +154,6 @@ func (v *fieldValue) huhField() huh.Field {
 	return in
 }
 
-// scrollStyle makes the position indicator stand out from the dim hints.
-var scrollStyle = lipgloss.NewStyle().Foreground(highlight).Bold(true)
-
 // minTextLines is the height of a text area that isn't being edited.
 const minTextLines = 5
 
@@ -121,17 +162,19 @@ func listHeight(n int) int {
 	return min(n, 6) + 1
 }
 
-// fieldsPane edits all of an issue's editable fields in one form. Changes are
-// kept until they're all saved together.
+// fieldsPane lists an issue's editable fields and edits one at a time in a
+// form. Changes are kept until they're all saved together.
 type fieldsPane struct {
 	key     string
 	backend Backend
 
-	vals   []*fieldValue
-	form   *huh.Form
-	loaded bool
-	saving bool
-	err    error
+	vals    []*fieldValue
+	list    list.Model
+	editing *fieldValue
+	form    *huh.Form
+	loaded  bool
+	saving  bool
+	err     error
 	// formH is the height the form was last drawn at.
 	formH int
 }
@@ -144,25 +187,52 @@ func (p *fieldsPane) loading() bool {
 	return (!p.loaded && p.err == nil) || p.saving
 }
 
-// capturing is true while the form is up, since it takes typed text.
-func (p *fieldsPane) capturing() bool { return p.form != nil }
+// capturing is true while typed text goes to a form field or the list filter.
+func (p *fieldsPane) capturing() bool {
+	return p.editing != nil || p.list.SettingFilter()
+}
+
+// consumesEsc is true when esc steps back within the pane instead of closing it.
+func (p *fieldsPane) consumesEsc() bool {
+	return p.editing != nil || p.list.FilterState() != list.Unfiltered
+}
 
 func (p *fieldsPane) unsaved() int { return len(p.changed()) }
 
-// newForm builds the form from the values entered so far.
-func (p *fieldsPane) newForm() *huh.Form {
-	fields := make([]huh.Field, len(p.vals))
-	for i, v := range p.vals {
-		v.input = v.huhField()
-		fields[i] = v.input
+func newFieldList(vals []*fieldValue) list.Model {
+	items := make([]list.Item, len(vals))
+	for i, v := range vals {
+		items[i] = v
 	}
+	d := list.NewDefaultDelegate()
+	d.SetSpacing(0)
+	l := list.New(items, d, 0, 0)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(true)
+	l.DisableQuitKeybindings()
+	return l
+}
+
+// edit opens a form for v alone.
+func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
+	p.editing = v
+	v.input = v.huhField()
 	km := huh.NewDefaultKeyMap()
 	// ctrl+c is the app's to handle.
 	km.Quit = key.NewBinding(key.WithDisabled())
-	return huh.NewForm(huh.NewGroup(fields...)).
+	p.form = huh.NewForm(huh.NewGroup(v.input)).
 		WithTheme(huh.ThemeFunc(huh.ThemeBase16)).
 		WithKeyMap(km).
 		WithShowHelp(false)
+	p.growText()
+	return p.form.Init()
+}
+
+// closeForm goes back to the list of fields.
+func (p *fieldsPane) closeForm() {
+	p.editing, p.form = nil, nil
 }
 
 func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
@@ -175,10 +245,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		for _, f := range msg.fields {
 			p.vals = append(p.vals, newFieldValue(f))
 		}
-		if len(p.vals) > 0 {
-			p.form = p.newForm()
-			return p.form.Init()
-		}
+		p.list = newFieldList(p.vals)
 		return nil
 	case fieldsSavedMsg:
 		if msg.key == p.key {
@@ -186,19 +253,38 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	}
-	if p.form == nil || p.saving {
+	if !p.loaded || p.saving || len(p.vals) == 0 {
 		return nil
 	}
-	if km, ok := msg.(tea.KeyMsg); ok && key.Matches(km, keys.send) {
+	km, isKey := msg.(tea.KeyMsg)
+	if isKey && key.Matches(km, keys.send) {
 		return p.save()
 	}
+	if p.form == nil {
+		if isKey && key.Matches(km, keys.accept) && !p.list.SettingFilter() {
+			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
+				return p.edit(v)
+			}
+			return nil
+		}
+		if isKey && key.Matches(km, keys.undo) && !p.list.SettingFilter() {
+			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
+				v.reset()
+			}
+			return nil
+		}
+		var cmd tea.Cmd
+		p.list, cmd = p.list.Update(msg)
+		return cmd
+	}
+	if isKey && key.Matches(km, keys.blur) {
+		p.closeForm()
+		return nil
+	}
 	_, cmd := p.form.Update(msg)
-	p.growFocusedText()
-	// Submitting the form ends it, so the form is rebuilt to stay editable
-	// if the save fails.
+	p.growText()
 	if p.form.State == huh.StateCompleted {
-		p.form = p.newForm()
-		return tea.Batch(p.save(), p.form.Init())
+		p.closeForm()
 	}
 	return cmd
 }
@@ -228,19 +314,23 @@ func (p *fieldsPane) changed() []jira.EditField {
 
 func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 	var lines []string
-	resized := p.formH != max(1, height-2)
-	p.formH = max(1, height-2)
+	formH := max(1, height-2)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
 	case p.loaded && len(p.vals) == 0 && p.err == nil:
 		lines = append(lines, dimStyle.Render("No editable fields."))
 	case p.form != nil:
-		p.form.WithWidth(innerW).WithHeight(p.formH)
+		resized := p.formH != formH
+		p.formH = formH
+		p.form.WithWidth(innerW).WithHeight(formH)
 		if resized {
-			p.growFocusedText()
+			p.growText()
 		}
 		lines = strings.Split(p.form.View(), "\n")
+	case p.loaded:
+		p.list.SetSize(innerW, formH)
+		lines = strings.Split(p.list.View(), "\n")
 	}
 	return append(lines, "", statusLine(spin, innerW, p.err, p.saving, "Saving…", p.hint()))
 }
@@ -248,39 +338,22 @@ func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 // refreshMsg makes the form redraw its content, which it only does on updates.
 type refreshMsg struct{}
 
-// growFocusedText gives the text area being edited most of the form's height,
-// leaving the other fields at their usual size.
-func (p *fieldsPane) growFocusedText() {
-	for _, v := range p.vals {
-		if t, ok := v.input.(*huh.Text); ok {
-			t.Lines(minTextLines)
-			if v.input == p.form.GetFocusedField() {
-				t.Lines(max(minTextLines, p.formH-3))
-			}
-		}
+// growText gives a text area being edited most of the form's height.
+func (p *fieldsPane) growText() {
+	if t, ok := p.editing.input.(*huh.Text); ok {
+		t.Lines(max(minTextLines, p.formH-3))
+		p.form.Update(refreshMsg{})
 	}
-	p.form.Update(refreshMsg{})
 }
 
-// hint shows where the focused field sits in the form, with arrows for the
-// fields out of view above or below it.
 func (p *fieldsPane) hint() string {
-	if p.form == nil {
-		return ""
+	switch {
+	case p.form != nil:
+		return dimStyle.Render("enter done · esc back · ctrl+j new line · ctrl+s save")
+	case p.list.SettingFilter():
+		return dimStyle.Render("enter apply filter · esc clear · ctrl+s save")
 	}
-	i := slices.IndexFunc(p.vals, func(v *fieldValue) bool { return v.input == p.form.GetFocusedField() })
-	pos := ""
-	if i >= 0 {
-		up, down := " ", " "
-		if i > 0 {
-			up = "▲"
-		}
-		if i < len(p.vals)-1 {
-			down = "▼"
-		}
-		pos = scrollStyle.Render(fmt.Sprintf("%s%s %d/%d", up, down, i+1, len(p.vals))) + dimStyle.Render(" · ")
-	}
-	return pos + dimStyle.Render("tab/enter next · shift+tab back · ctrl+j new line · ctrl+s save")
+	return dimStyle.Render("enter edit · u undo · / filter · esc close · ctrl+s save")
 }
 
 // sameSet reports whether a and b hold the same values in any order.

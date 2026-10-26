@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -56,10 +58,11 @@ func savedField(t *testing.T, fb *fakeBackend, id string) jira.EditField {
 
 func TestFieldsSaveChangesTogether(t *testing.T) {
 	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, " now")
-	m = pressDrain(t, m, "tab", "tab", "k", "tab")
+	m = pressDrain(t, m, "enter", "j", "j", "enter", "k", "enter", "j", "enter")
 	m = typeText(t, m, " ui")
-	m = pressDrain(t, m, "tab", " ")
+	m = pressDrain(t, m, "enter", "j", "enter", " ", "enter")
 	if len(fb.edited) != 0 {
 		t.Fatal("nothing should be saved before ctrl+s")
 	}
@@ -87,19 +90,85 @@ func TestFieldsSaveChangesTogether(t *testing.T) {
 
 func TestFieldsFormKeepsKeysThatWouldClose(t *testing.T) {
 	m, fb := fieldsModel(t)
-	m = typeText(t, m, "qhl")
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "qhl/")
 	if m.popup == nil {
 		t.Fatal("typing should stay in the form")
 	}
 	pressDrain(t, m, "ctrl+s")
-	if got := savedField(t, fb, "summary").Text; got != "Fix itqhl" {
+	if got := savedField(t, fb, "summary").Text; got != "Fix itqhl/" {
 		t.Errorf("summary = %q", got)
+	}
+}
+
+func TestFieldsEscGoesBackToListThenCloses(t *testing.T) {
+	m, _ := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	if v := m.View().Content; strings.Contains(v, "Description") {
+		t.Fatal("only the selected field should show")
+	}
+	m = pressDrain(t, m, "esc")
+	if v := m.View().Content; m.popup == nil || !strings.Contains(v, "Description") || !strings.Contains(v, "Components") {
+		t.Fatal("esc should go back to the list of fields")
+	}
+	if m = pressDrain(t, m, "esc"); m.popup != nil {
+		t.Fatal("esc on the list should close the popup")
+	}
+}
+
+func TestFieldsListShowsEnteredValues(t *testing.T) {
+	m, _ := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "esc")
+	if v := m.View().Content; !strings.Contains(v, "Fix it!") || !strings.Contains(v, "Summary * ●") {
+		t.Fatal("list should show the new value and mark the field as changed")
+	}
+}
+
+func TestFieldsUndoResetsSelectedField(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "esc", "j", "j", "enter", "k", "enter", "k", "k", "u")
+	if v := m.View().Content; !strings.Contains(v, "1 unsaved change") || strings.Contains(v, "Summary * ●") {
+		t.Fatal("u should reset the selected field and leave the other change")
+	}
+	pressDrain(t, m, "j", "j", "u", "ctrl+s")
+	if len(fb.edited) != 0 {
+		t.Fatalf("reset fields shouldn't be saved, got %v", fb.edited)
+	}
+}
+
+func TestFieldsFilterNarrowsList(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "/")
+	m = typeText(t, m, "lab")
+	m = pressDrain(t, m, "enter")
+	if v := ansi.Strip(m.View().Content); strings.Contains(v, "Summary") || !strings.Contains(v, "Labels") {
+		t.Fatal("filter should leave only matching fields")
+	}
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, " ui")
+	pressDrain(t, m, "enter", "ctrl+s")
+	if got := savedField(t, fb, "labels").Chosen; !slices.Equal(got, []string{"api", "ui"}) {
+		t.Errorf("labels = %v", got)
+	}
+}
+
+func TestFieldsEscClearsFilterBeforeClosing(t *testing.T) {
+	m, _ := fieldsModel(t)
+	m = pressDrain(t, m, "/")
+	m = typeText(t, m, "q")
+	m = pressDrain(t, m, "esc")
+	if m.popup == nil || !strings.Contains(m.View().Content, "Summary") {
+		t.Fatal("esc should clear the filter and keep the popup open")
 	}
 }
 
 func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 	m, fb := fieldsModel(t)
-	m = pressDrain(t, m, "tab")
+	m = pressDrain(t, m, "j", "enter")
 	m = typeText(t, m, " one")
 	m = pressDrain(t, m, "ctrl+j")
 	m = typeText(t, m, "two")
@@ -111,24 +180,16 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 
 func TestFieldsSelectCanClearOptionalField(t *testing.T) {
 	m, fb := fieldsModel(t)
-	pressDrain(t, m, "tab", "tab", "k", "k", "ctrl+s")
+	pressDrain(t, m, "j", "j", "enter", "k", "k", "enter", "ctrl+s")
 	if got := savedField(t, fb, "priority").Chosen; len(got) != 0 {
 		t.Errorf("priority = %v", got)
-	}
-}
-
-func TestFieldsEnterOnLastFieldSaves(t *testing.T) {
-	m, fb := fieldsModel(t)
-	m = typeText(t, m, "!")
-	m = pressDrain(t, m, "enter", "enter", "enter", "enter", "enter")
-	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.popup != nil {
-		t.Errorf("enter past the last field should save, got %q", got)
 	}
 }
 
 func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	m, fb := fieldsModel(t)
 	fb.editErr = errors.New("summary: too long")
+	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	m = pressDrain(t, m, "ctrl+s")
 	if m.popup == nil || !strings.Contains(m.View().Content, "summary: too long") || len(fb.boardCalls) != 1 {
@@ -141,7 +202,7 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	}
 }
 
-func TestFieldsFormScrollsToFocusedField(t *testing.T) {
+func TestFieldsListScrolls(t *testing.T) {
 	m, fb := issueModel(t)
 	fb.editFields = nil
 	for i := range 40 {
@@ -149,13 +210,11 @@ func TestFieldsFormScrollsToFocusedField(t *testing.T) {
 	}
 	m = pressDrain(t, m, "e")
 	if v := m.View().Content; !strings.Contains(v, "Field 00") || strings.Contains(v, "Field 39") {
-		t.Fatal("form should start at the top")
+		t.Fatal("list should start at the top")
 	}
-	for range 39 {
-		m = pressDrain(t, m, "tab")
-	}
+	m = pressDrain(t, m, "G")
 	if v := m.View().Content; !strings.Contains(v, "Field 39") || strings.Contains(v, "Field 00") {
-		t.Fatal("form should scroll to keep the focused field visible")
+		t.Fatal("list should scroll to the last field")
 	}
 }
 
@@ -168,10 +227,12 @@ func TestFieldsCloseWithoutChangesNeedsNoConfirm(t *testing.T) {
 
 func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	if !strings.Contains(m.View().Content, "1 unsaved change") {
 		t.Fatal("unsaved changes should be called out")
 	}
+	m = pressDrain(t, m, "esc")
 	m, _ = press(t, m, "esc")
 	if m.popup == nil || !strings.Contains(m.View().Content, "Discard 1 unsaved change?") {
 		t.Fatal("esc should ask before dropping changes")
@@ -188,6 +249,7 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 
 func TestFieldsCtrlDQuitsWithoutAsking(t *testing.T) {
 	m, _ := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	if _, cmd := press(t, m, "ctrl+d"); !isQuit(cmd) {
 		t.Fatal("ctrl+d must quit immediately, unsaved changes or not")

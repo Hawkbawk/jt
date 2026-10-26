@@ -22,6 +22,11 @@ type capturer interface {
 	capturing() bool
 }
 
+// escaper is a pane that uses esc to step back before it closes.
+type escaper interface {
+	consumesEsc() bool
+}
+
 // stager is a pane that holds changes until they're saved with ctrl+s.
 type stager interface {
 	unsaved() int
@@ -100,6 +105,9 @@ func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	closes := keys.close
 	if c, ok := p.pane.(capturer); ok && c.capturing() {
 		closes = keys.blur
+	}
+	if e, ok := p.pane.(escaper); ok && e.consumesEsc() && key.Matches(km, keys.blur) {
+		return p, p.pane.update(km)
 	}
 	if key.Matches(km, closes) {
 		if p.unsaved() > 0 {
