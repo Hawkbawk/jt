@@ -90,9 +90,32 @@ func (c *Client) EditFields(iss Issue) ([]EditField, error) {
 	return editFields(meta, res.Fields), nil
 }
 
+// SearchUsers finds people who can be assigned issues in the issue's project
+// whose name or email match query.
+func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
+	project, _, _ := strings.Cut(issueKey, "-")
+	search := c.jc.UserSearch
+	if c.local {
+		search = c.jc.UserSearchV2
+	}
+	users, err := search(&jcli.UserSearchOptions{Project: project, Query: query, MaxResults: 20})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Option, 0, len(users))
+	for _, u := range users {
+		if !u.Active {
+			continue
+		}
+		id := cmp.Or(u.AccountID, u.Name)
+		out = append(out, Option{ID: id, Name: cmp.Or(u.DisplayName, id)})
+	}
+	return out, nil
+}
+
 // Edit sets the given fields on an issue to their values.
 func (c *Client) Edit(key string, fields []EditField) error {
-	payload, err := editPayload(fields)
+	payload, err := editPayload(fields, c.local)
 	if err != nil {
 		return err
 	}
@@ -184,10 +207,20 @@ func fieldKind(id string, m fieldMeta) (FieldKind, bool) {
 		return FieldSelect, hasOptions
 	case s.Type == "array" && (s.Items == "option" || s.Items == "component" || s.Items == "version"):
 		return FieldMultiSelect, hasOptions
+	case s.Type == "user":
+		return FieldUser, true
+	case s.Type == "array" && s.Items == "user":
+		return FieldMultiUser, true
 	case s.Type == "array" && s.Items == "string" && (id == "labels" || custom == "labels"):
 		return FieldLabels, true
 	}
 	return 0, false
+}
+
+type userValue struct {
+	AccountID   string `json:"accountId"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
 }
 
 // setValue reads the field's current value from the issue. A missing or null
@@ -214,6 +247,21 @@ func (f *EditField) setValue(raw json.RawMessage) {
 		for _, v := range vs {
 			f.Chosen = append(f.Chosen, v.ID)
 		}
+	case FieldUser, FieldMultiUser:
+		var vs []userValue
+		var one *userValue
+		if f.Kind == FieldUser {
+			if json.Unmarshal(raw, &one) == nil && one != nil {
+				vs = append(vs, *one)
+			}
+		} else {
+			_ = json.Unmarshal(raw, &vs)
+		}
+		for _, v := range vs {
+			id := cmp.Or(v.AccountID, v.Name)
+			f.Chosen = append(f.Chosen, id)
+			f.Options = append(f.Options, Option{ID: id, Name: cmp.Or(v.DisplayName, id)})
+		}
 	case FieldLabels:
 		_ = json.Unmarshal(raw, &f.Chosen)
 	default:
@@ -222,8 +270,9 @@ func (f *EditField) setValue(raw json.RawMessage) {
 }
 
 // editPayload builds the "fields" object of an edit request. Empty values
-// clear the field.
-func editPayload(fields []EditField) (map[string]any, error) {
+// clear the field. People are identified by account ID, or by username on a
+// local installation.
+func editPayload(fields []EditField, local bool) (map[string]any, error) {
 	out := make(map[string]any, len(fields))
 	for _, f := range fields {
 		text := strings.TrimSpace(f.Text)
@@ -250,6 +299,18 @@ func editPayload(fields []EditField) (map[string]any, error) {
 				ids[i] = map[string]string{"id": id}
 			}
 			out[f.ID] = ids
+		case FieldUser:
+			if len(f.Chosen) == 0 {
+				out[f.ID] = nil
+				break
+			}
+			out[f.ID] = userRef(f.Chosen[0], local)
+		case FieldMultiUser:
+			users := make([]map[string]string, len(f.Chosen))
+			for i, id := range f.Chosen {
+				users[i] = userRef(id, local)
+			}
+			out[f.ID] = users
 		case FieldLabels:
 			out[f.ID] = append([]string{}, f.Chosen...)
 		default:
@@ -261,4 +322,11 @@ func editPayload(fields []EditField) (map[string]any, error) {
 		}
 	}
 	return out, nil
+}
+
+func userRef(id string, local bool) map[string]string {
+	if local {
+		return map[string]string{"name": id}
+	}
+	return map[string]string{"accountId": id}
 }

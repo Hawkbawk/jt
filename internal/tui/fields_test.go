@@ -3,14 +3,22 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
+
+func TestMain(m *testing.M) {
+	searchDelay = 0
+	os.Exit(m.Run())
+}
 
 func testFields() []jira.EditField {
 	return []jira.EditField{
@@ -24,6 +32,14 @@ func testFields() []jira.EditField {
 		{
 			ID: "components", Name: "Components", Kind: jira.FieldMultiSelect,
 			Options: []jira.Option{{ID: "c1", Name: "API"}, {ID: "c2", Name: "UI"}},
+		},
+		{
+			ID: "owner", Name: "Owner", Kind: jira.FieldUser, Chosen: []string{"u1"},
+			Options: []jira.Option{{ID: "u1", Name: "Ada"}},
+		},
+		{
+			ID: "reviewers", Name: "Reviewers", Kind: jira.FieldMultiUser, Chosen: []string{"u1"},
+			Options: []jira.Option{{ID: "u1", Name: "Ada"}},
 		},
 	}
 }
@@ -253,5 +269,126 @@ func TestFieldsCtrlDQuitsWithoutAsking(t *testing.T) {
 	m = typeText(t, m, "!")
 	if _, cmd := press(t, m, "ctrl+d"); !isQuit(cmd) {
 		t.Fatal("ctrl+d must quit immediately, unsaved changes or not")
+	}
+}
+
+// userModel opens the user field that is field rows down the list.
+func userModel(t *testing.T, field int) (Model, *fakeBackend) {
+	t.Helper()
+	m, fb := fieldsModel(t)
+	fb.users = []jira.Option{{ID: "u2", Name: "Bo"}, {ID: "u3", Name: "Cy"}}
+	for range field {
+		m = pressDrain(t, m, "down")
+	}
+	return pressDrain(t, m, "enter"), fb
+}
+
+func TestUserFieldSearchesAndPicksOne(t *testing.T) {
+	m, fb := userModel(t, 5)
+	m = typeText(t, m, "bo")
+	if !slices.Equal(fb.searches, []string{"b", "bo"}) {
+		t.Fatalf("searches = %v", fb.searches)
+	}
+	m = pressDrain(t, m, "enter", "down", "enter")
+	if !strings.Contains(m.View().Content, "Cy") {
+		t.Fatalf("expected the picked person in the list:\n%s", m.View().Content)
+	}
+	pressDrain(t, m, "ctrl+s")
+	if got := savedField(t, fb, "owner").Chosen; !slices.Equal(got, []string{"u3"}) {
+		t.Errorf("owner = %v", got)
+	}
+}
+
+func TestUserFieldShowsCurrentPeopleAndCanClear(t *testing.T) {
+	m, fb := userModel(t, 5)
+	if !strings.Contains(m.View().Content, "(none)") || !strings.Contains(m.View().Content, "Ada") {
+		t.Fatalf("expected the current person and a way to clear:\n%s", m.View().Content)
+	}
+	pressDrain(t, m, "enter", "up", "enter", "ctrl+s")
+	if got := savedField(t, fb, "owner").Chosen; len(got) != 0 {
+		t.Errorf("owner = %v", got)
+	}
+}
+
+func TestUserFieldEscKeepsCurrentPerson(t *testing.T) {
+	m, fb := userModel(t, 5)
+	m = typeText(t, m, "bo")
+	m = pressDrain(t, m, "enter", "esc", "ctrl+s")
+	if len(fb.edited) != 0 || m.popup == nil {
+		t.Fatalf("esc should leave the field unchanged, got %v", fb.edited)
+	}
+}
+
+func TestUserFieldMultiKeepsPicksAcrossSearches(t *testing.T) {
+	m, fb := userModel(t, 6)
+	m = typeText(t, m, "c")
+	m = pressDrain(t, m, "enter", "down", "down", " ")
+	m = pressDrain(t, m, "shift+tab", "backspace")
+	m = typeText(t, m, "b")
+	m = pressDrain(t, m, "esc")
+	if !strings.Contains(m.View().Content, "Ada, Cy") {
+		t.Fatalf("expected the picked person's name in the list:\n%s", m.View().Content)
+	}
+	pressDrain(t, m, "ctrl+s")
+	if got := savedField(t, fb, "reviewers").Chosen; !slices.Equal(got, []string{"u1", "u3"}) {
+		t.Errorf("reviewers = %v", got)
+	}
+}
+
+func TestUserFieldMultiTogglesTwiceCleanly(t *testing.T) {
+	m, fb := userModel(t, 6)
+	m = pressDrain(t, m, "enter", " ", " ", " ", " ")
+	m = pressDrain(t, m, "esc", "ctrl+s")
+	if len(fb.edited) != 0 {
+		t.Errorf("toggling twice should leave the field unchanged, got %v", fb.edited)
+	}
+	pressDrain(t, m, "enter", "enter", " ", " ", " ", "esc", "ctrl+s")
+	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
+		t.Errorf("reviewers = %v", got)
+	}
+}
+
+func TestUserSearchSkipsSupersededQueries(t *testing.T) {
+	fb := &fakeBackend{users: []jira.Option{{ID: "u2", Name: "Bo"}}}
+	s := newUserSearch(fb, "T-1")
+	s.delay = 50 * time.Millisecond
+	var wg sync.WaitGroup
+	for _, q := range []string{"b", "bo", "bob"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.lookup(q)
+		}()
+		time.Sleep(5 * time.Millisecond)
+	}
+	wg.Wait()
+	if !slices.Equal(fb.searches, []string{"bob"}) {
+		t.Errorf("searches = %v", fb.searches)
+	}
+}
+
+func TestUserFieldMultiRemovesCurrentPerson(t *testing.T) {
+	m, fb := userModel(t, 6)
+	pressDrain(t, m, "enter", " ", "esc", "ctrl+s")
+	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
+		t.Errorf("reviewers = %v", got)
+	}
+}
+
+func TestUserFieldShowsSearchError(t *testing.T) {
+	m, fb := userModel(t, 6)
+	fb.searchErr = errors.New("forbidden")
+	m = typeText(t, m, "x")
+	if !strings.Contains(m.View().Content, "forbidden") {
+		t.Fatalf("expected the error:\n%s", m.View().Content)
+	}
+}
+
+func TestUserFieldShowsNoMatches(t *testing.T) {
+	m, fb := userModel(t, 6)
+	fb.users = nil
+	m = typeText(t, m, "x")
+	if !strings.Contains(m.View().Content, "No matching people") {
+		t.Fatalf("expected a note that nobody matched:\n%s", m.View().Content)
 	}
 }

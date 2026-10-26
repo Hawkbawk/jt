@@ -67,6 +67,14 @@ func TestEditFieldsFromEditMeta(t *testing.T) {
 		},
 		{ID: "customfield_3", Name: "Notes", Kind: FieldTextArea},
 		{
+			ID: "customfield_7", Name: "Owner", Kind: FieldUser, Chosen: []string{"u1"},
+			Options: []Option{{ID: "u1", Name: "Ada"}},
+		},
+		{
+			ID: "customfield_8", Name: "Reviewer(s)", Kind: FieldMultiUser, Chosen: []string{"u2", "u3"},
+			Options: []Option{{ID: "u2", Name: "Bo"}, {ID: "u3", Name: "Cy"}},
+		},
+		{
 			ID: "customfield_2", Name: "Sprint Team", Kind: FieldSelect, Chosen: []string{"o2"},
 			Options: []Option{{ID: "o1", Name: "Team A"}, {ID: "o2", Name: "Team B"}},
 		},
@@ -87,21 +95,34 @@ func TestEditPayload(t *testing.T) {
 		{ID: "labels", Kind: FieldLabels},
 		{ID: "cf_points", Kind: FieldNumber, Text: " 5.5 "},
 		{ID: "duedate", Kind: FieldDate, Text: "2026-11-01"},
-	})
+		{ID: "cf_owner", Kind: FieldUser, Chosen: []string{"u1"}},
+		{ID: "cf_nobody", Kind: FieldUser},
+		{ID: "cf_reviewers", Kind: FieldMultiUser, Chosen: []string{"u2", "u3"}},
+	}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := json.Marshal(got)
-	want := `{"cf_points":5.5,` +
-		`"cf_team":null,"components":[{"id":"c1"},{"id":"c2"}],"description":null,` +
+	want := `{"cf_nobody":null,"cf_owner":{"accountId":"u1"},"cf_points":5.5,` +
+		`"cf_reviewers":[{"accountId":"u2"},{"accountId":"u3"}],"cf_team":null,"components":[{"id":"c1"},{"id":"c2"}],"description":null,` +
 		`"duedate":"2026-11-01","labels":[],"priority":{"id":"1"},"summary":"New"}`
 	if string(body) != want {
 		t.Fatalf("got  %s\nwant %s", body, want)
 	}
 }
 
+func TestEditPayloadUsesUsernamesOnLocalInstallations(t *testing.T) {
+	got, err := editPayload([]EditField{{ID: "cf", Kind: FieldMultiUser, Chosen: []string{"ada"}}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body, _ := json.Marshal(got); string(body) != `{"cf":[{"name":"ada"}]}` {
+		t.Fatalf("got %s", body)
+	}
+}
+
 func TestEditPayloadRejectsBadNumber(t *testing.T) {
-	if _, err := editPayload([]EditField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}); err == nil {
+	if _, err := editPayload([]EditField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}, false); err == nil {
 		t.Fatal("expected an error for a non-numeric value")
 	}
 }

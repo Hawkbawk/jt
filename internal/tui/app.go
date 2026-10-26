@@ -24,6 +24,7 @@ type Backend interface {
 	AddComment(key, body string) error
 	EditFields(iss jira.Issue) ([]jira.EditField, error)
 	Edit(key string, fields []jira.EditField) error
+	SearchUsers(issueKey, query string) ([]jira.Option, error)
 	IssueURL(key string) string
 }
 

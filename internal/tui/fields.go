@@ -39,6 +39,13 @@ type fieldValue struct {
 	single string
 	multi  []string
 	input  huh.Field
+
+	// query and people are only set while a user field is edited.
+	query  string
+	people *userSearch
+	rev    peopleRev
+	// before is the single value when editing began, to put back on esc.
+	before string
 }
 
 func newFieldValue(f jira.EditField) *fieldValue {
@@ -65,12 +72,12 @@ func (v *fieldValue) current() jira.EditField {
 	switch f.Kind {
 	case jira.FieldLabels:
 		f.Chosen = strings.Fields(v.text)
-	case jira.FieldSelect:
+	case jira.FieldSelect, jira.FieldUser:
 		f.Chosen = nil
 		if v.single != "" {
 			f.Chosen = []string{v.single}
 		}
-	case jira.FieldMultiSelect:
+	case jira.FieldMultiSelect, jira.FieldMultiUser:
 		f.Chosen = slices.Clone(v.multi)
 	default:
 		f.Text = v.text
@@ -103,7 +110,7 @@ func (v *fieldValue) Description() string {
 	f := v.current()
 	var s string
 	switch f.Kind {
-	case jira.FieldSelect, jira.FieldMultiSelect:
+	case jira.FieldSelect, jira.FieldMultiSelect, jira.FieldUser, jira.FieldMultiUser:
 		var names []string
 		for _, id := range f.Chosen {
 			i := slices.IndexFunc(f.Options, func(o jira.Option) bool { return o.ID == id })
@@ -218,11 +225,19 @@ func newFieldList(vals []*fieldValue) list.Model {
 // edit opens a form for v alone.
 func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
-	v.input = v.huhField()
+	fields := []huh.Field{}
+	if v.isUser() {
+		v.query, v.before, v.people = "", v.single, newUserSearch(p.backend, p.key)
+		fields = v.userFields()
+		v.input = fields[0]
+	} else {
+		v.input = v.huhField()
+		fields = append(fields, v.input)
+	}
 	km := huh.NewDefaultKeyMap()
 	// ctrl+c is the app's to handle.
 	km.Quit = key.NewBinding(key.WithDisabled())
-	p.form = huh.NewForm(huh.NewGroup(v.input)).
+	p.form = huh.NewForm(huh.NewGroup(fields...)).
 		WithTheme(huh.ThemeFunc(huh.ThemeBase16)).
 		WithKeyMap(km).
 		WithShowHelp(false)
@@ -278,10 +293,18 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	if isKey && key.Matches(km, keys.blur) {
+		// The list moves the value as the cursor moves, so browsing people
+		// that a search found would otherwise count as a choice.
+		if v := p.editing; v.Kind == jira.FieldUser {
+			v.single = v.before
+		}
 		p.closeForm()
 		return nil
 	}
 	_, cmd := p.form.Update(msg)
+	if p.editing.isUser() {
+		p.editing.rememberPeople()
+	}
 	p.growText()
 	if p.form.State == huh.StateCompleted {
 		p.closeForm()
@@ -348,6 +371,8 @@ func (p *fieldsPane) growText() {
 
 func (p *fieldsPane) hint() string {
 	switch {
+	case p.form != nil && p.editing.isUser():
+		return dimStyle.Render("enter next · shift+tab back to search · space toggles · esc back · ctrl+s save")
 	case p.form != nil:
 		return dimStyle.Render("enter done · esc back · ctrl+j new line · ctrl+s save")
 	case p.list.SettingFilter():
