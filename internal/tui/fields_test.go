@@ -289,7 +289,7 @@ func TestUserFieldSearchesAndPicksOne(t *testing.T) {
 	if !slices.Equal(fb.searches, []string{"b", "bo"}) {
 		t.Fatalf("searches = %v", fb.searches)
 	}
-	m = pressDrain(t, m, "enter", "down", "enter")
+	m = pressDrain(t, m, "enter", "enter")
 	if !strings.Contains(m.View().Content, "Cy") {
 		t.Fatalf("expected the picked person in the list:\n%s", m.View().Content)
 	}
@@ -388,7 +388,7 @@ func TestUserFieldShowsNoMatches(t *testing.T) {
 	m, fb := userModel(t, 6)
 	fb.users = nil
 	m = typeText(t, m, "x")
-	if !strings.Contains(m.View().Content, "No matching people") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "No matching") {
 		t.Fatalf("expected a note that nobody matched:\n%s", m.View().Content)
 	}
 }

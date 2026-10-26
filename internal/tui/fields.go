@@ -237,6 +237,11 @@ func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 	km := huh.NewDefaultKeyMap()
 	// ctrl+c is the app's to handle.
 	km.Quit = key.NewBinding(key.WithDisabled())
+	if v.isUser() {
+		// The search box above the list is the way to narrow people down.
+		km.Select.Filter.SetEnabled(false)
+		km.MultiSelect.Filter.SetEnabled(false)
+	}
 	p.form = huh.NewForm(huh.NewGroup(fields...)).
 		WithTheme(huh.ThemeFunc(huh.ThemeBase16)).
 		WithKeyMap(km).
