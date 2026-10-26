@@ -27,6 +27,9 @@ type escaper interface {
 	consumesEsc() bool
 }
 
+// holder is a pane that can't be saved while one of its fields is open.
+type holder interface{ holding() bool }
+
 // stager is a pane that holds changes until they're saved with ctrl+s.
 type stager interface {
 	unsaved() int
@@ -146,7 +149,11 @@ func (p *panePopup) view(spin string) string {
 	footer := p.help.View(paneHelpKeys)
 	if n := p.unsaved(); n > 0 {
 		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
-		title += "  " + warnStyle.Render("● "+changes+" · ctrl+s to save")
+		warn := "● " + changes
+		if h, ok := p.pane.(holder); !ok || !h.holding() {
+			warn += " · ctrl+s to save"
+		}
+		title += "  " + warnStyle.Render(warn)
 		if p.confirmClose {
 			footer = warnStyle.Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
 		}

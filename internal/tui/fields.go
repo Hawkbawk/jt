@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"errors"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
@@ -44,8 +47,15 @@ type fieldValue struct {
 	query  string
 	people *userSearch
 	rev    peopleRev
-	// before is the single value when editing began, to put back on esc.
-	before string
+	// before is the entered values when editing began, to put back on esc.
+	before entered
+}
+
+// entered is the values a form field is bound to.
+type entered struct {
+	text   string
+	single string
+	multi  []string
 }
 
 func newFieldValue(f jira.EditField) *fieldValue {
@@ -66,27 +76,50 @@ func (v *fieldValue) reset() {
 	}
 }
 
+// begin remembers the entered values, for revert.
+func (v *fieldValue) begin() {
+	v.before = v.entered()
+}
+
+func (v *fieldValue) entered() entered {
+	return entered{v.text, v.single, slices.Clone(v.multi)}
+}
+
+// revert puts back the values entered when editing began.
+func (v *fieldValue) revert() {
+	v.text, v.single, v.multi = v.before.text, v.before.single, slices.Clone(v.before.multi)
+}
+
 // current returns the field with the values entered so far.
 func (v *fieldValue) current() jira.EditField {
+	return v.with(v.entered())
+}
+
+// with returns the field holding the values in e.
+func (v *fieldValue) with(e entered) jira.EditField {
 	f := v.EditField
 	switch f.Kind {
 	case jira.FieldLabels:
-		f.Chosen = strings.Fields(v.text)
+		f.Chosen = strings.Fields(e.text)
 	case jira.FieldSelect, jira.FieldUser:
 		f.Chosen = nil
-		if v.single != "" {
-			f.Chosen = []string{v.single}
+		if e.single != "" {
+			f.Chosen = []string{e.single}
 		}
 	case jira.FieldMultiSelect, jira.FieldMultiUser:
-		f.Chosen = slices.Clone(v.multi)
+		f.Chosen = slices.Clone(e.multi)
 	default:
-		f.Text = v.text
+		f.Text = e.text
 	}
 	return f
 }
 
 func (v *fieldValue) changed() bool {
-	f := v.current()
+	return v.differs(v.current())
+}
+
+// differs reports whether f holds something other than how the field loaded.
+func (v *fieldValue) differs(f jira.EditField) bool {
 	return f.Text != v.Text || !sameSet(f.Chosen, v.Chosen)
 }
 
@@ -155,10 +188,35 @@ func (v *fieldValue) huhField() huh.Field {
 	switch v.Kind {
 	case jira.FieldLabels:
 		in.Placeholder("separate labels with spaces")
+	case jira.FieldNumber:
+		in.Validate(v.validate)
 	case jira.FieldDate:
-		in.Placeholder("YYYY-MM-DD")
+		in.Placeholder("YYYY-MM-DD").Validate(v.validate)
 	}
 	return in
+}
+
+// validate checks the text entered for number and date fields. An empty value
+// clears the field. Only optional fields can have an empty value.
+func (v *fieldValue) validate(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		if v.Required {
+			return errors.New("required")
+		}
+		return nil
+	}
+	switch v.Kind {
+	case jira.FieldNumber:
+		if _, err := strconv.ParseFloat(s, 64); err != nil {
+			return errors.New("must be a number")
+		}
+	case jira.FieldDate:
+		if _, err := time.Parse(time.DateOnly, s); err != nil {
+			return errors.New("must be a date like 2006-01-02")
+		}
+	}
+	return nil
 }
 
 // minTextLines is the height of a text area that isn't being edited.
@@ -225,9 +283,10 @@ func newFieldList(vals []*fieldValue) list.Model {
 // edit opens a form for v alone.
 func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
+	v.begin()
 	fields := []huh.Field{}
 	if v.isUser() {
-		v.query, v.before, v.people = "", v.single, newUserSearch(p.backend, p.key)
+		v.query, v.people = "", newUserSearch(p.backend, p.key)
 		fields = v.userFields()
 		v.input = fields[0]
 	} else {
@@ -277,7 +336,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	km, isKey := msg.(tea.KeyMsg)
-	if isKey && key.Matches(km, keys.send) {
+	if isKey && p.form == nil && key.Matches(km, keys.send) {
 		return p.save()
 	}
 	if p.form == nil {
@@ -298,11 +357,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	if isKey && key.Matches(km, keys.blur) {
-		// The list moves the value as the cursor moves, so browsing people
-		// that a search found would otherwise count as a choice.
-		if v := p.editing; v.Kind == jira.FieldUser {
-			v.single = v.before
-		}
+		p.editing.revert()
 		p.closeForm()
 		return nil
 	}
@@ -329,16 +384,24 @@ func (p *fieldsPane) save() tea.Cmd {
 	}
 }
 
-// changed returns the fields that differ from how they loaded.
+// changed returns the fields that differ from how they loaded. What is still
+// being entered in an open form doesn't count until enter keeps it.
 func (p *fieldsPane) changed() []jira.EditField {
 	var out []jira.EditField
 	for _, v := range p.vals {
-		if v.changed() {
-			out = append(out, v.current())
+		f := v.current()
+		if v == p.editing {
+			f = v.with(v.before)
+		}
+		if v.differs(f) {
+			out = append(out, f)
 		}
 	}
 	return out
 }
+
+// holding is true while a field's form is open, which blocks saving.
+func (p *fieldsPane) holding() bool { return p.form != nil }
 
 func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 	var lines []string
@@ -377,9 +440,9 @@ func (p *fieldsPane) growText() {
 func (p *fieldsPane) hint() string {
 	switch {
 	case p.form != nil && p.editing.isUser():
-		return dimStyle.Render("enter next · shift+tab back to search · space toggles · esc back · ctrl+s save")
+		return dimStyle.Render("enter next · shift+tab back to search · space toggles · esc back")
 	case p.form != nil:
-		return dimStyle.Render("enter done · esc back · ctrl+j new line · ctrl+s save")
+		return dimStyle.Render("enter done · esc back · ctrl+j new line")
 	case p.list.SettingFilter():
 		return dimStyle.Render("enter apply filter · esc clear · ctrl+s save")
 	}

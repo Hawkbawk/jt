@@ -111,9 +111,37 @@ func TestFieldsFormKeepsKeysThatWouldClose(t *testing.T) {
 	if m.popup == nil {
 		t.Fatal("typing should stay in the form")
 	}
-	pressDrain(t, m, "ctrl+s")
+	pressDrain(t, m, "enter", "ctrl+s")
 	if got := savedField(t, fb, "summary").Text; got != "Fix itqhl/" {
 		t.Errorf("summary = %q", got)
+	}
+}
+
+func TestFieldsEscRevertsEditEnterKeepsIt(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, " now")
+	m = pressDrain(t, m, "esc", "ctrl+s")
+	if len(fb.edited) != 0 {
+		t.Fatalf("esc should drop the edit, got %v", fb.edited)
+	}
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, " now")
+	m = pressDrain(t, m, "enter", "enter")
+	m = typeText(t, m, " more")
+	pressDrain(t, m, "esc", "ctrl+s")
+	if got := savedField(t, fb, "summary").Text; got != "Fix it now" {
+		t.Errorf("summary = %q", got)
+	}
+}
+
+func TestFieldsCtrlSDoesNothingInsideForm(t *testing.T) {
+	m, fb := fieldsModel(t)
+	m = pressDrain(t, m, "enter")
+	m = typeText(t, m, "!")
+	m = pressDrain(t, m, "ctrl+s")
+	if len(fb.edited) != 0 || m.popup == nil {
+		t.Fatalf("ctrl+s should only save from the list, got %v", fb.edited)
 	}
 }
 
@@ -136,7 +164,7 @@ func TestFieldsListShowsEnteredValues(t *testing.T) {
 	m, _ := fieldsModel(t)
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
-	m = pressDrain(t, m, "esc")
+	m = pressDrain(t, m, "enter")
 	if v := m.View().Content; !strings.Contains(v, "Fix it!") || !strings.Contains(v, "Summary * ●") {
 		t.Fatal("list should show the new value and mark the field as changed")
 	}
@@ -188,7 +216,7 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 	m = typeText(t, m, " one")
 	m = pressDrain(t, m, "ctrl+j")
 	m = typeText(t, m, "two")
-	pressDrain(t, m, "ctrl+s")
+	pressDrain(t, m, "enter", "ctrl+s")
 	if got := savedField(t, fb, "description").Text; got != "Steps one\ntwo" {
 		t.Errorf("description = %q", got)
 	}
@@ -207,7 +235,7 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	fb.editErr = errors.New("summary: too long")
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
-	m = pressDrain(t, m, "ctrl+s")
+	m = pressDrain(t, m, "enter", "ctrl+s")
 	if m.popup == nil || !strings.Contains(m.View().Content, "summary: too long") || len(fb.boardCalls) != 1 {
 		t.Fatal("failed save should leave the popup open with the error")
 	}
@@ -245,10 +273,13 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 	m, fb := fieldsModel(t)
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
-	if !strings.Contains(m.View().Content, "1 unsaved change") {
-		t.Fatal("unsaved changes should be called out")
+	if v := m.View().Content; strings.Contains(v, "unsaved") || strings.Contains(v, "ctrl+s") {
+		t.Fatal("what is still being entered shouldn't count or offer saving")
 	}
-	m = pressDrain(t, m, "esc")
+	m = pressDrain(t, m, "enter")
+	if !strings.Contains(m.View().Content, "1 unsaved change · ctrl+s to save") {
+		t.Fatal("kept changes should be called out")
+	}
 	m, _ = press(t, m, "esc")
 	if m.popup == nil || !strings.Contains(m.View().Content, "Discard 1 unsaved change?") {
 		t.Fatal("esc should ask before dropping changes")
@@ -325,7 +356,7 @@ func TestUserFieldMultiKeepsPicksAcrossSearches(t *testing.T) {
 	m = pressDrain(t, m, "enter", "down", "down", " ")
 	m = pressDrain(t, m, "shift+tab", "backspace")
 	m = typeText(t, m, "b")
-	m = pressDrain(t, m, "esc")
+	m = pressDrain(t, m, "enter", "enter")
 	if !strings.Contains(m.View().Content, "Ada, Cy") {
 		t.Fatalf("expected the picked person's name in the list:\n%s", m.View().Content)
 	}
@@ -338,11 +369,11 @@ func TestUserFieldMultiKeepsPicksAcrossSearches(t *testing.T) {
 func TestUserFieldMultiTogglesTwiceCleanly(t *testing.T) {
 	m, fb := userModel(t, 6)
 	m = pressDrain(t, m, "enter", " ", " ", " ", " ")
-	m = pressDrain(t, m, "esc", "ctrl+s")
+	m = pressDrain(t, m, "enter", "ctrl+s")
 	if len(fb.edited) != 0 {
 		t.Errorf("toggling twice should leave the field unchanged, got %v", fb.edited)
 	}
-	pressDrain(t, m, "enter", "enter", " ", " ", " ", "esc", "ctrl+s")
+	pressDrain(t, m, "enter", "enter", " ", " ", " ", "enter", "ctrl+s")
 	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
 		t.Errorf("reviewers = %v", got)
 	}
@@ -369,7 +400,7 @@ func TestUserSearchSkipsSupersededQueries(t *testing.T) {
 
 func TestUserFieldMultiRemovesCurrentPerson(t *testing.T) {
 	m, fb := userModel(t, 6)
-	pressDrain(t, m, "enter", " ", "esc", "ctrl+s")
+	pressDrain(t, m, "enter", " ", "enter", "ctrl+s")
 	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
 		t.Errorf("reviewers = %v", got)
 	}
@@ -390,5 +421,30 @@ func TestUserFieldShowsNoMatches(t *testing.T) {
 	m = typeText(t, m, "x")
 	if !strings.Contains(ansi.Strip(m.View().Content), "No matching") {
 		t.Fatalf("expected a note that nobody matched:\n%s", m.View().Content)
+	}
+}
+
+func TestFieldValueValidate(t *testing.T) {
+	tests := []struct {
+		kind     jira.FieldKind
+		required bool
+		text     string
+		ok       bool
+	}{
+		{jira.FieldNumber, false, "3.5", true},
+		{jira.FieldNumber, false, " 8 ", true},
+		{jira.FieldNumber, false, "abc", false},
+		{jira.FieldNumber, false, "", true},
+		{jira.FieldNumber, true, "", false},
+		{jira.FieldDate, false, "2026-10-26", true},
+		{jira.FieldDate, false, "10/26/2026", false},
+		{jira.FieldDate, false, "2026-02-30", false},
+		{jira.FieldDate, false, "", true},
+	}
+	for _, tt := range tests {
+		v := &fieldValue{EditField: jira.EditField{Kind: tt.kind, Required: tt.required}}
+		if err := v.validate(tt.text); (err == nil) != tt.ok {
+			t.Errorf("validate(%v, required=%v, %q) = %v", tt.kind, tt.required, tt.text, err)
+		}
 	}
 }
