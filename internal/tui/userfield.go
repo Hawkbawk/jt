@@ -5,11 +5,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -72,7 +71,9 @@ func newUserField(f jira.EditField, b Backend, issueKey string) *userField {
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.Placeholder = "Search by name or email"
-	ti.Cursor.SetMode(cursor.CursorStatic)
+	tis := textinput.DefaultStyles(darkBackground)
+	tis.Cursor.Blink = false
+	ti.SetStyles(tis)
 	ti.Focus()
 	u := &userField{EditField: f, backend: b, issueKey: issueKey, input: ti, help: newHelp()}
 	if f.Kind == jira.FieldUser {
@@ -103,7 +104,7 @@ func (f *userField) rows() []jira.Option {
 	return f.results
 }
 
-func (f *userField) update(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (f *userField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	rows := f.rows()
 	switch {
 	case key.Matches(msg, keys.blur):
@@ -185,7 +186,7 @@ func (f *userField) receive(msg userSearchedMsg) {
 
 func (f *userField) view(innerW, height int) []string {
 	border := inputBorder.BorderForeground(highlight)
-	f.input.Width = innerW - border.GetHorizontalFrameSize() - 1
+	f.input.SetWidth(innerW - border.GetHorizontalFrameSize() - 1)
 	lines := []string{border.Render(f.input.View())}
 	height -= len(lines)
 

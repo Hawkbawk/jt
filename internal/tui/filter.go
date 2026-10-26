@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -78,7 +78,7 @@ func (p *filterPopup) switchTab(delta int) {
 }
 
 func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
+	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
 	}

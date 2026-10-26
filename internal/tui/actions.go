@@ -3,8 +3,8 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 )
 
 // actionDoneMsg reports the result of a yank or open.
@@ -40,7 +40,7 @@ func newIssueActions(b Backend) issueActions {
 
 // handle returns the command for msg on the given issue. Keys that open a
 // popup also return it, with the command that loads its content.
-func (a issueActions) handle(msg tea.KeyMsg, issueKey string) (popup, tea.Cmd) {
+func (a issueActions) handle(msg tea.KeyPressMsg, issueKey string) (popup, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.view):
 		return newTextPopup("Details", issueKey, renderDetail, a.md), loadIssue(a.backend, issueKey)

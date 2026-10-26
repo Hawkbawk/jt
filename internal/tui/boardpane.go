@@ -3,9 +3,9 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -92,7 +92,7 @@ func (b *boardPane) update(msg boardLoadedMsg) {
 }
 
 // move applies a navigation key and reports whether it was one.
-func (b *boardPane) move(msg tea.KeyMsg) bool {
+func (b *boardPane) move(msg tea.KeyPressMsg) bool {
 	if b.nav == nil {
 		return false
 	}

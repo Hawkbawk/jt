@@ -66,7 +66,7 @@ func TestCommentsSendErrorKeepsDraft(t *testing.T) {
 	if p.input.Value() != "a" || !p.input.Focused() {
 		t.Fatal("draft should survive a failed send")
 	}
-	if !strings.Contains(m.View(), "nope") {
+	if !strings.Contains(m.View().Content, "nope") {
 		t.Fatal("send error not shown")
 	}
 }

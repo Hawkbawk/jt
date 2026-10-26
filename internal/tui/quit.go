@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 )
 
 // quitGuard implements the quit keys: ctrl+d exits at once, while ctrl+c asks
@@ -12,7 +12,7 @@ type quitGuard struct {
 }
 
 // handle reports whether msg was consumed and whether the app should exit.
-func (q *quitGuard) handle(msg tea.KeyMsg) (consumed, quit bool) {
+func (q *quitGuard) handle(msg tea.KeyPressMsg) (consumed, quit bool) {
 	switch {
 	case key.Matches(msg, keys.forceQuit):
 		return true, true

@@ -3,9 +3,9 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -18,7 +18,7 @@ type choiceList struct {
 
 // handle moves the cursor for an up or down key over n rows and reports
 // whether the key was one.
-func (l *choiceList) handle(msg tea.KeyMsg, n int) bool {
+func (l *choiceList) handle(msg tea.KeyPressMsg, n int) bool {
 	switch {
 	case key.Matches(msg, keys.down):
 		l.cursor = min(l.cursor+1, max(n-1, 0))
@@ -78,5 +78,5 @@ func renderPopup(width, height int, header, body []string, footer string) string
 	bodyH := max(1, innerH-len(header)-1)
 	content := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(strings.Join(body, "\n"))
 	lines := append(append([]string{}, header...), content, footer)
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(strings.Join(lines, "\n"))
+	return popupStyle.Width(innerW + popupStyle.GetHorizontalFrameSize()).Render(strings.Join(lines, "\n"))
 }

@@ -101,7 +101,7 @@ func TestFieldsUndoLeavesNothingToSave(t *testing.T) {
 	m = pressDrain(t, m, "esc", "j", "enter")
 	m = typeText(t, m, "more")
 	m = pressDrain(t, m, "esc")
-	if strings.Count(m.View(), "(edited)") != 2 {
+	if strings.Count(m.View().Content, "(edited)") != 2 {
 		t.Fatal("esc should keep what was typed")
 	}
 	m = pressDrain(t, m, "u", "k", "u", "ctrl+s")
@@ -147,7 +147,7 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	m = pressDrain(t, m, "enter", "ctrl+s")
-	if m.popup == nil || !strings.Contains(m.View(), "summary: too long") || len(fb.boardCalls) != 1 {
+	if m.popup == nil || !strings.Contains(m.View().Content, "summary: too long") || len(fb.boardCalls) != 1 {
 		t.Fatal("failed save should leave the popup open with the error")
 	}
 	fb.editErr = nil
@@ -164,13 +164,13 @@ func TestFieldsListScrollsToCursor(t *testing.T) {
 		fb.editFields = append(fb.editFields, jira.EditField{ID: fmt.Sprint(i), Name: fmt.Sprintf("Field %02d", i), Kind: jira.FieldText})
 	}
 	m = pressDrain(t, m, "e")
-	if v := m.View(); !strings.Contains(v, "Field 00") || strings.Contains(v, "Field 39") {
+	if v := m.View().Content; !strings.Contains(v, "Field 00") || strings.Contains(v, "Field 39") {
 		t.Fatal("list should start at the top")
 	}
 	for range 39 {
 		m, _ = press(t, m, "j")
 	}
-	if v := m.View(); !strings.Contains(v, "Field 39") || strings.Contains(v, "Field 00") {
+	if v := m.View().Content; !strings.Contains(v, "Field 39") || strings.Contains(v, "Field 00") {
 		t.Fatal("list should scroll to keep the cursor visible")
 	}
 }
@@ -187,11 +187,11 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	m = pressDrain(t, m, "enter")
-	if !strings.Contains(m.View(), "1 unsaved change") {
+	if !strings.Contains(m.View().Content, "1 unsaved change") {
 		t.Fatal("unsaved changes should be called out")
 	}
 	m, _ = press(t, m, "esc")
-	if m.popup == nil || !strings.Contains(m.View(), "Discard 1 unsaved change?") {
+	if m.popup == nil || !strings.Contains(m.View().Content, "Discard 1 unsaved change?") {
 		t.Fatal("esc should ask before dropping changes")
 	}
 	m, _ = press(t, m, "n")
@@ -242,8 +242,8 @@ func TestUserFieldSearchesAndPicksOne(t *testing.T) {
 
 func TestUserFieldShowsCurrentPeopleAndCanClear(t *testing.T) {
 	m, fb := userModel(t, 5)
-	if !strings.Contains(m.View(), "(none)") || !strings.Contains(m.View(), "Ada") {
-		t.Fatalf("expected the current person and a way to clear:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "(none)") || !strings.Contains(m.View().Content, "Ada") {
+		t.Fatalf("expected the current person and a way to clear:\n%s", m.View().Content)
 	}
 	pressDrain(t, m, "up", "enter", "ctrl+s")
 	if got := savedField(t, fb, "owner").Chosen; len(got) != 0 {
@@ -256,8 +256,8 @@ func TestUserFieldMultiTogglesAndKeepsNames(t *testing.T) {
 	m = typeText(t, m, "c")
 	m = pressDrain(t, m, "down", "enter")
 	m = pressDrain(t, m, "esc")
-	if !strings.Contains(m.View(), "Ada, Cy") {
-		t.Fatalf("expected the picked person's name in the list:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "Ada, Cy") {
+		t.Fatalf("expected the picked person's name in the list:\n%s", m.View().Content)
 	}
 	pressDrain(t, m, "ctrl+s")
 	if got := savedField(t, fb, "reviewers").Chosen; !slices.Equal(got, []string{"u1", "u3"}) {
@@ -277,7 +277,7 @@ func TestUserFieldShowsSearchError(t *testing.T) {
 	m, fb := userModel(t, 6)
 	fb.searchErr = errors.New("forbidden")
 	m = typeText(t, m, "x")
-	if !strings.Contains(m.View(), "forbidden") {
-		t.Fatalf("expected the error:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "forbidden") {
+		t.Fatalf("expected the error:\n%s", m.View().Content)
 	}
 }

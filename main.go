@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui"
@@ -24,6 +24,6 @@ func run() error {
 		return err
 	}
 
-	_, err = tea.NewProgram(tui.New(client), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.New(client)).Run()
 	return err
 }

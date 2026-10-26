@@ -3,13 +3,13 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/glamour/v2"
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -56,22 +56,22 @@ type textPopup struct {
 }
 
 func newTextPopup(title, issueKey string, render issueRenderer, md markdownRenderer) *textPopup {
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.SetHorizontalStep(4)
 	return &textPopup{title: title, key: issueKey, render: render, md: md, vp: vp}
 }
 
 func (p *textPopup) setSize(width, height int) {
 	p.width, p.height = width, height
-	p.vp.Width = width - popupStyle.GetHorizontalFrameSize()
+	p.vp.SetWidth(width - popupStyle.GetHorizontalFrameSize())
 	// Title and hint lines sit above and below the viewport.
-	p.vp.Height = max(1, height-popupStyle.GetVerticalFrameSize()-2-p.reserved)
+	p.vp.SetHeight(max(1, height-popupStyle.GetVerticalFrameSize()-2-p.reserved))
 	p.refresh()
 }
 
 func (p *textPopup) refresh() {
 	if p.detail != nil {
-		p.vp.SetContent(p.render(p.detail, p.vp.Width, p.md))
+		p.vp.SetContent(p.render(p.detail, p.vp.Width(), p.md))
 	}
 }
 
@@ -84,7 +84,7 @@ func (p *textPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		p.detail, p.err = msg.detail, msg.err
 		p.refresh()
 		return p, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.close) {
 			return nil, nil
 		}
@@ -119,12 +119,12 @@ func (p *textPopup) compose(spin, below, hint string) string {
 	default:
 		body = p.vp.View()
 	}
-	parts := []string{title, lipgloss.NewStyle().Height(p.vp.Height).MaxHeight(p.vp.Height).Render(body)}
+	parts := []string{title, lipgloss.NewStyle().Height(p.vp.Height()).MaxHeight(p.vp.Height()).Render(body)}
 	if below != "" {
 		parts = append(parts, below)
 	}
 	parts = append(parts, hint)
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+	return popupStyle.Width(innerW + popupStyle.GetHorizontalFrameSize()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 // markdownRenderer renders markdown wrapped to width.
@@ -136,7 +136,7 @@ type markdownRenderer func(md string, width int) string
 // wrong.
 func glamourStyleConfig() ansi.StyleConfig {
 	cfg := styles.LightStyleConfig
-	if lipgloss.HasDarkBackground() {
+	if darkBackground {
 		cfg = styles.DarkStyleConfig
 	}
 	cfg.Document.Color = nil

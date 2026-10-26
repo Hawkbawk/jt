@@ -1,13 +1,21 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"os"
+
+	"charm.land/lipgloss/v2"
+)
+
+var darkBackground = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+
+var lightDark = lipgloss.LightDark(darkBackground)
 
 var (
-	accent    = lipgloss.AdaptiveColor{Light: "#5A3FC0", Dark: "#A08CFF"}
-	subtle    = lipgloss.AdaptiveColor{Light: "#8A8A8A", Dark: "#6C6C6C"}
-	highlight = lipgloss.AdaptiveColor{Light: "#D97706", Dark: "#F5B041"}
-	muted     = lipgloss.AdaptiveColor{Light: "#4A4A4A", Dark: "#B0B0B0"}
-	danger    = lipgloss.AdaptiveColor{Light: "#C0392B", Dark: "#FF6B6B"}
+	accent    = lightDark(lipgloss.Color("#5A3FC0"), lipgloss.Color("#A08CFF"))
+	subtle    = lightDark(lipgloss.Color("#8A8A8A"), lipgloss.Color("#6C6C6C"))
+	highlight = lightDark(lipgloss.Color("#D97706"), lipgloss.Color("#F5B041"))
+	muted     = lightDark(lipgloss.Color("#4A4A4A"), lipgloss.Color("#B0B0B0"))
+	danger    = lightDark(lipgloss.Color("#C0392B"), lipgloss.Color("#FF6B6B"))
 
 	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(accent)
 	dimStyle    = lipgloss.NewStyle().Foreground(subtle)

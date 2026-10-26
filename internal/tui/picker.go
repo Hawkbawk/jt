@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -150,7 +150,7 @@ func (p *picker) update(msg tea.Msg) tea.Cmd {
 		}
 		p.projects = msg.projects
 		return p.setProjects(msg.projects)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		return p.handleKey(msg)
 	}
 	if !p.open {
@@ -159,7 +159,7 @@ func (p *picker) update(msg tea.Msg) tea.Cmd {
 	return p.forward(msg)
 }
 
-func (p *picker) handleKey(msg tea.KeyMsg) tea.Cmd {
+func (p *picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
 		if key.Matches(msg, pickerCloseKey) && p.cancellable {
 			p.open = false
@@ -208,7 +208,7 @@ func (p picker) view(spin string) string {
 	default:
 		body = p.list.View()
 	}
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalPadding()).
+	return popupStyle.Width(innerW + popupStyle.GetHorizontalFrameSize()).
 		Height(innerH).
 		Render(lipgloss.NewStyle().MaxWidth(innerW).Render(body))
 }
