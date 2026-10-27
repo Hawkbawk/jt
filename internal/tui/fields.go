@@ -191,12 +191,14 @@ func (v *fieldValue) huhField() huh.Field {
 	case jira.FieldNumber:
 		in.Validate(v.validate)
 	case jira.FieldDate:
-		in.Placeholder("YYYY-MM-DD").Validate(v.validate)
+		in.Placeholder("YYYY-MM-DD or relative like -2d").Validate(v.validate)
+	case jira.FieldDateTime:
+		in.Placeholder("YYYY-MM-DDTHH:MM or relative like -2d").Validate(v.validate)
 	}
 	return in
 }
 
-// validate checks the text entered for number and date fields. An empty value
+// validate checks the text entered for number, date and date time fields. An empty value
 // clears the field. Only optional fields can have an empty value.
 func (v *fieldValue) validate(s string) error {
 	s = strings.TrimSpace(s)
@@ -211,9 +213,9 @@ func (v *fieldValue) validate(s string) error {
 		if _, err := strconv.ParseFloat(s, 64); err != nil {
 			return errors.New("must be a number")
 		}
-	case jira.FieldDate:
-		if _, err := time.Parse(time.DateOnly, s); err != nil {
-			return errors.New("must be a date like 2006-01-02")
+	case jira.FieldDate, jira.FieldDateTime:
+		if _, err := v.parseTime(s, time.Now()); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -367,6 +369,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 	}
 	p.growText()
 	if p.form.State == huh.StateCompleted {
+		p.editing.normalizeTime(time.Now())
 		p.closeForm()
 	}
 	return cmd
