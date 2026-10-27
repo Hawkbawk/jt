@@ -6,6 +6,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 const commentInputHeight = 5
@@ -31,21 +33,16 @@ func newCommentsPopup(b Backend, issueKey string, md markdownRenderer) *comments
 	ta.Prompt = ""
 	ta.ShowLineNumbers = false
 	ta.Placeholder = "Write a comment…"
-	ts := textarea.DefaultStyles(darkBackground)
-	ts.Cursor.Blink = false
-	ts.Focused.Placeholder = ts.Focused.Placeholder.Foreground(muted)
-	ts.Blurred.Placeholder = ts.Blurred.Placeholder.Foreground(muted)
-	ts.Blurred.Text = ts.Blurred.Text.Foreground(muted)
-	ta.SetStyles(ts)
+	ta.SetStyles(styles.TextArea())
 	ta.SetHeight(commentInputHeight)
 
 	tp := newTextPopup("Comments", issueKey, renderComments, md)
-	tp.reserved = commentInputHeight + inputBorder.GetVerticalFrameSize()
+	tp.reserved = commentInputHeight + styles.Input().GetVerticalFrameSize()
 	return &commentsPopup{textPopup: tp, backend: b, input: ta}
 }
 
 func (p *commentsPopup) setSize(width, height int) {
-	p.input.SetWidth(width - popupStyle.GetHorizontalFrameSize() - inputBorder.GetHorizontalFrameSize())
+	p.input.SetWidth(width - styles.Popup().GetHorizontalFrameSize() - styles.Input().GetHorizontalFrameSize())
 	p.textPopup.setSize(width, height)
 }
 
@@ -112,18 +109,18 @@ func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
 }
 
 func (p *commentsPopup) view(spin string) string {
-	border := inputBorder
+	border := styles.Input()
 	hint := "↑↓←→ scroll · enter write · esc close"
 	if p.input.Focused() {
-		border = border.BorderForeground(highlight)
+		border = border.BorderForeground(styles.Highlight())
 		hint = "ctrl+s send · esc stop writing"
 	}
 	switch {
 	case p.sending:
 		hint = spin + " Sending…"
 	case p.sendErr != nil:
-		hint = errorStyle.Render("Error: " + p.sendErr.Error())
+		hint = styles.Error().Render("Error: " + p.sendErr.Error())
 	}
 	below := border.Render(p.input.View())
-	return p.compose(spin, below, dimStyle.Render(hint))
+	return p.compose(spin, below, styles.Dim().Render(hint))
 }

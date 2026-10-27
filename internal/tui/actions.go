@@ -5,6 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // actionDoneMsg reports the result of a yank or open.
@@ -16,7 +18,7 @@ type actionDoneMsg struct {
 // display returns the status line text for the result.
 func (m actionDoneMsg) display() string {
 	if m.err != nil {
-		return errorStyle.Render(m.err.Error())
+		return styles.Error().Render(m.err.Error())
 	}
 	return m.status
 }
@@ -32,7 +34,7 @@ type issueActions struct {
 func newIssueActions(b Backend) issueActions {
 	return issueActions{
 		backend:  b,
-		md:       glamourRenderer(),
+		md:       styles.Markdown,
 		copyText: copyToClipboard,
 		openURL:  openInBrowser,
 	}

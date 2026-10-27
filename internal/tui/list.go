@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // choiceList tracks the cursor of a vertical list of choices.
@@ -34,7 +36,7 @@ func (l choiceList) render(labels []string, innerW int) []string {
 	for i, label := range labels {
 		label = ansi.Truncate(label, innerW-2, "…")
 		if i == l.cursor {
-			lines[i] = lipgloss.NewStyle().Foreground(highlight).Bold(true).Render("› " + label)
+			lines[i] = lipgloss.NewStyle().Foreground(styles.Highlight()).Bold(true).Render("› " + label)
 		} else {
 			lines[i] = "  " + label
 		}
@@ -46,9 +48,9 @@ func (l choiceList) render(labels []string, innerW int) []string {
 func renderTabs(names []string, active int) string {
 	parts := make([]string, len(names))
 	for i, name := range names {
-		style := dimStyle.Padding(0, 1)
+		style := styles.Dim().Padding(0, 1)
 		if i == active {
-			style = titleStyle.Padding(0, 1).Underline(true)
+			style = styles.Title().Padding(0, 1).Underline(true)
 		}
 		parts[i] = style.Render(name)
 	}
@@ -57,7 +59,7 @@ func renderTabs(names []string, active int) string {
 
 // popupInner returns the content area of a popup with the given outer size.
 func popupInner(width, height int) (int, int) {
-	return width - popupStyle.GetHorizontalFrameSize(), height - popupStyle.GetVerticalFrameSize()
+	return width - styles.Popup().GetHorizontalFrameSize(), height - styles.Popup().GetVerticalFrameSize()
 }
 
 // renderPopup draws a popup of the given outer size. The body is padded or
@@ -68,5 +70,5 @@ func renderPopup(width, height int, header, body []string, footer string) string
 	bodyH := max(1, innerH-len(header)-1)
 	content := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(strings.Join(body, "\n"))
 	lines := append(append([]string{}, header...), content, footer)
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalFrameSize()).Render(strings.Join(lines, "\n"))
+	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).Render(strings.Join(lines, "\n"))
 }

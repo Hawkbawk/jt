@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // Backend is the Jira functionality the TUI depends on.
@@ -48,8 +49,8 @@ type Model struct {
 // opened on start.
 func New(backend Backend) Model {
 	m := Model{
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
-		help:    newHelp(),
+		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
+		help:    styles.Help(),
 		board:   newBoardPane(backend),
 		picker:  newPicker(backend),
 		actions: newIssueActions(backend),

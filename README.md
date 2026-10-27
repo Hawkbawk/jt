@@ -57,6 +57,46 @@ If your jira-cli config lives somewhere other than the default location, set `JI
 
 Press `ctrl-d` to quit immediately, or `ctrl-c` twice to confirm quitting.
 
+## Settings
+
+`jt` keeps its own settings in `jt.yaml` in your user config directory (`~/.config` on Linux, `~/Library/Application Support` on macOS). It creates the file the first time you run `jt`. Set `JT_CONFIG_FILE` to use a different path.
+
+`jt` reads the file once at startup. If you edit it by hand, restart `jt` to pick up the change.
+
+### Theme
+
+Set `theme` to one of `base`, `charm`, `dracula`, `base16`, `catppuccin`, or `gruvbox`.
+
+```yaml
+theme: gruvbox
+```
+
+Each theme, with the same board:
+
+**base**
+
+![base theme](docs/screenshots/base.png)
+
+**charm**
+
+![charm theme](docs/screenshots/charm.png)
+
+**dracula**
+
+![dracula theme](docs/screenshots/dracula.png)
+
+**base16**
+
+![base16 theme](docs/screenshots/base16.png)
+
+**catppuccin**
+
+![catppuccin theme](docs/screenshots/catppuccin.png)
+
+**gruvbox**
+
+![gruvbox theme](docs/screenshots/gruvbox.png)
+
 ## Development
 
 The Nix dev shell (loaded automatically if you use direnv) provides Go and the lint tools.

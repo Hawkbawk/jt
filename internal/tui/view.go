@@ -5,6 +5,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // View implements tea.Model.
@@ -29,8 +31,8 @@ func (m Model) render() string {
 }
 
 func (m Model) headerView() string {
-	parts := append([]string{titleStyle.Render("jt")}, m.board.headerParts(m.spinner.View())...)
-	return headerStyle.Width(m.width).Render(strings.Join(parts, dimStyle.Render(" · ")))
+	parts := append([]string{styles.Title().Render("jt")}, m.board.headerParts(m.spinner.View())...)
+	return styles.Header().Width(m.width).Render(strings.Join(parts, styles.Dim().Render(" · ")))
 }
 
 func (m Model) footerView() string {
@@ -39,9 +41,9 @@ func (m Model) footerView() string {
 	}
 	prefix := ""
 	if m.status != "" {
-		prefix = m.status + dimStyle.Render(" · ")
+		prefix = m.status + styles.Dim().Render(" · ")
 	}
 	h := m.help
 	h.SetWidth(max(0, m.width-2-lipgloss.Width(prefix)))
-	return dimStyle.Padding(0, 1).Width(m.width).Render(prefix + h.View(keys))
+	return styles.Dim().Padding(0, 1).Width(m.width).Render(prefix + h.View(keys))
 }

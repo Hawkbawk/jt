@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 )
 
@@ -66,13 +65,4 @@ func (k boardKeys) ShortHelp() []key.Binding {
 // FullHelp implements help.KeyMap.
 func (k boardKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{k.ShortHelp()}
-}
-
-func newHelp() help.Model {
-	h := help.New()
-	h.Styles.ShortKey = dimStyle
-	h.Styles.ShortDesc = dimStyle
-	h.Styles.ShortSeparator = dimStyle
-	h.Styles.Ellipsis = dimStyle
-	return h
 }

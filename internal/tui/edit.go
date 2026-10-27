@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // pane is the content of a pane popup.
@@ -71,7 +72,7 @@ type panePopup struct {
 }
 
 func newPanePopup(title, issueKey string, p pane) *panePopup {
-	return &panePopup{title: title, issueKey: issueKey, pane: p, help: newHelp()}
+	return &panePopup{title: title, issueKey: issueKey, pane: p, help: styles.Help()}
 }
 
 func newMovePopup(b Backend, iss jira.Issue) *panePopup {
@@ -145,7 +146,7 @@ func (p *panePopup) unsaved() int {
 func (p *panePopup) view(spin string) string {
 	innerW, innerH := popupInner(p.width, p.height)
 	p.help.SetWidth(innerW)
-	title := titleStyle.Render(p.title + " · " + p.issueKey)
+	title := styles.Title().Render(p.title + " · " + p.issueKey)
 	footer := p.help.View(paneHelpKeys)
 	if n := p.unsaved(); n > 0 {
 		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
@@ -153,9 +154,9 @@ func (p *panePopup) view(spin string) string {
 		if h, ok := p.pane.(holder); !ok || !h.holding() {
 			warn += " · ctrl+s to save"
 		}
-		title += "  " + warnStyle.Render(warn)
+		title += "  " + styles.Warn().Render(warn)
 		if p.confirmClose {
-			footer = warnStyle.Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
+			footer = styles.Warn().Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
 		}
 	}
 	header := []string{title, ""}
