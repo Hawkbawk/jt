@@ -9,11 +9,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// choiceList tracks the cursor of a vertical list of choices, and the first
-// row shown when the list is scrolled.
+// choiceList tracks the cursor of a vertical list of choices.
 type choiceList struct {
 	cursor int
-	top    int
 }
 
 // handle moves the cursor for an up or down key over n rows and reports
@@ -42,14 +40,6 @@ func (l choiceList) render(labels []string, innerW int) []string {
 		}
 	}
 	return lines
-}
-
-// renderWindow renders the rows that fit in height, scrolling just enough to
-// keep the cursor in view.
-func (l *choiceList) renderWindow(labels []string, innerW, height int) []string {
-	height = max(height, 1)
-	l.top = max(0, min(l.top, l.cursor, len(labels)-height), l.cursor-height+1)
-	return l.render(labels, innerW)[l.top:min(len(labels), l.top+height)]
 }
 
 // renderTabs draws a tab bar with the active tab underlined.

@@ -2,220 +2,211 @@ package tui
 
 import (
 	"slices"
-	"sync/atomic"
+	"sync"
 	"time"
 
-	"charm.land/bubbles/v2/help"
-	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textinput"
-	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
-// userSearchDelay waits for a pause in typing before searching.
-var userSearchDelay = 250 * time.Millisecond
-
-// The bindings that move the cursor and the ones that only appear in the help
-// line, which are matched through keys.accept and keys.blur.
-var (
-	userUp   = key.NewBinding(key.WithKeys("up", "ctrl+k"))
-	userDown = key.NewBinding(key.WithKeys("down", "ctrl+j"))
-
-	userSearchHelp = key.NewBinding(key.WithHelp("type", "search"))
-	userMoveHelp   = key.NewBinding(key.WithHelp("↑/↓", "move"))
-	userPickHelp   = key.NewBinding(key.WithHelp("enter", "choose"))
-	userToggleHelp = key.NewBinding(key.WithHelp("enter", "toggle"))
-	userDoneHelp   = key.NewBinding(key.WithHelp("esc", "done"))
-	userCancelHelp = key.NewBinding(key.WithHelp("esc", "cancel"))
-)
-
-// userHelp is the key hints for a user field.
-type userHelp []key.Binding
-
-// ShortHelp implements help.KeyMap.
-func (h userHelp) ShortHelp() []key.Binding { return h }
-
-// FullHelp implements help.KeyMap.
-func (h userHelp) FullHelp() [][]key.Binding { return [][]key.Binding{h} }
-
-type userSearchedMsg struct {
-	// from is the field that searched. Undoing a field replaces it, and the
-	// replacement must not take results meant for the old one.
-	from    *userField
-	seq     int64
-	results []jira.Option
-	err     error
-}
-
-// userField picks people by searching for them as you type. Letters go to the
-// search box, so only the arrow keys move the cursor.
-type userField struct {
-	jira.EditField
+// userSearch looks up people for a user field. Options funcs run on their own
+// goroutines and may ask for the same query more than once, so each query is
+// fetched once and the answer kept. A query only goes out once nothing newer
+// has been asked for during the debounce delay.
+type userSearch struct {
 	backend  Backend
 	issueKey string
+	delay    time.Duration
 
-	input   textinput.Model
-	help    help.Model
-	list    choiceList
-	results []jira.Option
-	// searches counts the searches started. Only the newest one's results are
-	// used, and a search that waits out the debounce behind a newer one is
-	// skipped.
-	searches  atomic.Int64
-	searching bool
-	err       error
+	mu     sync.Mutex
+	latest string
+	found  map[string]searchResult
+	names  map[string]jira.Option
 }
 
-func newUserField(f jira.EditField, b Backend, issueKey string) *userField {
-	ti := textinput.New()
-	ti.Prompt = ""
-	ti.Placeholder = "Search by name or email"
-	tis := textinput.DefaultStyles(darkBackground)
-	tis.Cursor.Blink = false
-	ti.SetStyles(tis)
-	ti.Focus()
-	u := &userField{EditField: f, backend: b, issueKey: issueKey, input: ti, help: newHelp()}
-	if f.Kind == jira.FieldUser {
-		u.list.cursor = max(0, slices.IndexFunc(u.rows(), func(o jira.Option) bool {
-			return o.ID == "" && len(f.Chosen) == 0 || slices.Contains(f.Chosen, o.ID)
-		}))
-	}
-	return u
+type searchResult struct {
+	people []jira.Option
+	err    error
 }
 
-func (f *userField) value() jira.EditField { return f.EditField }
-
-// rows lists the people currently set until something is typed, then the
-// search results. A single user field that isn't required can also be cleared.
-func (f *userField) rows() []jira.Option {
-	var rows []jira.Option
-	if f.input.Value() == "" {
-		if f.Kind == jira.FieldUser && !f.Required {
-			rows = append(rows, jira.Option{Name: "(none)"})
-		}
-		for _, o := range f.Options {
-			if slices.Contains(f.Chosen, o.ID) {
-				rows = append(rows, o)
-			}
-		}
-		return rows
-	}
-	return f.results
-}
-
-func (f *userField) update(msg tea.KeyPressMsg) (tea.Cmd, bool) {
-	rows := f.rows()
-	switch {
-	case key.Matches(msg, keys.blur):
-		return nil, true
-	case key.Matches(msg, userUp):
-		f.list.cursor = max(f.list.cursor-1, 0)
-	case key.Matches(msg, userDown):
-		f.list.cursor = min(f.list.cursor+1, max(len(rows)-1, 0))
-	case key.Matches(msg, keys.accept):
-		if f.list.cursor >= len(rows) {
-			return nil, f.Kind == jira.FieldUser
-		}
-		return nil, f.choose(rows[f.list.cursor])
-	default:
-		before := f.input.Value()
-		var cmd tea.Cmd
-		f.input, cmd = f.input.Update(msg)
-		if f.input.Value() == before {
-			return cmd, false
-		}
-		return tea.Batch(cmd, f.search()), false
-	}
-	return nil, false
-}
-
-// choose applies the picked row, and reports whether editing is done.
-func (f *userField) choose(o jira.Option) bool {
-	if f.Kind == jira.FieldUser {
-		f.Chosen = nil
-		if o.ID != "" {
-			f.Chosen = []string{o.ID}
-			f.remember(o)
-		}
-		return true
-	}
-	if i := slices.Index(f.Chosen, o.ID); i >= 0 {
-		f.Chosen = slices.Delete(f.Chosen, i, i+1)
-	} else {
-		f.Chosen = append(f.Chosen, o.ID)
-		f.remember(o)
-	}
-	return false
-}
-
-// remember keeps a picked person's name, to show it once the search is gone.
-func (f *userField) remember(o jira.Option) {
-	if !slices.ContainsFunc(f.Options, func(x jira.Option) bool { return x.ID == o.ID }) {
-		f.Options = append(f.Options, o)
+func newUserSearch(b Backend, issueKey string) *userSearch {
+	return &userSearch{
+		backend:  b,
+		issueKey: issueKey,
+		delay:    searchDelay,
+		found:    map[string]searchResult{},
+		names:    map[string]jira.Option{},
 	}
 }
 
-func (f *userField) search() tea.Cmd {
-	query := f.input.Value()
-	seq := f.searches.Add(1)
-	f.list.cursor, f.err = 0, nil
-	if query == "" {
-		f.results, f.searching = nil, false
-		return nil
+func (s *userSearch) lookup(query string) searchResult {
+	s.mu.Lock()
+	if r, ok := s.found[query]; ok {
+		s.mu.Unlock()
+		return r
 	}
-	f.searching = true
-	b, issueKey := f.backend, f.issueKey
-	return func() tea.Msg {
-		time.Sleep(userSearchDelay)
-		if f.searches.Load() != seq {
+	s.latest = query
+	s.mu.Unlock()
+
+	time.Sleep(s.delay)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r, ok := s.found[query]; ok {
+		return r
+	}
+	if s.latest != query {
+		// Superseded while waiting. huh drops the answer for an old query.
+		return searchResult{}
+	}
+	people, err := s.backend.SearchUsers(s.issueKey, query)
+	for _, o := range people {
+		s.names[o.ID] = o
+	}
+	r := searchResult{people: people, err: err}
+	s.found[query] = r
+	return r
+}
+
+func (s *userSearch) name(id string) (jira.Option, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	o, ok := s.names[id]
+	return o, ok
+}
+
+// isUser reports whether the field picks people by searching for them.
+func (v *fieldValue) isUser() bool {
+	return v.Kind == jira.FieldUser || v.Kind == jira.FieldMultiUser
+}
+
+// chosenPeople is the ids of the people picked so far.
+func (v *fieldValue) chosenPeople() []string {
+	if v.Kind == jira.FieldUser {
+		if v.single == "" {
 			return nil
 		}
-		results, err := b.SearchUsers(issueKey, query)
-		return userSearchedMsg{from: f, seq: seq, results: results, err: err}
+		return []string{v.single}
 	}
+	return v.multi
 }
 
-// receive takes the results of a search, unless a newer one has started.
-func (f *userField) receive(msg userSearchedMsg) {
-	if msg.from != f || msg.seq != f.searches.Load() {
-		return
+// person finds the name of a person already on the field or found by a search.
+func (v *fieldValue) person(id string) jira.Option {
+	if i := slices.IndexFunc(v.Options, func(o jira.Option) bool { return o.ID == id }); i >= 0 {
+		return v.Options[i]
 	}
-	f.searching, f.err, f.results = false, msg.err, msg.results
+	if o, ok := v.people.name(id); ok {
+		return o
+	}
+	return jira.Option{ID: id, Name: id}
 }
 
-func (f *userField) view(innerW, height int) []string {
-	border := inputBorder.BorderForeground(highlight)
-	f.input.SetWidth(innerW - border.GetHorizontalFrameSize() - 1)
-	lines := []string{border.Render(f.input.View())}
-	height -= len(lines)
-
-	rows := f.rows()
-	labels := make([]string, len(rows))
-	for i, o := range rows {
-		labels[i] = o.Name
-		if f.Kind == jira.FieldMultiUser {
-			mark := "[ ] "
-			if slices.Contains(f.Chosen, o.ID) {
-				mark = "[x] "
-			}
-			labels[i] = mark + o.Name
+// rememberPeople keeps the names of the people picked, to show them once the
+// search is gone.
+func (v *fieldValue) rememberPeople() {
+	for _, id := range v.chosenPeople() {
+		if !slices.ContainsFunc(v.Options, func(o jira.Option) bool { return o.ID == id }) {
+			v.Options = append(v.Options, v.person(id))
 		}
 	}
-	switch {
-	case f.err != nil:
-		return append(lines, errorStyle.Width(innerW).Render("Error: "+f.err.Error()))
-	case f.searching:
-		return append(lines, dimStyle.Render("Searching…"))
-	case len(rows) == 0 && f.input.Value() != "":
-		return append(lines, dimStyle.Render("No matching people."))
-	}
-	return append(lines, f.list.renderWindow(labels, innerW, height)...)
 }
 
-func (f *userField) hint() string {
-	if f.Kind == jira.FieldMultiUser {
-		return f.help.View(userHelp{userSearchHelp, userMoveHelp, userToggleHelp, userDoneHelp})
+// peopleOptions lists the people currently set until something is typed, then
+// the search results. Picked people stay in a multi-select's list, since it
+// drops anything that isn't in it.
+func (v *fieldValue) peopleOptions() []huh.Option[string] {
+	var people []jira.Option
+	if v.query == "" {
+		if v.Kind == jira.FieldUser && !v.Required {
+			people = append(people, jira.Option{Name: "(none)"})
+		}
+		ids := v.chosenPeople()
+		if v.Kind == jira.FieldMultiUser {
+			// People taken off stay listed so they can be put back.
+			ids = slices.Concat(v.Chosen, ids)
+		}
+		for _, id := range ids {
+			if !slices.ContainsFunc(people, func(p jira.Option) bool { return p.ID == id }) {
+				people = append(people, v.person(id))
+			}
+		}
+	} else {
+		if v.Kind == jira.FieldMultiUser {
+			for _, id := range v.multi {
+				people = append(people, v.person(id))
+			}
+		}
+		for _, o := range v.people.lookup(v.query).people {
+			if !slices.ContainsFunc(people, func(p jira.Option) bool { return p.ID == o.ID }) {
+				people = append(people, o)
+			}
+		}
 	}
-	return f.help.View(userHelp{userSearchHelp, userMoveHelp, userPickHelp, userCancelHelp})
+	opts := make([]huh.Option[string], len(people))
+	for i, o := range people {
+		opts[i] = huh.NewOption(o.Name, o.ID)
+	}
+	return opts
 }
+
+// searchStatus says why the list of people is empty.
+func (v *fieldValue) searchStatus() string {
+	if v.query == "" {
+		return ""
+	}
+	r := v.people.lookup(v.query)
+	switch {
+	case r.err != nil:
+		return "Error: " + r.err.Error()
+	case len(r.people) == 0:
+		return "No matching people."
+	}
+	return ""
+}
+
+// peopleRev is what the lists of people bind to. huh caches lists by a hash of
+// their bindings and toggles the cached options in place, so binding the query
+// and picks themselves would bring back stale toggles once they return to an
+// earlier state. Hash gives every change of query or picks a number that is
+// never reused, so nothing cached is ever picked up again.
+type peopleRev struct {
+	v     *fieldValue
+	n     uint64
+	query string
+	picks []string
+}
+
+func (r *peopleRev) Hash() (uint64, error) {
+	picks := r.v.chosenPeople()
+	if r.v.query != r.query || !slices.Equal(picks, r.picks) {
+		r.n++
+		r.query, r.picks = r.v.query, slices.Clone(picks)
+	}
+	return r.n, nil
+}
+
+// userFields builds a search box and the list of people it finds.
+func (v *fieldValue) userFields() []huh.Field {
+	search := huh.NewInput().Title(v.Name).Placeholder("Search by name or email").Value(&v.query)
+	v.rev = peopleRev{v: v}
+	bind := []any{&v.rev}
+	if v.Kind == jira.FieldUser {
+		return []huh.Field{search, huh.NewSelect[string]().
+			OptionsFunc(v.peopleOptions, bind).
+			DescriptionFunc(v.searchStatus, bind).
+			Height(userListHeight).
+			Value(&v.single)}
+	}
+	return []huh.Field{search, huh.NewMultiSelect[string]().
+		OptionsFunc(v.peopleOptions, bind).
+		DescriptionFunc(v.searchStatus, bind).
+		Height(userListHeight).
+		Value(&v.multi)}
+}
+
+const userListHeight = 8
+
+// searchDelay is how long a query waits for another keystroke before it is sent.
+var searchDelay = 300 * time.Millisecond

@@ -17,11 +17,18 @@ type pane interface {
 	loading() bool
 }
 
-// capturer is a pane that can take over every key, such as while text is
-// being typed into it.
+// capturer is a pane that takes typed text, so only esc closes it.
 type capturer interface {
 	capturing() bool
 }
+
+// escaper is a pane that uses esc to step back before it closes.
+type escaper interface {
+	consumesEsc() bool
+}
+
+// holder is a pane that can't be saved while one of its fields is open.
+type holder interface{ holding() bool }
 
 // stager is a pane that holds changes until they're saved with ctrl+s.
 type stager interface {
@@ -98,10 +105,14 @@ func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	if p.confirmClose {
 		return p.updateConfirm(km)
 	}
+	closes := keys.close
 	if c, ok := p.pane.(capturer); ok && c.capturing() {
+		closes = keys.blur
+	}
+	if e, ok := p.pane.(escaper); ok && e.consumesEsc() && key.Matches(km, keys.blur) {
 		return p, p.pane.update(km)
 	}
-	if key.Matches(km, keys.close) {
+	if key.Matches(km, closes) {
 		if p.unsaved() > 0 {
 			p.confirmClose = true
 			return p, nil
@@ -138,7 +149,11 @@ func (p *panePopup) view(spin string) string {
 	footer := p.help.View(paneHelpKeys)
 	if n := p.unsaved(); n > 0 {
 		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
-		title += "  " + warnStyle.Render("● "+changes+" · ctrl+s to save")
+		warn := "● " + changes
+		if h, ok := p.pane.(holder); !ok || !h.holding() {
+			warn += " · ctrl+s to save"
+		}
+		title += "  " + warnStyle.Render(warn)
 		if p.confirmClose {
 			footer = warnStyle.Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
 		}
