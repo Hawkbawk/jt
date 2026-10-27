@@ -12,6 +12,7 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/spf13/viper v1.21.0
 )
 
@@ -34,7 +35,6 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/kentaro-m/blackfriday-confluence v0.0.0-20220126124413-8e85477b49b3 // indirect
