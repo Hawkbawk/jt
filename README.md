@@ -97,6 +97,8 @@ Each theme, with the same board:
 
 ![gruvbox theme](docs/screenshots/gruvbox.png)
 
+The gruvbox theme uses the hard-contrast palette from [gruvbox.nvim](https://github.com/ellisonleao/gruvbox.nvim) by [ellisonleao](https://github.com/ellisonleao), which is based on the original [gruvbox](https://github.com/morhetz/gruvbox) by Pavel Pertsev (morhetz).
+
 ## Development
 
 The Nix dev shell (loaded automatically if you use direnv) provides Go and the lint tools.

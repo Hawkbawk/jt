@@ -8,7 +8,8 @@ import (
 )
 
 // shade is a color for light and dark terminal backgrounds. Values are hex
-// strings or ANSI color numbers.
+// strings or ANSI color numbers. An empty value uses the terminal's own
+// foreground.
 type shade struct{ light, dark string }
 
 func (s shade) pick(dark bool) string {
@@ -86,7 +87,7 @@ var themes = map[config.Theme]theme{
 			accent:    shade{"#8F3F71", "#D3869B"},
 			subtle:    shade{"#928374", "#928374"},
 			highlight: shade{"#B57614", "#FABD2F"},
-			muted:     shade{"#504945", "#BDAE93"},
+			muted:     shade{"#7C6F64", "#A89984"},
 			danger:    shade{"#9D0006", "#FB4934"},
 		},
 		form: themeGruvbox,
@@ -101,14 +102,15 @@ func lookupTheme(t config.Theme) theme {
 	return themes[config.ThemeBase]
 }
 
-// themeGruvbox returns a huh theme based on the gruvbox color scheme.
+// themeGruvbox returns a huh theme using the hard-contrast palette from
+// gruvbox.nvim.
 func themeGruvbox(isDark bool) *huh.Styles {
 	t := huh.ThemeBase(isDark)
 	ld := lipgloss.LightDark(isDark)
 
 	var (
 		fg      = ld(lipgloss.Color("#3C3836"), lipgloss.Color("#EBDBB2"))
-		border  = ld(lipgloss.Color("#BDAE93"), lipgloss.Color("#504945"))
+		border  = ld(lipgloss.Color("#D5C4A1"), lipgloss.Color("#504945"))
 		gray    = lipgloss.Color("#928374")
 		red     = ld(lipgloss.Color("#9D0006"), lipgloss.Color("#FB4934"))
 		green   = ld(lipgloss.Color("#79740E"), lipgloss.Color("#B8BB26"))
@@ -116,7 +118,7 @@ func themeGruvbox(isDark bool) *huh.Styles {
 		purple  = ld(lipgloss.Color("#8F3F71"), lipgloss.Color("#D3869B"))
 		aqua    = ld(lipgloss.Color("#427B58"), lipgloss.Color("#8EC07C"))
 		blurBg  = ld(lipgloss.Color("#EBDBB2"), lipgloss.Color("#3C3836"))
-		buttonF = ld(lipgloss.Color("#FBF1C7"), lipgloss.Color("#282828"))
+		buttonF = ld(lipgloss.Color("#F9F5D7"), lipgloss.Color("#1D2021"))
 	)
 
 	t.Focused.Base = t.Focused.Base.BorderForeground(border)

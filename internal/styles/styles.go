@@ -196,8 +196,8 @@ func markdownConfig(pal palette, dark bool) ansi.StyleConfig {
 	}
 	cfg.Document.Color = nil
 
-	heading := new(pal.accent.pick(dark))
-	link := new(pal.highlight.pick(dark))
+	heading := colorPtr(pal.accent.pick(dark))
+	link := colorPtr(pal.highlight.pick(dark))
 	for _, h := range []*ansi.StyleBlock{&cfg.Heading, &cfg.H1, &cfg.H2, &cfg.H3, &cfg.H4, &cfg.H5, &cfg.H6} {
 		h.Color = heading
 		h.BackgroundColor = nil
@@ -206,6 +206,14 @@ func markdownConfig(pal palette, dark bool) ansi.StyleConfig {
 	cfg.LinkText.Color = link
 	cfg.Code.Color = link
 	cfg.Code.BackgroundColor = nil
-	cfg.BlockQuote.Color = new(pal.subtle.pick(dark))
+	cfg.BlockQuote.Color = colorPtr(pal.subtle.pick(dark))
 	return cfg
+}
+
+// colorPtr returns a glamour color, or nil to use the terminal's foreground.
+func colorPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
