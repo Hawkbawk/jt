@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
@@ -19,6 +20,7 @@ type Config struct {
 	Theme Theme `mapstructure:"theme"`
 
 	viper *viper.Viper
+	mu    *sync.Mutex
 }
 
 // Load reads the settings file, creating it with the defaults when missing.
@@ -28,7 +30,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	return decode(v)
+	c, err := decode(v)
+	if err != nil {
+		return Config{}, err
+	}
+	c.mu = &sync.Mutex{}
+	return c, nil
 }
 
 // decode reads the settings out of v, rejecting values that don't parse.
@@ -42,6 +49,15 @@ func decode(v *viper.Viper) (Config, error) {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
 	return c, nil
+}
+
+// SaveTheme writes t to the settings file, keeping its other keys.
+func (c Config) SaveTheme(t Theme) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Set("theme", t.String())
+	return c.viper.WriteConfig()
 }
 
 func initializeViper() (*viper.Viper, error) {
@@ -68,8 +84,8 @@ func initializeViper() (*viper.Viper, error) {
 	return v, nil
 }
 
-// writeDefaults creates the settings file from v's defaults, so there is
-// always a file to watch, and reads it back so v knows its path.
+// writeDefaults creates the settings file from v's defaults and reads it back
+// so v knows its path when saving.
 func writeDefaults(v *viper.Viper, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return createError(path, withoutPath(err))

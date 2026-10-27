@@ -32,6 +32,6 @@ func run() error {
 		return err
 	}
 
-	_, err = tea.NewProgram(tui.New(client)).Run()
+	_, err = tea.NewProgram(tui.New(client, cfg)).Run()
 	return err
 }

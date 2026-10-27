@@ -14,7 +14,7 @@ type boardKeys struct {
 	filter, nextTab, prevTab           key.Binding
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
-	toggle, undo                       key.Binding
+	toggle, undo, theme                key.Binding
 
 	navigate, topBottom key.Binding
 }
@@ -35,6 +35,7 @@ var keys = boardKeys{
 	yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
 	open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
 	filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
+	theme:    key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 	refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	projects: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "projects")),
 	quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
@@ -59,7 +60,7 @@ var keys = boardKeys{
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.refresh, k.projects, k.quit}
+	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.theme, k.refresh, k.projects, k.quit}
 }
 
 // FullHelp implements help.KeyMap.

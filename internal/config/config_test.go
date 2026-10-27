@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -56,6 +57,46 @@ func TestLoadCreatesDefaultFile(t *testing.T) {
 	if err != nil || !strings.Contains(string(b), "theme: base") {
 		t.Fatalf("default file = %q, %v", b, err)
 	}
+}
+
+func TestSaveThemeKeepsOtherKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jt.yml")
+	if err := os.WriteFile(path, []byte("theme: charm\nother: kept\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("JT_CONFIG_FILE", path)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.SaveTheme(ThemeGruvbox); err != nil {
+		t.Fatal(err)
+	}
+
+	b, _ := os.ReadFile(path)
+	if !strings.Contains(string(b), "other: kept") || !strings.Contains(string(b), "theme: gruvbox") {
+		t.Errorf("saved file = %q", b)
+	}
+}
+
+func TestSaveThemeIsSafeConcurrently(t *testing.T) {
+	t.Setenv("JT_CONFIG_FILE", filepath.Join(t.TempDir(), "jt.yml"))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for _, th := range Themes() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := cfg.SaveTheme(th); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestLoadExplainsWhenDefaultFileCannotBeCreated(t *testing.T) {

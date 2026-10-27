@@ -87,6 +87,12 @@ func newProjectList(cancellable bool) list.Model {
 	return l
 }
 
+// restyle redraws the list in the current theme.
+func (p *picker) restyle() {
+	p.list.Styles.Title = styles.Title()
+	p.list.SetDelegate(themedDelegate())
+}
+
 // show opens a fresh picker. It returns the command that fills the list, from
 // the cache when the projects were already fetched.
 func (p *picker) show(cancellable bool) tea.Cmd {

@@ -10,6 +10,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+
+	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type fakeBackend struct {
@@ -132,7 +135,7 @@ func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) Model {
 	if fb.board == nil {
 		fb.board = testBoard()
 	}
-	m := New(fb)
+	m := New(fb, &fakeSettings{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
@@ -408,4 +411,31 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 	if _, cmd := press(t, m, "r"); cmd != nil {
 		t.Fatal("r without a project should do nothing")
 	}
+}
+
+func TestThemeSelectedRestylesEverything(t *testing.T) {
+	t.Cleanup(func() { styles.Use(config.ThemeBase) })
+	styles.Use(config.ThemeBase)
+
+	m := newTestModel(t, "TEST", &fakeBackend{})
+	m.settings = &fakeSettings{}
+	m = drain(t, m, m.Init())
+	before := m.spinner.Style.GetForeground()
+
+	next, _ := m.Update(themeSelectedMsg{theme: config.ThemeGruvbox})
+	m = next.(Model)
+
+	if got := m.spinner.Style.GetForeground(); got == before || got != styles.Title().GetForeground() {
+		t.Errorf("spinner color = %v, want the new title color (was %v)", got, before)
+	}
+}
+
+type fakeSettings struct {
+	saved []config.Theme
+	err   error
+}
+
+func (f *fakeSettings) SaveTheme(t config.Theme) error {
+	f.saved = append(f.saved, t)
+	return f.err
 }
