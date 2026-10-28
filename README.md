@@ -73,6 +73,10 @@ theme: gruvbox
 
 Each theme, with the same board:
 
+**terminal**
+
+![terminal theme](docs/screenshots/terminal.png)
+
 **charm**
 
 ![charm theme](docs/screenshots/charm.png)
