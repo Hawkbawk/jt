@@ -57,11 +57,11 @@ func parseArgs(args []string, stdout io.Writer) (done bool, err error) {
 	}
 	switch {
 	case help:
-		fmt.Fprint(stdout, usage)
-		return true, nil
+		_, err = fmt.Fprint(stdout, usage)
+		return true, err
 	case showVersion:
-		fmt.Fprintln(stdout, "jt", buildVersion())
-		return true, nil
+		_, err = fmt.Fprintln(stdout, "jt", buildVersion())
+		return true, err
 	case fs.NArg() > 0:
 		return true, fmt.Errorf("unexpected argument %q (see 'jt --help')", fs.Arg(0))
 	}
