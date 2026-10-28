@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Check for an existing release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(nix eval --raw .#packages.x86_64-linux.default.version)
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test
+        if: steps.version.outputs.exists != 'true'
+        run: nix develop --command go test ./...
+
+      - name: Build binaries
+        if: steps.version.outputs.exists != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          mkdir dist
+          for target in linux/amd64 linux/arm64 darwin/arm64; do
+            os=${target%/*}
+            arch=${target#*/}
+            name="jt_${TAG}_${os}_${arch}"
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 nix develop --command \
+              go build -trimpath -ldflags "-s -w -X main.version=${TAG#v}" -o "dist/jt" .
+            tar -C dist -czf "dist/${name}.tar.gz" jt
+            rm dist/jt
+          done
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
+
+      # Immutable releases lock the tag and assets on publish, so create a
+      # draft, attach everything, then publish. Publishing creates the tag at
+      # the pushed commit.
+      - name: Create release
+        if: steps.version.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" dist/* \
+            --draft --target "$GITHUB_SHA" --generate-notes --title "$TAG" $prerelease
+          gh release edit "$TAG" --draft=false

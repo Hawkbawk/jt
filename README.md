@@ -34,7 +34,29 @@ To install it into your profile instead:
 nix profile install github:Hawkbawk/jt
 ```
 
+To pin a release, add its tag to the flake reference:
+
+```sh
+nix run github:Hawkbawk/jt/v0.1.0
+```
+
+In a flake, use `inputs.jt.url = "github:Hawkbawk/jt/v0.1.0";`.
+
 The flake is configured with a Cachix cache, so prebuilt binaries are available for x86_64-linux, aarch64-linux, and aarch64-darwin.
+
+### From a release tarball
+
+Each [release](https://github.com/Hawkbawk/jt/releases) has tarballs for linux-amd64, linux-arm64, and darwin-arm64, plus a `checksums.txt`. Download the one for your platform, verify it, and put `jt` on your `PATH`:
+
+```sh
+version=0.1.0
+platform=darwin_arm64 # or linux_amd64, linux_arm64
+curl -LO "https://github.com/Hawkbawk/jt/releases/download/v${version}/jt_v${version}_${platform}.tar.gz"
+curl -LO "https://github.com/Hawkbawk/jt/releases/download/v${version}/checksums.txt"
+sha256sum --check --ignore-missing checksums.txt # on macOS: shasum -a 256 --check --ignore-missing checksums.txt
+tar -xzf "jt_v${version}_${platform}.tar.gz"
+install jt ~/.local/bin/
+```
 
 ### From source
 
@@ -53,6 +75,8 @@ jt
 ```
 
 `jt` opens the default project from your jira-cli config (`project.key`). If the configured `board.id` belongs to that project, `jt` uses it. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
+
+Run `jt --version` to see the installed version and `jt --help` for usage.
 
 If your jira-cli config lives somewhere other than the default location, set `JIRA_CONFIG_FILE` to its path.
 
