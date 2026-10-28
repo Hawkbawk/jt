@@ -10,6 +10,7 @@
 
 - [jira-cli](https://github.com/ankitpokhrel/jira-cli) by Ankit Pokhrel, which `jt` imports as a library for all Jira access, config, and auth.
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss), [Bubbles](https://github.com/charmbracelet/bubbles), and [Glamour](https://github.com/charmbracelet/glamour) from Charm, which make up the terminal UI.
+- [bubbletint](https://github.com/lrstanley/bubbletint), which handles almost all of the theming code.
 
 ## Install
 
@@ -55,7 +56,21 @@ jt
 
 If your jira-cli config lives somewhere other than the default location, set `JIRA_CONFIG_FILE` to its path.
 
-Press `ctrl-d` to quit immediately, or `ctrl-c` twice to confirm quitting.
+## Settings
+
+`jt` keeps its own settings in `jt.yaml` in your user config directory (`~/.config` on Linux, `~/Library/Application Support` on macOS). It creates the file the first time you run `jt`. Set `JT_CONFIG_FILE` to use a different path.
+
+`jt` reads the file once at startup. If you edit it by hand, restart `jt` to pick up the change.
+
+### Theme
+
+Colors come from [bubbletint](https://github.com/lrstanley/bubbletint)'s 770+ tints ([browse them](https://lrstanley.github.io/bubbletint/)). Press `t` in `jt` to pick one. The list is paged and filterable (press `/`), and picking a tint applies it right away and saves its ID to the settings file:
+
+```yaml
+theme: gruvbox_dark_hard
+```
+
+Leave `theme` empty to follow your terminal's theme, or press `r` in the picker to go back to it. `jt` reads the terminal's config and updates live when you change it. This works in kitty, Ghostty, Alacritty, foot, Windows Terminal and terminals configured through X resources. In other terminals, `jt` starts on Dracula+. An unknown `theme` falls back the same way, with a warning in the status line.
 
 ## Development
 

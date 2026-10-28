@@ -5,6 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // filterSelectedMsg reports the chosen filter. A nil filter clears it.
@@ -111,11 +112,11 @@ func (p *filterPopup) view(string) string {
 	header := []string{renderTabs(names, p.tab), ""}
 	var body []string
 	if len(t.filters) == 0 {
-		body = []string{dimStyle.Render(t.empty)}
+		body = []string{styles.Dim().Render(t.empty)}
 	} else {
 		body = p.render(append([]string{"All issues"}, filterNames(t.filters)...), innerW)
 	}
-	return renderPopup(p.width, p.height, header, body, dimStyle.Render("tab switch · j/k select · enter apply · esc cancel"))
+	return renderPopup(p.width, p.height, header, body, styles.Dim().Render("tab switch · j/k select · enter apply · esc cancel"))
 }
 
 func filterNames(fs []jira.Filter) []string {

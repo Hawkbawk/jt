@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type boardLoadedMsg struct {
@@ -130,7 +131,7 @@ func (b boardPane) headerParts(spin string) []string {
 		parts = append(parts, b.project)
 	}
 	if b.nav != nil {
-		parts = append(parts, dimStyle.Render(b.nav.board.Name))
+		parts = append(parts, styles.Dim().Render(b.nav.board.Name))
 	}
 	if b.filter != nil {
 		parts = append(parts, "filter: "+b.filter.Name)
@@ -145,13 +146,13 @@ func (b boardPane) view(width, height int, spin string) string {
 	var body string
 	switch {
 	case b.err != nil:
-		body = errorStyle.Render(fmt.Sprintf("Error: %v", b.err))
+		body = styles.Error().Render(fmt.Sprintf("Error: %v", b.err))
 	case b.nav != nil:
 		return renderBoard(b.nav, width, height)
 	case b.loading:
 		body = spin + " Loading board…"
 	default:
-		body = dimStyle.Render("No project selected.")
+		body = styles.Dim().Render("No project selected.")
 	}
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, body)
 }

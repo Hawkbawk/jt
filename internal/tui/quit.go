@@ -3,6 +3,8 @@ package tui
 import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // quitGuard implements the quit keys: ctrl+d exits at once, while ctrl+c asks
@@ -36,5 +38,5 @@ func (q *quitGuard) handle(msg tea.KeyPressMsg) (consumed, quit bool) {
 }
 
 func (q quitGuard) view() string {
-	return errorStyle.Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
+	return styles.Error().Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
 }

@@ -6,6 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 func orDash(s string) string {
@@ -16,7 +17,7 @@ func orDash(s string) string {
 }
 
 func field(label, value string) string {
-	return dimStyle.Render(label+": ") + orDash(value)
+	return styles.Dim().Render(label+": ") + orDash(value)
 }
 
 func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
@@ -34,7 +35,7 @@ func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
 	b.WriteString("\n")
 
 	if strings.TrimSpace(d.Description) == "" {
-		b.WriteString(dimStyle.Render("No description."))
+		b.WriteString(styles.Dim().Render("No description."))
 	} else {
 		b.WriteString(md(d.Description, width))
 	}
@@ -43,12 +44,12 @@ func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
 
 func renderComments(d *jira.IssueDetail, width int, md markdownRenderer) string {
 	if len(d.Comments) == 0 {
-		return dimStyle.Render("No comments.")
+		return styles.Dim().Render("No comments.")
 	}
-	sep := dimStyle.Render(strings.Repeat("─", width))
+	sep := styles.Dim().Render(strings.Repeat("─", width))
 	parts := make([]string, 0, len(d.Comments))
 	for _, c := range d.Comments {
-		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + dimStyle.Render(" · "+c.Created)
+		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(" · "+c.Created)
 		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
 	}
 	return strings.Join(parts, "\n"+sep+"\n")

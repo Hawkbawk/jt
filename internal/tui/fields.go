@@ -13,6 +13,7 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type fieldsLoadedMsg struct {
@@ -266,14 +267,19 @@ func (p *fieldsPane) consumesEsc() bool {
 
 func (p *fieldsPane) unsaved() int { return len(p.changed()) }
 
+// fieldDelegate is the themed delegate with no gap between rows.
+func fieldDelegate() list.DefaultDelegate {
+	d := themedDelegate()
+	d.SetSpacing(0)
+	return d
+}
+
 func newFieldList(vals []*fieldValue) list.Model {
 	items := make([]list.Item, len(vals))
 	for i, v := range vals {
 		items[i] = v
 	}
-	d := list.NewDefaultDelegate()
-	d.SetSpacing(0)
-	l := list.New(items, d, 0, 0)
+	l := list.New(items, fieldDelegate(), 0, 0)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
@@ -304,7 +310,7 @@ func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 		km.MultiSelect.Filter.SetEnabled(false)
 	}
 	p.form = huh.NewForm(huh.NewGroup(fields...)).
-		WithTheme(huh.ThemeFunc(huh.ThemeBase16)).
+		WithTheme(styles.FormTheme()).
 		WithKeyMap(km).
 		WithShowHelp(false)
 	p.growText()
@@ -413,7 +419,7 @@ func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
 	case p.loaded && len(p.vals) == 0 && p.err == nil:
-		lines = append(lines, dimStyle.Render("No editable fields."))
+		lines = append(lines, styles.Dim().Render("No editable fields."))
 	case p.form != nil:
 		resized := p.formH != formH
 		p.formH = formH
@@ -443,13 +449,13 @@ func (p *fieldsPane) growText() {
 func (p *fieldsPane) hint() string {
 	switch {
 	case p.form != nil && p.editing.isUser():
-		return dimStyle.Render("enter next · shift+tab back to search · space toggles · esc back")
+		return styles.Dim().Render("enter next · shift+tab back to search · space toggles · esc back")
 	case p.form != nil:
-		return dimStyle.Render("enter done · esc back · ctrl+j new line")
+		return styles.Dim().Render("enter done · esc back · ctrl+j new line")
 	case p.list.SettingFilter():
-		return dimStyle.Render("enter apply filter · esc clear · ctrl+s save")
+		return styles.Dim().Render("enter apply filter · esc clear · ctrl+s save")
 	}
-	return dimStyle.Render("enter edit · u undo · / filter · esc close · ctrl+s save")
+	return styles.Dim().Render("enter edit · u undo · / filter · esc close · ctrl+s save")
 }
 
 // sameSet reports whether a and b hold the same values in any order.

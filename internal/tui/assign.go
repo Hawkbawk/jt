@@ -5,6 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type assignDoneMsg struct {
@@ -66,7 +67,7 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 func (p *assignPane) view(spin string, innerW, _ int, hint string) []string {
 	var lines []string
 	if len(p.people) == 0 {
-		lines = append(lines, dimStyle.Render("No assignees on this board."))
+		lines = append(lines, styles.Dim().Render("No assignees on this board."))
 	} else {
 		lines = append(lines, p.render(filterNames(p.people), innerW)...)
 	}

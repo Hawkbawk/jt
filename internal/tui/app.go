@@ -8,8 +8,10 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 // Backend is the Jira functionality the TUI depends on.
@@ -32,6 +34,7 @@ type Backend interface {
 // board, project picker and at most one popup, and controls high-level
 // or broadly used state.
 type Model struct {
+	settings      Settings
 	width, height int
 	spinner       spinner.Model
 	status        string
@@ -46,17 +49,24 @@ type Model struct {
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend) Model {
+func New(backend Backend, settings Settings) Model {
 	m := Model{
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(titleStyle)),
-		help:    newHelp(),
-		board:   newBoardPane(backend),
-		picker:  newPicker(backend),
-		actions: newIssueActions(backend),
+		settings: settings,
+		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
+		help:     styles.Help(),
+		board:    newBoardPane(backend),
+		picker:   newPicker(backend),
+		actions:  newIssueActions(backend),
 	}
 	if m.board.project == "" {
 		m.picker.show(false)
 	}
+	return m
+}
+
+// WithWarning shows text in the status line until the next action replaces it.
+func (m Model) WithWarning(text string) Model {
+	m.status = styles.Warn().Render(text)
 	return m
 }
 
@@ -93,6 +103,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.picker.setSize(m.width, m.bodyHeight())
 		if m.popup != nil {
 			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
+		}
+		return m, nil
+
+	case ThemeChangedMsg:
+		m.restyle()
+		return m, nil
+
+	case themeSelectedMsg:
+		tint.SetTint(msg.tint)
+		m.restyle()
+		return m, saveTheme(m.settings, msg.id)
+
+	case themeSavedMsg:
+		if msg.err != nil {
+			m.status = styles.Error().Render("saving theme: " + msg.err.Error())
 		}
 		return m, nil
 
@@ -146,6 +171,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(popupCmd, m.picker.update(msg))
 }
 
+// restyle rebuilds what the model copied from the styles when it was built.
+func (m *Model) restyle() {
+	m.spinner.Style = styles.Title()
+	m.help = styles.Help()
+	m.picker.restyle()
+}
+
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
@@ -184,6 +216,9 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.status = ""
 		return m, m.startBusy(m.board.reload(focusKey))
+	}
+	if key.Matches(msg, keys.theme) {
+		return m, m.openPopup(newThemePopup(), nil)
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
 		return m, m.openPopup(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter), nil)

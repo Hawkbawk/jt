@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 const (
@@ -59,9 +60,9 @@ func headerText(col jira.Column, width int, moreLeft, moreRight bool) string {
 }
 
 func renderColumn(col jira.Column, focused bool, row, width, height int, moreLeft, moreRight bool) string {
-	header := columnHeaderStyle
+	header := styles.ColumnHeader()
 	if focused {
-		header = focusedColumnHeaderStyle
+		header = styles.FocusedColumnHeader()
 	}
 	lines := []string{header.Width(width).Render(headerText(col, width-2, moreLeft, moreRight))}
 
@@ -71,7 +72,7 @@ func renderColumn(col jira.Column, focused bool, row, width, height int, moreLef
 	end := min(len(col.Issues), start+perPage)
 
 	if start > 0 {
-		lines = append(lines, dimStyle.Width(width).Align(lipgloss.Center).Render("▲"))
+		lines = append(lines, styles.Dim().Width(width).Align(lipgloss.Center).Render("▲"))
 	} else {
 		lines = append(lines, "")
 	}
@@ -79,16 +80,16 @@ func renderColumn(col jira.Column, focused bool, row, width, height int, moreLef
 		lines = append(lines, renderCard(col.Issues[i], focused && i == row, width))
 	}
 	if end < len(col.Issues) {
-		lines = append(lines, dimStyle.Width(width).Align(lipgloss.Center).Render("▼"))
+		lines = append(lines, styles.Dim().Width(width).Align(lipgloss.Center).Render("▼"))
 	}
 
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(lines, "\n"))
 }
 
 func renderCard(iss jira.Issue, selected bool, width int) string {
-	style := cardStyle
+	style := styles.Card()
 	if selected {
-		style = selectedCardStyle
+		style = styles.SelectedCard()
 	}
 	inner := max(1, width-style.GetHorizontalFrameSize())
 
@@ -99,7 +100,7 @@ func renderCard(iss jira.Issue, selected bool, width int) string {
 	keyWidth := lipgloss.Width(iss.Key)
 	assignee = ansi.Truncate(assignee, max(0, inner-keyWidth-1), "…")
 	gap := max(1, inner-keyWidth-lipgloss.Width(assignee))
-	top := keyStyle.Render(iss.Key) + strings.Repeat(" ", gap) + dimStyle.Render(assignee)
+	top := styles.Key().Render(iss.Key) + strings.Repeat(" ", gap) + styles.Dim().Render(assignee)
 
 	return style.Width(width).Render(top + "\n" + clampLines(iss.Summary, inner, summaryLines))
 }

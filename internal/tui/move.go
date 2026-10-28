@@ -5,6 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type transitionsLoadedMsg struct {
@@ -79,7 +80,7 @@ func (p *movePane) view(spin string, innerW, _ int, hint string) []string {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading transitions…")
 	case p.loaded && len(p.transitions) == 0 && p.err == nil:
-		lines = append(lines, dimStyle.Render("No transitions available."))
+		lines = append(lines, styles.Dim().Render("No transitions available."))
 	default:
 		labels := make([]string, len(p.transitions))
 		for i, t := range p.transitions {
@@ -94,9 +95,9 @@ func (p *movePane) view(spin string, innerW, _ int, hint string) []string {
 func statusLine(spin string, innerW int, err error, applying bool, progress, hint string) string {
 	switch {
 	case err != nil:
-		return errorStyle.Width(innerW).Render("Error: " + err.Error())
+		return styles.Error().Width(innerW).Render("Error: " + err.Error())
 	case applying:
 		return spin + " " + progress
 	}
-	return dimStyle.Render(hint)
+	return styles.Dim().Render(hint)
 }

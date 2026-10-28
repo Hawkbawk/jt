@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type projectsLoadedMsg struct {
@@ -59,14 +60,19 @@ func newPicker(b Backend) picker {
 	return picker{backend: b}
 }
 
-func newProjectList(cancellable bool) list.Model {
+// themedDelegate returns a list delegate that marks the selected item in the
+// highlight color.
+func themedDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
-	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(highlight).BorderForeground(highlight)
-	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(highlight).BorderForeground(highlight)
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(styles.Highlight()).BorderForeground(styles.Highlight())
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(styles.Highlight()).BorderForeground(styles.Highlight())
+	return d
+}
 
-	l := list.New(nil, d, 0, 0)
+func newProjectList(cancellable bool) list.Model {
+	l := list.New(nil, themedDelegate(), 0, 0)
 	l.Title = "Select a project"
-	l.Styles.Title = titleStyle
+	l.Styles.Title = styles.Title()
 	// The list re-enables its own bindings, so quitting is removed by giving
 	// those bindings no keys; jt handles quitting itself.
 	l.KeyMap.Quit = key.NewBinding()
@@ -79,6 +85,12 @@ func newProjectList(cancellable bool) list.Model {
 		return keys
 	}
 	return l
+}
+
+// restyle redraws the list in the current theme.
+func (p *picker) restyle() {
+	p.list.Styles.Title = styles.Title()
+	p.list.SetDelegate(themedDelegate())
 }
 
 // show opens a fresh picker. It returns the command that fills the list, from
@@ -138,7 +150,7 @@ func (p *picker) applySize() {
 	if !p.open {
 		return
 	}
-	p.list.SetSize(p.width-popupStyle.GetHorizontalFrameSize(), p.height-popupStyle.GetVerticalFrameSize())
+	p.list.SetSize(p.width-styles.Popup().GetHorizontalFrameSize(), p.height-styles.Popup().GetVerticalFrameSize())
 }
 
 func (p *picker) update(msg tea.Msg) tea.Cmd {
@@ -196,19 +208,19 @@ func (p *picker) forward(msg tea.Msg) tea.Cmd {
 }
 
 func (p picker) view(spin string) string {
-	innerW := p.width - popupStyle.GetHorizontalFrameSize()
-	innerH := p.height - popupStyle.GetVerticalFrameSize()
+	innerW := p.width - styles.Popup().GetHorizontalFrameSize()
+	innerH := p.height - styles.Popup().GetVerticalFrameSize()
 
 	var body string
 	switch {
 	case p.err != nil:
-		body = errorStyle.Render("Error loading projects: " + p.err.Error())
+		body = styles.Error().Render("Error loading projects: " + p.err.Error())
 	case !p.loaded:
 		body = spin + " Loading projects…"
 	default:
 		body = p.list.View()
 	}
-	return popupStyle.Width(innerW + popupStyle.GetHorizontalFrameSize()).
+	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).
 		Height(innerH).
 		Render(lipgloss.NewStyle().MaxWidth(innerW).Render(body))
 }

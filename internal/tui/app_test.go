@@ -132,7 +132,7 @@ func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) Model {
 	if fb.board == nil {
 		fb.board = testBoard()
 	}
-	m := New(fb)
+	m := New(fb, &fakeSettings{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(Model)
 }
@@ -408,4 +408,14 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 	if _, cmd := press(t, m, "r"); cmd != nil {
 		t.Fatal("r without a project should do nothing")
 	}
+}
+
+type fakeSettings struct {
+	saved []string
+	err   error
+}
+
+func (f *fakeSettings) SaveTheme(id string) error {
+	f.saved = append(f.saved, id)
+	return f.err
 }
