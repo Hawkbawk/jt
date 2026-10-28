@@ -13,6 +13,8 @@ import (
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
+	v.BackgroundColor = styles.Background()
+	v.ForegroundColor = styles.Foreground()
 	return v
 }
 

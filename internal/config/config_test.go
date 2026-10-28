@@ -23,15 +23,13 @@ func load(t *testing.T, contents string) (Config, error) {
 func TestLoad(t *testing.T) {
 	tests := []struct {
 		name, contents string
-		want           Theme
+		want           string
 		wantErr        bool
 	}{
-		{"missing file defaults to terminal", "", ThemeTerminal, false},
-		{"empty theme defaults to terminal", "other: 1\n", ThemeTerminal, false},
-		{"named theme", "theme: gruvbox\n", ThemeGruvbox, false},
-		{"case-insensitive", "theme: Dracula\n", ThemeDracula, false},
-		{"unknown theme", "theme: nope\n", ThemeTerminal, true},
-		{"malformed", "theme: [\n", ThemeTerminal, true},
+		{"missing file follows the terminal", "", "", false},
+		{"missing theme follows the terminal", "other: 1\n", "", false},
+		{"tint ID", "theme: gruvbox_dark_hard\n", "gruvbox_dark_hard", false},
+		{"malformed", "theme: [\n", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -54,7 +52,7 @@ func TestLoadCreatesDefaultFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)
-	if err != nil || !strings.Contains(string(b), "theme: terminal") {
+	if err != nil || !strings.Contains(string(b), `theme: ""`) {
 		t.Fatalf("default file = %q, %v", b, err)
 	}
 }
@@ -70,12 +68,12 @@ func TestSaveThemeKeepsOtherKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.SaveTheme(ThemeGruvbox); err != nil {
+	if err := cfg.SaveTheme("gruvbox_dark_hard"); err != nil {
 		t.Fatal(err)
 	}
 
 	b, _ := os.ReadFile(path)
-	if !strings.Contains(string(b), "other: kept") || !strings.Contains(string(b), "theme: gruvbox") {
+	if !strings.Contains(string(b), "other: kept") || !strings.Contains(string(b), "theme: gruvbox_dark_hard") {
 		t.Errorf("saved file = %q", b)
 	}
 }
@@ -87,7 +85,7 @@ func TestSaveThemeIsSafeConcurrently(t *testing.T) {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup
-	for _, th := range Themes() {
+	for _, th := range []string{"dracula", "nord", "gruvbox_dark_hard", "catppuccin_mocha"} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

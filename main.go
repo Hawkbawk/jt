@@ -2,10 +2,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -25,13 +27,29 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	styles.Use(cfg.Theme)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	themeErr := styles.Start(ctx, cfg.Theme)
 
 	client, err := jira.New()
 	if err != nil {
 		return err
 	}
 
-	_, err = tea.NewProgram(tui.New(client, cfg)).Run()
+	m := tui.New(client, cfg)
+	if themeErr != nil {
+		m = m.WithWarning(themeErr.Error())
+	}
+	p := tea.NewProgram(m)
+	// Send blocks until the program reads the message, and a tint can change
+	// from inside Update, so it runs on its own goroutine.
+	defer tint.Subscribe(func(ev tint.Event) {
+		if ev.Kind == tint.CurrentChanged {
+			go p.Send(tui.ThemeChangedMsg{})
+		}
+	})()
+
+	_, err = p.Run()
 	return err
 }

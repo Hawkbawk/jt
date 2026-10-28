@@ -65,39 +65,13 @@ Press `ctrl-d` to quit immediately, or `ctrl-c` twice to confirm quitting.
 
 ### Theme
 
-Set `theme` to one of `terminal`, `charm`, `dracula`, `base16`, `catppuccin`, or `gruvbox`, or press `t` in `jt` to pick one. Picking a theme applies it right away and saves it to the settings file.
+Colors come from [bubbletint](https://github.com/lrstanley/bubbletint)'s 770+ tints ([browse them](https://lrstanley.github.io/bubbletint/)). Press `t` in `jt` to pick one. The list is paged and filterable (press `/`), and picking a tint applies it right away and saves its ID to the settings file:
 
 ```yaml
-theme: gruvbox
+theme: gruvbox_dark_hard
 ```
 
-Each theme, with the same board:
-
-**terminal**
-
-![terminal theme](docs/screenshots/terminal.png)
-
-**charm**
-
-![charm theme](docs/screenshots/charm.png)
-
-**dracula**
-
-![dracula theme](docs/screenshots/dracula.png)
-
-**base16**
-
-![base16 theme](docs/screenshots/base16.png)
-
-**catppuccin**
-
-![catppuccin theme](docs/screenshots/catppuccin.png)
-
-**gruvbox**
-
-![gruvbox theme](docs/screenshots/gruvbox.png)
-
-The gruvbox theme uses the hard-contrast palette from [gruvbox.nvim](https://github.com/ellisonleao/gruvbox.nvim) by [ellisonleao](https://github.com/ellisonleao), which is based on the original [gruvbox](https://github.com/morhetz/gruvbox) by Pavel Pertsev (morhetz).
+Leave `theme` empty to follow your terminal's theme, or press `r` in the picker to go back to it. `jt` reads the terminal's config and updates live when you change it. This works in kitty, Ghostty, Alacritty, foot, Windows Terminal and terminals configured through X resources. In other terminals, `jt` starts on Dracula+. A picked tint holds until you change your terminal's theme, which `jt` then follows. An unknown `theme` falls back the same way, with a warning in the status line.
 
 ## Development
 

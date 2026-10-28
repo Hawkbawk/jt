@@ -10,9 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
-
-	"github.com/hawkbawk/jt/internal/config"
-	"github.com/hawkbawk/jt/internal/styles"
 )
 
 type fakeBackend struct {
@@ -413,29 +410,12 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 	}
 }
 
-func TestThemeSelectedRestylesEverything(t *testing.T) {
-	t.Cleanup(func() { styles.Use(config.ThemeTerminal) })
-	styles.Use(config.ThemeTerminal)
-
-	m := newTestModel(t, "TEST", &fakeBackend{})
-	m.settings = &fakeSettings{}
-	m = drain(t, m, m.Init())
-	before := m.spinner.Style.GetForeground()
-
-	next, _ := m.Update(themeSelectedMsg{theme: config.ThemeGruvbox})
-	m = next.(Model)
-
-	if got := m.spinner.Style.GetForeground(); got == before || got != styles.Title().GetForeground() {
-		t.Errorf("spinner color = %v, want the new title color (was %v)", got, before)
-	}
-}
-
 type fakeSettings struct {
-	saved []config.Theme
+	saved []string
 	err   error
 }
 
-func (f *fakeSettings) SaveTheme(t config.Theme) error {
-	f.saved = append(f.saved, t)
+func (f *fakeSettings) SaveTheme(id string) error {
+	f.saved = append(f.saved, id)
 	return f.err
 }

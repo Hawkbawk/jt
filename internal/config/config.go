@@ -17,7 +17,9 @@ import (
 
 // Config holds jt's settings.
 type Config struct {
-	Theme Theme `mapstructure:"theme"`
+	// Theme is the ID of the bubbletint tint to draw with. Empty follows the
+	// terminal's theme.
+	Theme string `mapstructure:"theme"`
 
 	viper *viper.Viper
 	mu    *sync.Mutex
@@ -51,12 +53,12 @@ func decode(v *viper.Viper) (Config, error) {
 	return c, nil
 }
 
-// SaveTheme writes t to the settings file, keeping its other keys.
-func (c Config) SaveTheme(t Theme) error {
+// SaveTheme writes the tint ID to the settings file, keeping its other keys.
+func (c Config) SaveTheme(id string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.viper.Set("theme", t.String())
+	c.viper.Set("theme", id)
 	return c.viper.WriteConfig()
 }
 
@@ -113,7 +115,7 @@ func withoutPath(err error) error {
 }
 
 func applyDefaults(v *viper.Viper) {
-	v.SetDefault("theme", ThemeTerminal.String())
+	v.SetDefault("theme", "")
 }
 
 // loadConfiguration points v at the settings file and returns where the file

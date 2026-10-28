@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -63,12 +64,18 @@ func New(backend Backend, settings Settings) Model {
 	return m
 }
 
+// WithWarning shows text in the status line until the next action replaces it.
+func (m Model) WithWarning(text string) Model {
+	m.status = styles.Warn().Render(text)
+	return m
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	if m.board.project == "" {
-		return tea.Batch(tea.RequestBackgroundColor, m.startBusy(m.picker.fetch()))
+		return m.startBusy(m.picker.fetch())
 	}
-	return tea.Batch(tea.RequestBackgroundColor, m.startBusy(m.board.fetch(m.board.project, "")))
+	return m.startBusy(m.board.fetch(m.board.project, ""))
 }
 
 // startBusy runs cmd alongside the spinner.
@@ -99,15 +106,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.BackgroundColorMsg:
-		styles.SetDark(msg.IsDark())
+	case ThemeChangedMsg:
 		m.restyle()
 		return m, nil
 
 	case themeSelectedMsg:
-		styles.Use(msg.theme)
+		tint.SetTint(msg.tint)
 		m.restyle()
-		return m, saveTheme(m.settings, msg.theme)
+		return m, saveTheme(m.settings, msg.id)
 
 	case themeSavedMsg:
 		if msg.err != nil {

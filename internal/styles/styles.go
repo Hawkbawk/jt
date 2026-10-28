@@ -1,33 +1,26 @@
-// Package styles holds the colors and lipgloss styles jt draws with. The
-// whole set belongs to one theme and is replaced as a unit by Use, so the
+// Package styles holds the lipgloss styles jt draws with. They're derived from
+// bubbletint's current tint and rebuilt as a unit when it changes, so the
 // accessors always return styles that match each other. They return copies,
-// so callers can derive from them freely. Use is safe to call while other
-// goroutines read.
+// so callers can derive from them freely.
 package styles
 
 import (
 	"image/color"
-	"os"
-	"sync"
 	"sync/atomic"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
-	glamourstyles "charm.land/glamour/v2/styles"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
-
-	"github.com/hawkbawk/jt/internal/config"
+	"github.com/lrstanley/bubbletint/glamourtint/v2"
+	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// set is one theme resolved for a terminal background. It is never modified
-// after it's built.
+// set is one tint's styles. It is never modified after it's built.
 type set struct {
-	theme config.Theme
-	dark  bool
-	def   theme
+	tint *tint.Tint
 
 	title, dim, errStyle, warn, key, header lipgloss.Style
 	columnHeader, focusedColumnHeader       lipgloss.Style
@@ -37,59 +30,41 @@ type set struct {
 	markdown         ansi.StyleConfig
 }
 
-var (
-	current  atomic.Pointer[set]
-	override atomic.Pointer[bool]
-	detected = sync.OnceValue(func() bool {
-		return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-	})
-)
-
-func isDark() bool {
-	if d := override.Load(); d != nil {
-		return *d
-	}
-	return detected()
-}
+var current atomic.Pointer[set]
 
 func init() {
-	Use(config.ThemeTerminal)
+	tint.NewDefaultRegistry()
 }
 
-// Use switches every style to theme t, matching the terminal background.
-func Use(t config.Theme) {
-	use(t, isDark())
+// get returns the styles for the current tint, building them the first time
+// that tint is seen.
+func get() *set {
+	t := tint.Current()
+	if s := current.Load(); s != nil && s.tint == t {
+		return s
+	}
+	s := build(t)
+	current.Store(s)
+	return s
 }
 
-// SetDark overrides the detected terminal background, for example with the
-// answer to a background color query, and rebuilds the active theme.
-func SetDark(dark bool) {
-	override.Store(&dark)
-	use(Current(), dark)
-}
-
-func use(t config.Theme, dark bool) {
-	current.Store(build(t, dark))
-}
-
-func get() *set { return current.Load() }
-
-func build(t config.Theme, dark bool) *set {
-	def := lookupTheme(t)
-	pal := def.palette
-	c := func(sh shade) color.Color { return lipgloss.Color(sh.pick(dark)) }
-	accent, subtle, highlight, danger := c(pal.accent), c(pal.subtle), c(pal.highlight), c(pal.danger)
+func build(t *tint.Tint) *set {
+	// Subtle and muted text are the foreground faded toward the background,
+	// which stays readable whichever ANSI slot a tint puts its grays in.
+	fade := lipgloss.Blend1D(101, t.Bg, t.Fg)
+	accent, subtle, muted, danger := color.Color(t.Blue), fade[70], fade[85], color.Color(t.Red)
+	highlight := color.Color(t.Yellow)
+	if !t.Dark {
+		highlight = tint.Darken(highlight, 0.25)
+	}
 
 	columnHeader := lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(subtle)
 	card := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(subtle).
 		Padding(0, 1)
-	selectedCard := card.Border(lipgloss.ThickBorder()).BorderForeground(highlight)
 	return &set{
-		theme:               t,
-		dark:                dark,
-		def:                 def,
+		tint:                t,
 		title:               lipgloss.NewStyle().Bold(true).Foreground(accent),
 		dim:                 lipgloss.NewStyle().Foreground(subtle),
 		errStyle:            lipgloss.NewStyle().Foreground(danger),
@@ -97,12 +72,12 @@ func build(t config.Theme, dark bool) *set {
 		key:                 lipgloss.NewStyle().Bold(true).Foreground(accent),
 		header:              lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		highlight:           highlight,
-		muted:               c(pal.muted),
-		markdown:            markdownConfig(pal, dark),
+		muted:               muted,
+		markdown:            glamourtint.StyleConfig(t),
 		columnHeader:        columnHeader,
 		focusedColumnHeader: columnHeader.Foreground(highlight),
 		card:                card,
-		selectedCard:        selectedCard,
+		selectedCard:        card.Border(lipgloss.ThickBorder()).BorderForeground(highlight),
 		popup: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accent).
@@ -113,8 +88,14 @@ func build(t config.Theme, dark bool) *set {
 	}
 }
 
-// Current returns the active theme.
-func Current() config.Theme { return get().theme }
+// Current returns the tint the styles are drawn from.
+func Current() *tint.Tint { return get().tint }
+
+// Background is the color painted over the terminal's own background.
+func Background() color.Color { return get().tint.Bg }
+
+// Foreground is the color painted over the terminal's own text color.
+func Foreground() color.Color { return get().tint.Fg }
 
 // Title styles headings and the app name.
 func Title() lipgloss.Style { return get().title }
@@ -171,13 +152,14 @@ func Help() help.Model {
 
 // FormTheme returns the huh theme for edit forms.
 func FormTheme() huh.Theme {
-	return huh.ThemeFunc(get().def.form)
+	t := get().tint
+	return huh.ThemeFunc(func(bool) *huh.Styles { return form(t) })
 }
 
 // TextArea returns textarea styles with a muted placeholder and blurred text.
 func TextArea() textarea.Styles {
 	s := get()
-	ts := textarea.DefaultStyles(s.dark)
+	ts := textarea.DefaultStyles(s.tint.Dark)
 	ts.Cursor.Blink = false
 	ts.Focused.Placeholder = ts.Focused.Placeholder.Foreground(s.muted)
 	ts.Blurred.Placeholder = ts.Blurred.Placeholder.Foreground(s.muted)
@@ -185,7 +167,7 @@ func TextArea() textarea.Styles {
 	return ts
 }
 
-// Markdown renders md wrapped to width in the theme's colors.
+// Markdown renders md wrapped to width in the tint's colors.
 func Markdown(md string, width int) string {
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStyles(get().markdown),
@@ -199,37 +181,4 @@ func Markdown(md string, width int) string {
 		return md
 	}
 	return out
-}
-
-// markdownConfig returns the standard glamour style matching the terminal
-// background, minus the document text color so body text uses the terminal's
-// own foreground. That keeps it readable even when background detection is
-// wrong. Headings, links, code and quotes take the palette's colors.
-func markdownConfig(pal palette, dark bool) ansi.StyleConfig {
-	cfg := glamourstyles.LightStyleConfig
-	if dark {
-		cfg = glamourstyles.DarkStyleConfig
-	}
-	cfg.Document.Color = nil
-
-	heading := colorPtr(pal.accent.pick(dark))
-	link := colorPtr(pal.highlight.pick(dark))
-	for _, h := range []*ansi.StyleBlock{&cfg.Heading, &cfg.H1, &cfg.H2, &cfg.H3, &cfg.H4, &cfg.H5, &cfg.H6} {
-		h.Color = heading
-		h.BackgroundColor = nil
-	}
-	cfg.Link.Color = link
-	cfg.LinkText.Color = link
-	cfg.Code.Color = link
-	cfg.Code.BackgroundColor = nil
-	cfg.BlockQuote.Color = colorPtr(pal.subtle.pick(dark))
-	return cfg
-}
-
-// colorPtr returns a glamour color, or nil to use the terminal's foreground.
-func colorPtr(s string) *string {
-	if s == "" {
-		return nil
-	}
-	return &s
 }
