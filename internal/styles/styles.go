@@ -78,6 +78,7 @@ func build(t config.Theme, dark bool) *set {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(subtle).
 		Padding(0, 1)
+	selectedCard := card.Border(lipgloss.ThickBorder()).BorderForeground(highlight)
 	return &set{
 		theme:               t,
 		dark:                dark,
@@ -94,7 +95,7 @@ func build(t config.Theme, dark bool) *set {
 		columnHeader:        columnHeader,
 		focusedColumnHeader: columnHeader.Foreground(highlight),
 		card:                card,
-		selectedCard:        card.BorderForeground(highlight),
+		selectedCard:        selectedCard,
 		popup: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accent).

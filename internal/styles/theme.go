@@ -44,13 +44,13 @@ var themes = map[config.Theme]theme{
 	},
 	config.ThemeDracula: {
 		palette: palette{
-			accent:    shade{"#BD93F9", "#BD93F9"},
-			subtle:    shade{"#6272A4", "#6272A4"},
-			highlight: shade{"#F1FA8C", "#F1FA8C"},
-			muted:     shade{"#F8F8F2", "#F8F8F2"},
-			danger:    shade{"#FF5555", "#FF5555"},
+			accent:    shade{"#644AC9", "#BD93F9"},
+			subtle:    shade{"#6C664B", "#6272A4"},
+			highlight: shade{"#A34D14", "#F1FA8C"},
+			muted:     shade{"#4F4A35", "#F8F8F2"},
+			danger:    shade{"#CB3A2A", "#FF5555"},
 		},
-		form: huh.ThemeDracula,
+		form: themeDracula,
 	},
 	config.ThemeBase16: {
 		palette: palette{
@@ -100,6 +100,48 @@ func lookupTheme(t config.Theme) theme {
 		return def
 	}
 	return themes[config.ThemeTerminal]
+}
+
+// themeDracula returns huh's Dracula theme, which only has dark colors, on a
+// dark terminal. On a light one it returns the base theme with the Alucard
+// palette's accents.
+func themeDracula(isDark bool) *huh.Styles {
+	if isDark {
+		return huh.ThemeDracula(true)
+	}
+	t := huh.ThemeBase(false)
+	purple := lipgloss.Color("#644AC9")
+	orange := lipgloss.Color("#A34D14")
+	green := lipgloss.Color("#14710A")
+	red := lipgloss.Color("#CB3A2A")
+	comment := lipgloss.Color("#6C664B")
+
+	t.Focused.Title = t.Focused.Title.Foreground(purple).Bold(true)
+	t.Focused.NoteTitle = t.Focused.NoteTitle.Foreground(purple).Bold(true)
+	t.Focused.Description = t.Focused.Description.Foreground(comment)
+	t.Focused.ErrorIndicator = t.Focused.ErrorIndicator.Foreground(red)
+	t.Focused.ErrorMessage = t.Focused.ErrorMessage.Foreground(red)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(orange)
+	t.Focused.NextIndicator = t.Focused.NextIndicator.Foreground(orange)
+	t.Focused.PrevIndicator = t.Focused.PrevIndicator.Foreground(orange)
+	t.Focused.MultiSelectSelector = t.Focused.MultiSelectSelector.Foreground(orange)
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(green)
+	t.Focused.SelectedPrefix = t.Focused.SelectedPrefix.Foreground(green)
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(lipgloss.Color("#FFFBEB")).Background(purple).Bold(true)
+	t.Focused.Next = t.Focused.FocusedButton
+	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(orange)
+	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(comment)
+	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(orange)
+
+	t.Blurred = t.Focused
+	t.Blurred.Base = t.Blurred.Base.BorderStyle(lipgloss.HiddenBorder())
+	t.Blurred.Card = t.Blurred.Base
+	t.Blurred.NextIndicator = lipgloss.NewStyle()
+	t.Blurred.PrevIndicator = lipgloss.NewStyle()
+
+	t.Group.Title = t.Focused.Title
+	t.Group.Description = t.Focused.Description
+	return t
 }
 
 // themeGruvbox returns a huh theme using the hard-contrast palette from
