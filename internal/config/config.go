@@ -113,7 +113,7 @@ func withoutPath(err error) error {
 }
 
 func applyDefaults(v *viper.Viper) {
-	v.SetDefault("theme", ThemeBase.String())
+	v.SetDefault("theme", ThemeTerminal.String())
 }
 
 // loadConfiguration points v at the settings file and returns where the file

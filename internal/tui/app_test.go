@@ -414,8 +414,8 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 }
 
 func TestThemeSelectedRestylesEverything(t *testing.T) {
-	t.Cleanup(func() { styles.Use(config.ThemeBase) })
-	styles.Use(config.ThemeBase)
+	t.Cleanup(func() { styles.Use(config.ThemeTerminal) })
+	styles.Use(config.ThemeTerminal)
 
 	m := newTestModel(t, "TEST", &fakeBackend{})
 	m.settings = &fakeSettings{}

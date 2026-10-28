@@ -26,12 +26,12 @@ func TestLoad(t *testing.T) {
 		want           Theme
 		wantErr        bool
 	}{
-		{"missing file defaults to base", "", ThemeBase, false},
-		{"empty theme defaults to base", "other: 1\n", ThemeBase, false},
+		{"missing file defaults to terminal", "", ThemeTerminal, false},
+		{"empty theme defaults to terminal", "other: 1\n", ThemeTerminal, false},
 		{"named theme", "theme: gruvbox\n", ThemeGruvbox, false},
 		{"case-insensitive", "theme: Dracula\n", ThemeDracula, false},
-		{"unknown theme", "theme: nope\n", ThemeBase, true},
-		{"malformed", "theme: [\n", ThemeBase, true},
+		{"unknown theme", "theme: nope\n", ThemeTerminal, true},
+		{"malformed", "theme: [\n", ThemeTerminal, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -54,7 +54,7 @@ func TestLoadCreatesDefaultFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)
-	if err != nil || !strings.Contains(string(b), "theme: base") {
+	if err != nil || !strings.Contains(string(b), "theme: terminal") {
 		t.Fatalf("default file = %q, %v", b, err)
 	}
 }

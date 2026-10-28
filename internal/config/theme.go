@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// Theme is one of the supported color themes. The zero value is ThemeBase.
+// Theme is one of the supported color themes. The zero value is ThemeTerminal.
 type Theme int
 
 // The supported themes.
 const (
-	ThemeBase Theme = iota
+	ThemeTerminal Theme = iota
 	ThemeCharm
 	ThemeDracula
 	ThemeBase16
@@ -18,7 +18,7 @@ const (
 	ThemeGruvbox
 )
 
-var themeNames = [...]string{"base", "charm", "dracula", "base16", "catppuccin", "gruvbox"}
+var themeNames = [...]string{"terminal", "charm", "dracula", "base16", "catppuccin", "gruvbox"}
 
 // Themes returns every supported theme.
 func Themes() []Theme {

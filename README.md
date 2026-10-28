@@ -65,17 +65,13 @@ Press `ctrl-d` to quit immediately, or `ctrl-c` twice to confirm quitting.
 
 ### Theme
 
-Set `theme` to one of `base`, `charm`, `dracula`, `base16`, `catppuccin`, or `gruvbox`, or press `t` in `jt` to pick one. Picking a theme applies it right away and saves it to the settings file.
+Set `theme` to one of `terminal`, `charm`, `dracula`, `base16`, `catppuccin`, or `gruvbox`, or press `t` in `jt` to pick one. Picking a theme applies it right away and saves it to the settings file.
 
 ```yaml
 theme: gruvbox
 ```
 
 Each theme, with the same board:
-
-**base**
-
-![base theme](docs/screenshots/base.png)
 
 **charm**
 

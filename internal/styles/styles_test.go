@@ -8,7 +8,7 @@ import (
 )
 
 func TestUseSwapsWholeSet(t *testing.T) {
-	t.Cleanup(func() { use(config.ThemeBase, true) })
+	t.Cleanup(func() { use(config.ThemeTerminal, true) })
 
 	for _, th := range config.Themes() {
 		for _, dark := range []bool{true, false} {
@@ -27,17 +27,17 @@ func TestUseSwapsWholeSet(t *testing.T) {
 }
 
 func TestUnknownThemeFallsBackToBase(t *testing.T) {
-	t.Cleanup(func() { use(config.ThemeBase, true) })
+	t.Cleanup(func() { use(config.ThemeTerminal, true) })
 
 	use(config.Theme(99), true)
-	want := build(config.ThemeBase, true)
+	want := build(config.ThemeTerminal, true)
 	if Title().GetForeground() != want.title.GetForeground() {
-		t.Error("unknown theme did not fall back to base")
+		t.Error("unknown theme did not fall back to terminal")
 	}
 }
 
 func TestUseIsSafeConcurrently(t *testing.T) {
-	t.Cleanup(func() { use(config.ThemeBase, true) })
+	t.Cleanup(func() { use(config.ThemeTerminal, true) })
 
 	var wg sync.WaitGroup
 	for i := range 8 {

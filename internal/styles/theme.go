@@ -32,16 +32,6 @@ type theme struct {
 
 // themes is read-only. Use lookupTheme to read it.
 var themes = map[config.Theme]theme{
-	config.ThemeBase: {
-		palette: palette{
-			accent:    shade{"0", "15"},
-			subtle:    shade{"8", "8"},
-			highlight: shade{"0", "15"},
-			muted:     shade{"8", "7"},
-			danger:    shade{"1", "9"},
-		},
-		form: huh.ThemeBase,
-	},
 	config.ThemeCharm: {
 		palette: palette{
 			accent:    shade{"#5A56E0", "#7571F9"},
@@ -92,14 +82,24 @@ var themes = map[config.Theme]theme{
 		},
 		form: themeGruvbox,
 	},
+	config.ThemeTerminal: {
+		palette: palette{
+			accent:    shade{"25", "75"},
+			subtle:    shade{"244", "244"},
+			highlight: shade{"166", "214"},
+			muted:     shade{"240", "250"},
+			danger:    shade{"160", "203"},
+		},
+		form: huh.ThemeBase16,
+	},
 }
 
-// lookupTheme returns the definition for t, or base for an unknown value.
+// lookupTheme returns the definition for t, or terminal for an unknown value.
 func lookupTheme(t config.Theme) theme {
 	if def, ok := themes[t]; ok {
 		return def
 	}
-	return themes[config.ThemeBase]
+	return themes[config.ThemeTerminal]
 }
 
 // themeGruvbox returns a huh theme using the hard-contrast palette from

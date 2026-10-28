@@ -9,8 +9,8 @@ import (
 )
 
 func TestThemePopupAppliesAndSaves(t *testing.T) {
-	t.Cleanup(func() { styles.Use(config.ThemeBase) })
-	styles.Use(config.ThemeBase)
+	t.Cleanup(func() { styles.Use(config.ThemeTerminal) })
+	styles.Use(config.ThemeTerminal)
 
 	fs := &fakeSettings{}
 	m := newTestModel(t, "TEST", &fakeBackend{})
@@ -34,7 +34,7 @@ func TestThemePopupAppliesAndSaves(t *testing.T) {
 }
 
 func TestThemeSaveErrorShowsInStatus(t *testing.T) {
-	t.Cleanup(func() { styles.Use(config.ThemeBase) })
+	t.Cleanup(func() { styles.Use(config.ThemeTerminal) })
 
 	fs := &fakeSettings{err: errors.New("read-only")}
 	m := newTestModel(t, "TEST", &fakeBackend{})

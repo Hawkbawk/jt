@@ -39,18 +39,26 @@ type set struct {
 
 var (
 	current  atomic.Pointer[set]
+	override atomic.Pointer[bool]
 	detected = sync.OnceValue(func() bool {
 		return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 	})
 )
 
+func isDark() bool {
+	if d := override.Load(); d != nil {
+		return *d
+	}
+	return detected()
+}
+
 func init() {
-	Use(config.ThemeBase)
+	Use(config.ThemeTerminal)
 }
 
 // Use switches every style to theme t, matching the terminal background.
 func Use(t config.Theme) {
-	use(t, detected())
+	use(t, isDark())
 }
 
 func use(t config.Theme, dark bool) {
