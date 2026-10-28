@@ -66,9 +66,9 @@ func New(backend Backend, settings Settings) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	if m.board.project == "" {
-		return m.startBusy(m.picker.fetch())
+		return tea.Batch(tea.RequestBackgroundColor, m.startBusy(m.picker.fetch()))
 	}
-	return m.startBusy(m.board.fetch(m.board.project, ""))
+	return tea.Batch(tea.RequestBackgroundColor, m.startBusy(m.board.fetch(m.board.project, "")))
 }
 
 // startBusy runs cmd alongside the spinner.
@@ -97,6 +97,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
 		}
+		return m, nil
+
+	case tea.BackgroundColorMsg:
+		styles.SetDark(msg.IsDark())
+		m.restyle()
 		return m, nil
 
 	case themeSelectedMsg:

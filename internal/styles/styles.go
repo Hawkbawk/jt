@@ -61,6 +61,13 @@ func Use(t config.Theme) {
 	use(t, isDark())
 }
 
+// SetDark overrides the detected terminal background, for example with the
+// answer to a background color query, and rebuilds the active theme.
+func SetDark(dark bool) {
+	override.Store(&dark)
+	use(Current(), dark)
+}
+
 func use(t config.Theme, dark bool) {
 	current.Store(build(t, dark))
 }
