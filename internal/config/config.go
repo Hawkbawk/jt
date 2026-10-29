@@ -1,6 +1,5 @@
-// Package config loads jt's own settings. They live in a separate file from
-// jira-cli's config and are read through their own viper instance so the two
-// never share keys.
+// Package config loads jt's own settings, including how to reach Jira. They
+// are read through their own viper instance rather than the global one.
 package config
 
 import (
@@ -20,6 +19,9 @@ type Config struct {
 	// Theme is the ID of the bubbletint tint to draw with. Empty follows the
 	// terminal's theme.
 	Theme string `mapstructure:"theme"`
+	// Jira is how to reach the Jira server. The API token isn't stored here,
+	// see Token.
+	Jira Jira `mapstructure:"jira"`
 
 	viper *viper.Viper
 	mu    *sync.Mutex
@@ -50,6 +52,7 @@ func decode(v *viper.Viper) (Config, error) {
 	))); err != nil {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
+	c.Jira.Server = trimServer(c.Jira.Server)
 	return c, nil
 }
 
@@ -59,6 +62,18 @@ func (c Config) SaveTheme(id string) error {
 	defer c.mu.Unlock()
 
 	c.viper.Set("theme", id)
+	return c.viper.WriteConfig()
+}
+
+// SaveJira writes the Jira connection settings to the settings file, keeping
+// its other keys.
+func (c Config) SaveJira(j Jira) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for k, val := range j.settings() {
+		c.viper.Set("jira."+k, val)
+	}
 	return c.viper.WriteConfig()
 }
 
