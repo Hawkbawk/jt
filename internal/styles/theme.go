@@ -15,6 +15,10 @@ import (
 // also where the default registry starts.
 var fallback = tint.TintDraculaPlus
 
+// FallbackID is the ID of the tint jt uses when it has nothing better to go
+// on.
+func FallbackID() string { return fallback.ID }
+
 // detect finds the source for the terminal jt runs in. Tests replace it.
 var detect = func() (tint.Source, error) { return terminal.Detect() }
 

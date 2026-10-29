@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/fang/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
 
@@ -22,6 +22,15 @@ import (
 // -ldflags "-X github.com/hawkbawk/jt/cmd.version=...".
 var version string
 
+var (
+	// cfg is loaded before any command runs so help and errors can use the
+	// theme. Commands that need the settings report cfgErr themselves, so a
+	// broken settings file doesn't break --help, completion or man.
+	cfg      config.Config
+	cfgErr   error
+	themeErr error
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "jt",
 	Short: "jt is a terminal kanban board for Jira.",
@@ -29,39 +38,35 @@ var rootCmd = &cobra.Command{
 
 Environment:
   JT_CONFIG_FILE    Path to the jt settings file`,
-	Version: buildVersion(),
-	Args:    cobra.NoArgs,
-	RunE:    runBoard,
+	Args: cobra.NoArgs,
+	RunE: runBoard,
 }
 
 // Execute runs the command named by the arguments, opening the board when
 // there isn't one.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg, cfgErr = config.Load()
+	theme := cfg.Theme
+	if cfgErr != nil {
+		theme = styles.FallbackID()
+	}
+	themeErr = styles.Start(ctx, theme)
+
+	err := fang.Execute(ctx, rootCmd,
+		fang.WithVersion(version),
+		fang.WithColorSchemeFunc(styles.CLIColorScheme),
+	)
+	cancel()
+	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func buildVersion() string {
-	if version != "" {
-		return version
-	}
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
-		return info.Main.Version
-	}
-	return "dev"
-}
-
 func runBoard(*cobra.Command, []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
+	if cfgErr != nil {
+		return cfgErr
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	themeErr := styles.Start(ctx, cfg.Theme)
-
 	client, err := connect(cfg.Jira)
 	if err != nil {
 		return err

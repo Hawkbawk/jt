@@ -24,7 +24,7 @@
           pname = "jt";
           inherit version;
           src = self;
-          vendorHash = "sha256-Q2t7SkvHpUDk8BfKjECFha0l2MZ+2qJsl1IidLCM1qQ=";
+          vendorHash = "sha256-Lh9y4H2cHvpsq3ruxPgcxaET7+N62mE9+Uw3BzNcZcg=";
           ldflags = [ "-s" "-w" "-X github.com/hawkbawk/jt/cmd.version=${version}" ];
           doCheck = false;
           meta.mainProgram = "jt";
