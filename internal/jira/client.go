@@ -31,8 +31,7 @@ const (
 
 // Client talks to Jira using jira-cli's configuration and HTTP client.
 type Client struct {
-	jc    *jcli.Client
-	local bool
+	jc *jcli.Client
 
 	mu        sync.Mutex
 	quick     map[int][]Filter
@@ -56,10 +55,7 @@ func New() (*Client, error) {
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("reading jira-cli config (run `jira init` first): %w", err)
 	}
-	return &Client{
-		jc:    api.DefaultClient(false),
-		local: viper.GetString("installation") == jcli.InstallationTypeLocal,
-	}, nil
+	return &Client{jc: api.DefaultClient(false)}, nil
 }
 
 // DefaultProject returns the project key set in jira-cli's config, if any.
@@ -263,10 +259,6 @@ func (c *Client) Transitions(iss Issue) ([]Transition, error) {
 			return slices.Clone(cached), nil
 		}
 	}
-	get := c.jc.Get
-	if c.local {
-		get = c.jc.GetV2
-	}
 	var res struct {
 		Transitions []struct {
 			ID   string `json:"id"`
@@ -276,7 +268,7 @@ func (c *Client) Transitions(iss Issue) ([]Transition, error) {
 			} `json:"to"`
 		} `json:"transitions"`
 	}
-	if err := c.getJSON(get, "/issue/"+url.PathEscape(iss.Key)+"/transitions", &res); err != nil {
+	if err := c.getJSON(c.jc.Get, "/issue/"+url.PathEscape(iss.Key)+"/transitions", &res); err != nil {
 		return nil, err
 	}
 	out := make([]Transition, 0, len(res.Transitions))
@@ -306,9 +298,6 @@ func (c *Client) Transition(key, transitionID string) error {
 func (c *Client) Assign(key, assigneeID string) error {
 	if assigneeID == "" {
 		assigneeID = jcli.AssigneeNone
-	}
-	if c.local {
-		return c.jc.AssignIssueV2(key, assigneeID)
 	}
 	return c.jc.AssignIssue(key, assigneeID)
 }

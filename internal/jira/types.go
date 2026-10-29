@@ -16,8 +16,7 @@ type Issue struct {
 	StatusID string
 	Status   string
 	Assignee string
-	// AssigneeID identifies the assignee in JQL: the account ID on cloud, the
-	// username on server.
+	// AssigneeID identifies the assignee in JQL by account ID.
 	AssigneeID string
 	Type       string
 	Priority   string
@@ -97,7 +96,7 @@ const (
 )
 
 // Option is one of a select field's allowed values, or a person for user
-// fields, where ID is the account ID (the username on Jira Server).
+// fields, where ID is the account ID.
 type Option struct {
 	ID   string
 	Name string

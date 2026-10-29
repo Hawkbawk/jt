@@ -94,11 +94,7 @@ func (c *Client) EditFields(iss Issue) ([]EditField, error) {
 // whose name or email match query.
 func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
 	project, _, _ := strings.Cut(issueKey, "-")
-	search := c.jc.UserSearch
-	if c.local {
-		search = c.jc.UserSearchV2
-	}
-	users, err := search(&jcli.UserSearchOptions{Project: project, Query: query, MaxResults: 20})
+	users, err := c.jc.UserSearch(&jcli.UserSearchOptions{Project: project, Query: query, MaxResults: 20})
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +111,7 @@ func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
 
 // Edit sets the given fields on an issue to their values.
 func (c *Client) Edit(key string, fields []EditField) error {
-	payload, err := editPayload(fields, c.local)
+	payload, err := editPayload(fields)
 	if err != nil {
 		return err
 	}
@@ -270,9 +266,8 @@ func (f *EditField) setValue(raw json.RawMessage) {
 }
 
 // editPayload builds the "fields" object of an edit request. Empty values
-// clear the field. People are identified by account ID, or by username on a
-// local installation.
-func editPayload(fields []EditField, local bool) (map[string]any, error) {
+// clear the field. People are identified by account ID.
+func editPayload(fields []EditField) (map[string]any, error) {
 	out := make(map[string]any, len(fields))
 	for _, f := range fields {
 		text := strings.TrimSpace(f.Text)
@@ -304,11 +299,11 @@ func editPayload(fields []EditField, local bool) (map[string]any, error) {
 				out[f.ID] = nil
 				break
 			}
-			out[f.ID] = userRef(f.Chosen[0], local)
+			out[f.ID] = userRef(f.Chosen[0])
 		case FieldMultiUser:
 			users := make([]map[string]string, len(f.Chosen))
 			for i, id := range f.Chosen {
-				users[i] = userRef(id, local)
+				users[i] = userRef(id)
 			}
 			out[f.ID] = users
 		case FieldLabels:
@@ -324,9 +319,6 @@ func editPayload(fields []EditField, local bool) (map[string]any, error) {
 	return out, nil
 }
 
-func userRef(id string, local bool) map[string]string {
-	if local {
-		return map[string]string{"name": id}
-	}
+func userRef(id string) map[string]string {
 	return map[string]string{"accountId": id}
 }
