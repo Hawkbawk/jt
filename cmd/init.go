@@ -13,7 +13,8 @@ var initCmd = &cobra.Command{
 
 init asks for your Jira site, email and API token, checks them, and lets you
 pick a default project and board. The settings go in jt's settings file and
-the API token goes in your OS keyring. Run it again to change any of them.`,
+the API token goes in your OS keyring. Run it again to change any of them. It asks before
+replacing settings you already have.`,
 	Args: cobra.NoArgs,
 	RunE: runInit,
 }

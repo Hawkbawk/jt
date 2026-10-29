@@ -45,8 +45,15 @@ func (a answers) jira() config.Jira {
 // Run walks the user through setting up the Jira connection and saves it to
 // cfg and the keyring. Output that isn't part of a form goes to out.
 func Run(cfg config.Config, out io.Writer) error {
+	ok, err := overwriteOK(cfg.Jira, confirmOverwrite)
+	if err == nil && !ok {
+		_, err = fmt.Fprintf(out, "Kept your settings in %s.\n", cfg.Path())
+		return err
+	}
 	a := fromConfig(cfg.Jira)
-	err := run(cfg, &a)
+	if err == nil {
+		err = run(cfg, &a)
+	}
 	if errors.Is(err, huh.ErrUserAborted) {
 		_, err = fmt.Fprintln(out, "Cancelled, nothing was saved.")
 		return err
@@ -56,6 +63,25 @@ func Run(cfg config.Config, out io.Writer) error {
 	}
 	_, err = fmt.Fprintf(out, "Saved your settings to %s. Run jt to open your board.\n", cfg.Path())
 	return err
+}
+
+// overwriteOK reports whether init may replace the saved Jira settings,
+// asking with confirm when there are some.
+func overwriteOK(j config.Jira, confirm func(config.Jira) (bool, error)) (bool, error) {
+	if !j.Configured() {
+		return true, nil
+	}
+	return confirm(j)
+}
+
+func confirmOverwrite(j config.Jira) (bool, error) {
+	var ok bool
+	err := form(huh.NewGroup(
+		huh.NewConfirm().Title("Replace your Jira settings?").
+			Description(fmt.Sprintf("jt is already set up for %s as %s.", j.Server, j.Login)).
+			Affirmative("Replace").Negative("Keep").Value(&ok),
+	)).Run()
+	return ok, err
 }
 
 func run(cfg config.Config, a *answers) error {

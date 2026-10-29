@@ -1,9 +1,11 @@
 package setup
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
+	"charm.land/huh/v2"
 	"github.com/zalando/go-keyring"
 
 	"github.com/hawkbawk/jt/internal/config"
@@ -68,5 +70,32 @@ func TestSave(t *testing.T) {
 	}
 	if tok, err := config.Token("me@x.com"); err != nil || tok != "secret" {
 		t.Errorf("token = %q, %v", tok, err)
+	}
+}
+
+func TestOverwriteOK(t *testing.T) {
+	configured := config.Jira{Server: "https://x.atlassian.net", Login: "me@x.com"}
+	answer := func(ok bool, err error) func(config.Jira) (bool, error) {
+		return func(config.Jira) (bool, error) { return ok, err }
+	}
+	tests := []struct {
+		name    string
+		j       config.Jira
+		confirm func(config.Jira) (bool, error)
+		want    bool
+		wantErr error
+	}{
+		{"nothing saved skips the prompt", config.Jira{}, answer(false, errors.New("asked")), true, nil},
+		{"replace", configured, answer(true, nil), true, nil},
+		{"keep", configured, answer(false, nil), false, nil},
+		{"aborted", configured, answer(false, huh.ErrUserAborted), false, huh.ErrUserAborted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := overwriteOK(tt.j, tt.confirm)
+			if got != tt.want || !errors.Is(err, tt.wantErr) {
+				t.Errorf("got %v, %v, want %v, %v", got, err, tt.want, tt.wantErr)
+			}
+		})
 	}
 }
