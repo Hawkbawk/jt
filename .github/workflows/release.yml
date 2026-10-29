@@ -47,7 +47,7 @@ jobs:
             arch=${target#*/}
             name="jt_${TAG}_${os}_${arch}"
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 nix develop --command \
-              go build -trimpath -ldflags "-s -w -X main.version=${TAG#v}" -o "dist/jt" .
+              go build -trimpath -ldflags "-s -w -X github.com/hawkbawk/jt/cmd.version=${TAG#v}" -o "dist/jt" .
             tar -C dist -czf "dist/${name}.tar.gz" jt
             rm dist/jt
           done

@@ -16,6 +16,7 @@ require (
 	github.com/lrstanley/bubbletint/glamourtint/v2 v2.1.0-beta.0
 	github.com/lrstanley/bubbletint/sources/v2 v2.0.0-20261026014704-cd0ef701c1ac
 	github.com/lrstanley/bubbletint/v2 v2.1.0-beta.0
+	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/zalando/go-keyring v0.2.6
 )
@@ -42,6 +43,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kentaro-m/blackfriday-confluence v0.0.0-20220126124413-8e85477b49b3 // indirect
 	github.com/lrstanley/bubbletint/chromatint/v2 v2.1.0-beta.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
