@@ -7,21 +7,21 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ankitpokhrel/jira-cli/api"
 	"github.com/ankitpokhrel/jira-cli/pkg/adf"
 	jcli "github.com/ankitpokhrel/jira-cli/pkg/jira"
 	"github.com/ankitpokhrel/jira-cli/pkg/jira/filter/issue"
 	"github.com/ankitpokhrel/jira-cli/pkg/md"
-	"github.com/spf13/viper"
+
+	"github.com/hawkbawk/jt/internal/config"
 )
 
 const (
+	timeout   = 15 * time.Second
 	pageSize  = 100
 	maxIssues = 1000
 
@@ -29,9 +29,10 @@ const (
 	displayLayout  = "2006-01-02 15:04"
 )
 
-// Client talks to Jira using jira-cli's configuration and HTTP client.
+// Client talks to Jira using jira-cli's HTTP client.
 type Client struct {
-	jc *jcli.Client
+	jc  *jcli.Client
+	cfg config.Jira
 
 	mu        sync.Mutex
 	quick     map[int][]Filter
@@ -39,28 +40,20 @@ type Client struct {
 	moves     map[fieldsKey][]Transition
 }
 
-// New loads jira-cli's config file and builds a client from it. Uses the
-// same lookup logic as jira-cli itself.
-func New() (*Client, error) {
-	if f := os.Getenv("JIRA_CONFIG_FILE"); f != "" {
-		viper.SetConfigFile(f)
-	} else {
-		viper.AddConfigPath("$XDG_CONFIG_HOME/.jira")
-		viper.AddConfigPath("$HOME/.config/.jira")
-		viper.SetConfigName(".config")
-		viper.SetConfigType("yml")
-	}
-	viper.SetEnvPrefix("jira")
-	viper.AutomaticEnv()
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("reading jira-cli config (run `jira init` first): %w", err)
-	}
-	return &Client{jc: api.DefaultClient(false)}, nil
+// New builds a client from jt's Jira settings and the API token. It signs in
+// with basic auth, jira-cli's default.
+func New(cfg config.Jira, token string) *Client {
+	jc := jcli.NewClient(jcli.Config{
+		Server:   cfg.Server,
+		Login:    cfg.Login,
+		APIToken: token,
+	}, jcli.WithTimeout(timeout))
+	return &Client{jc: jc, cfg: cfg}
 }
 
-// DefaultProject returns the project key set in jira-cli's config, if any.
+// DefaultProject returns the project key set in jt's settings, if any.
 func (c *Client) DefaultProject() string {
-	return viper.GetString("project.key")
+	return c.cfg.Project
 }
 
 // Projects lists the projects visible to the user, sorted by key.
@@ -77,13 +70,13 @@ func (c *Client) Projects() ([]Project, error) {
 	return out, nil
 }
 
-// Board loads the board for a project. jira-cli's configured board is used
+// Board loads the board for a project. The configured board is used
 // when it belongs to the project, otherwise one is chosen from the project's
 // boards. filterJQL, when set, narrows the issues loaded.
 func (c *Client) Board(project, filterJQL string) (*Board, error) {
 	var boardID int
-	if c.DefaultProject() == project {
-		boardID = viper.GetInt("board.id")
+	if c.cfg.Project == project {
+		boardID = c.cfg.BoardID
 	}
 
 	var info boardInfo
@@ -215,7 +208,7 @@ func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 
 // Issue fetches an issue with its description and all comments.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
-	iss, err := api.ProxyGetIssue(c.jc, key, issue.NewNumCommentsFilter(1<<16))
+	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(1<<16))
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +302,7 @@ func (c *Client) AddComment(key, body string) error {
 
 // IssueURL returns the browser URL for an issue on the configured server.
 func (c *Client) IssueURL(key string) string {
-	return strings.TrimSuffix(viper.GetString("server"), "/") + "/browse/" + url.PathEscape(key)
+	return c.cfg.Server + "/browse/" + url.PathEscape(key)
 }
 
 type getFunc func(ctx context.Context, path string, headers jcli.Header) (*http.Response, error)

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -36,7 +37,7 @@ func run() error {
 	defer cancel()
 	themeErr := styles.Start(ctx, cfg.Theme)
 
-	client, err := jira.New()
+	client, err := connect(cfg.Jira)
 	if err != nil {
 		return err
 	}
@@ -56,4 +57,17 @@ func run() error {
 
 	_, err = p.Run()
 	return err
+}
+
+// connect builds a Jira client from the settings and the token in the
+// keyring.
+func connect(cfg config.Jira) (*jira.Client, error) {
+	if !cfg.Configured() {
+		return nil, errors.New("jira.server and jira.login aren't set in jt's settings file")
+	}
+	token, err := config.Token(cfg.Login)
+	if err != nil {
+		return nil, fmt.Errorf("reading the API token for %s: %w", cfg.Login, err)
+	}
+	return jira.New(cfg, token), nil
 }

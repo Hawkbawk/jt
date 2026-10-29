@@ -21,10 +21,7 @@ Flags:
   -v, --version    Show the version
 
 Environment:
-  JIRA_CONFIG_FILE    Path to the jira-cli config (default $XDG_CONFIG_HOME/.jira/.config.yml)
   JT_CONFIG_FILE      Path to the jt settings file
-
-jt reuses jira-cli's config and credentials, so run 'jira init' first.
 `
 
 func buildVersion() string {

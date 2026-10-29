@@ -4,7 +4,7 @@ This file provides guidance to agents when working with code in this repository.
 
 ## Overview
 
-`jt` is a Go terminal kanban board for Jira, built with bubbletea/lipgloss/bubbles/glamour. It does not talk to Jira directly. It imports `github.com/ankitpokhrel/jira-cli` as a library and reuses its config and auth, so `jira init` must have been run first.
+`jt` is a Go terminal kanban board for Jira, built with bubbletea/lipgloss/bubbles/glamour. It imports `github.com/ankitpokhrel/jira-cli`'s `pkg/jira` client as a library, but builds that client from its own settings and never reads jira-cli's config.
 
 ## Commands
 
@@ -20,7 +20,8 @@ The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `G
 
 Two layers, wired together in `main.go`:
 
-- `internal/jira`: wraps jira-cli's client. `New` loads jira-cli's own config (`$JIRA_CONFIG_FILE`, else `$XDG_CONFIG_HOME/.jira/.config.yml`) through the global viper instance. jt has no config of its own: the default project is jira-cli's `project.key`, and its `board.id` is used when it belongs to the project. `board.go` picks the board otherwise, builds the JQL, and maps board column config to `Column`s. Scrum boards load open sprints. Kanban boards load open work plus issues resolved in the last 14 days.
+- `internal/config`: jt's settings file (`$JT_CONFIG_FILE`, else `jt.yaml` in the user config dir), read through its own viper instance. The `jira` section holds the connection settings, default project and board. The API token lives only in the OS keyring under the `jt` service, keyed by login.
+- `internal/jira`: wraps jira-cli's `pkg/jira` client. `New` takes the `config.Jira` settings and the token. Don't use jira-cli's `api` package, since it reads jira-cli's config through the global viper. Only Jira Cloud is supported. The default project is `jira.project`, and `jira.board_id` is used for it when set. `board.go` picks the board otherwise, builds the JQL, and maps board column config to `Column`s. Scrum boards load open sprints. Kanban boards load open work plus issues resolved in the last 14 days.
 - `internal/tui`: the bubbletea UI. The root `Model` in `app.go` owns the board state (`boardNav` in `nav.go`), the project `picker`, and at most one `popup` (issue view, comments, move menu). It depends on the `Backend` interface defined in `app.go`, not on `*jira.Client`, so tests use fakes. Network calls run as `tea.Cmd`s that return `*LoadedMsg`/`*DoneMsg` types. `Update` routes them, and popups receive their results through `forwardToPopup`.
 
 `system.go` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into `Model` as `copyText` and `openURL` so tests can stub them.

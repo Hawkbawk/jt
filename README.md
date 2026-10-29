@@ -2,19 +2,17 @@
 
 `jt` is a terminal kanban board for Jira. It shows the issues for a project as columns on a board, and lets you view, comment on, move, and reassign them without leaving the terminal.
 
-`jt` has no config or login of its own. It reuses the configuration and credentials from [jira-cli](https://github.com/ankitpokhrel/jira-cli), so you need to set that up first.
+`jt` keeps its Jira connection in its own settings file and its API token in your OS keyring.
 
 ## Built with
 
 `jt` is a thin layer on top of other people's work, and it wouldn't exist without them. Thank you to:
 
-- [jira-cli](https://github.com/ankitpokhrel/jira-cli) by Ankit Pokhrel, which `jt` imports as a library for all Jira access, config, and auth.
+- [jira-cli](https://github.com/ankitpokhrel/jira-cli) by Ankit Pokhrel, which `jt` imports as a library for all Jira access.
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea), [Lip Gloss](https://github.com/charmbracelet/lipgloss), [Bubbles](https://github.com/charmbracelet/bubbles), and [Glamour](https://github.com/charmbracelet/glamour) from Charm, which make up the terminal UI.
 - [bubbletint](https://github.com/lrstanley/bubbletint), which handles almost all of the theming code.
 
 ## Install
-
-You need a working jira-cli setup. Follow the [jira-cli installation guide](https://github.com/ankitpokhrel/jira-cli#installation), then run `jira init` and follow the prompts.
 
 ### With Go
 
@@ -68,23 +66,37 @@ go build -o jt .
 
 ## Run
 
-After `jira init` has been run, start `jt` from any directory:
+Once the [Jira connection](#jira) is set up, start `jt` from any directory:
 
 ```sh
 jt
 ```
 
-`jt` opens the default project from your jira-cli config (`project.key`). If the configured `board.id` belongs to that project, `jt` uses it. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
+`jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
-
-If your jira-cli config lives somewhere other than the default location, set `JIRA_CONFIG_FILE` to its path.
 
 ## Settings
 
 `jt` keeps its own settings in `jt.yaml` in your user config directory (`~/.config` on Linux, `~/Library/Application Support` on macOS). It creates the file the first time you run `jt`. Set `JT_CONFIG_FILE` to use a different path.
 
 `jt` reads the file once at startup. If you edit it by hand, restart `jt` to pick up the change.
+
+### Jira
+
+The `jira` section says how to reach your Jira Cloud site:
+
+```yaml
+jira:
+  server: https://example.atlassian.net
+  login: you@example.com # the email you sign in to Jira with
+  project: ABC
+  board_id: 42 # optional
+```
+
+`jt` signs in with your login email and an API token.
+
+The API token isn't stored in the file. `jt` reads it from your OS keyring, under the service `jt` and your login as the account.
 
 ### Theme
 
