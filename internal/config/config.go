@@ -65,6 +65,11 @@ func (c Config) SaveTheme(id string) error {
 	return c.viper.WriteConfig()
 }
 
+// Path is where the settings file lives.
+func (c Config) Path() string {
+	return c.viper.ConfigFileUsed()
+}
+
 // SaveJira writes the Jira connection settings to the settings file, keeping
 // its other keys.
 func (c Config) SaveJira(j Jira) error {

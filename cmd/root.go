@@ -93,11 +93,11 @@ func runBoard(*cobra.Command, []string) error {
 // keyring.
 func connect(cfg config.Jira) (*jira.Client, error) {
 	if !cfg.Configured() {
-		return nil, errors.New("jira.server and jira.login aren't set in jt's settings file")
+		return nil, errors.New("not connected to Jira yet, run 'jt init' to set it up")
 	}
 	token, err := config.Token(cfg.Login)
 	if err != nil {
-		return nil, fmt.Errorf("reading the API token for %s: %w", cfg.Login, err)
+		return nil, fmt.Errorf("reading the API token for %s: %w (run 'jt init' to save one)", cfg.Login, err)
 	}
 	return jira.New(cfg, token), nil
 }

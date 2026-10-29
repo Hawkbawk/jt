@@ -70,6 +70,35 @@ func (c *Client) Projects() ([]Project, error) {
 	return out, nil
 }
 
+// CheckLogin checks that Jira accepts the login and token.
+func (c *Client) CheckLogin() error {
+	_, err := c.jc.Me()
+	return err
+}
+
+// Boards lists a project's boards.
+func (c *Client) Boards(project string) ([]BoardSummary, error) {
+	boards, err := c.boards(project)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]BoardSummary, len(boards))
+	for i, b := range boards {
+		out[i] = BoardSummary{ID: b.ID, Name: b.Name, Type: b.Type}
+	}
+	return out, nil
+}
+
+func (c *Client) boards(project string) ([]boardInfo, error) {
+	var res struct {
+		Values []boardInfo `json:"values"`
+	}
+	if err := c.getJSON(c.jc.GetV1, "/board?projectKeyOrId="+url.QueryEscape(project), &res); err != nil {
+		return nil, err
+	}
+	return res.Values, nil
+}
+
 // Board loads the board for a project. The configured board is used
 // when it belongs to the project, otherwise one is chosen from the project's
 // boards. filterJQL, when set, narrows the issues loaded.
@@ -85,14 +114,11 @@ func (c *Client) Board(project, filterJQL string) (*Board, error) {
 			return nil, err
 		}
 	} else {
-		var res struct {
-			Values []boardInfo `json:"values"`
-		}
-		if err := c.getJSON(c.jc.GetV1, "/board?projectKeyOrId="+url.QueryEscape(project), &res); err != nil {
+		boards, err := c.boards(project)
+		if err != nil {
 			return nil, err
 		}
-		var err error
-		if info, err = pickBoard(project, res.Values); err != nil {
+		if info, err = pickBoard(project, boards); err != nil {
 			return nil, err
 		}
 	}

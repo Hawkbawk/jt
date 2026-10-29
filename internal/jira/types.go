@@ -22,6 +22,13 @@ type Issue struct {
 	Priority   string
 }
 
+// BoardSummary is a board as listed for a project, without its issues.
+type BoardSummary struct {
+	ID   int
+	Name string
+	Type string
+}
+
 // Column is a board column and the issues whose status maps to it.
 type Column struct {
 	Name      string

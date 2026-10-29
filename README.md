@@ -2,7 +2,7 @@
 
 `jt` is a terminal kanban board for Jira. It shows the issues for a project as columns on a board, and lets you view, comment on, move, and reassign them without leaving the terminal.
 
-`jt` keeps its Jira connection in its own settings file and its API token in your OS keyring.
+`jt` works with Jira Cloud. Run `jt init` once to connect it, and it keeps the connection in its own settings file and your API token in your OS keyring.
 
 ## Built with
 
@@ -66,7 +66,15 @@ go build -o jt .
 
 ## Run
 
-Once the [Jira connection](#jira) is set up, start `jt` from any directory:
+First, connect `jt` to your Jira Cloud site:
+
+```sh
+jt init
+```
+
+It asks for your site URL, your email and an [API token](https://id.atlassian.com/manage-profile/security/api-tokens), checks that they work, and then lets you pick a default project and board. Run it again any time to change them.
+
+Then start `jt` from any directory:
 
 ```sh
 jt
@@ -84,7 +92,7 @@ Run `jt --version` to see the installed version and `jt --help` for usage.
 
 ### Jira
 
-The `jira` section says how to reach your Jira Cloud site:
+`jt init` writes the `jira` section, which says how to reach your Jira Cloud site. You can also edit it by hand:
 
 ```yaml
 jira:
