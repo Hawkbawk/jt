@@ -17,14 +17,15 @@
         pkgs = nixpkgs.legacyPackages.${system};
         go = pkgs.go_latest or pkgs.go;
         buildGoModule = pkgs.buildGoModule.override { inherit go; };
+        version = "0.1.0";
       in
       {
         packages.default = buildGoModule {
           pname = "jt";
-          version = self.shortRev or self.dirtyShortRev or "dev";
+          inherit version;
           src = self;
           vendorHash = "sha256-9sKPgdsySgP+GZwUQEpS+NRNd2gqaUo/v6UeiXTJaZc=";
-          ldflags = [ "-s" "-w" ];
+          ldflags = [ "-s" "-w" "-X main.version=${version}" ];
           doCheck = false;
           meta.mainProgram = "jt";
         };

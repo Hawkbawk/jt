@@ -16,7 +16,11 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	done, err := parseArgs(os.Args[1:], os.Stdout)
+	if err == nil && !done {
+		err = run()
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "jt:", err)
 		os.Exit(1)
 	}
