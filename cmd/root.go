@@ -46,6 +46,7 @@ Environment:
 // there isn't one.
 func Execute() {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	cfg, cfgErr = config.Load()
 	theme := cfg.Theme
 	if cfgErr != nil {
@@ -57,7 +58,6 @@ func Execute() {
 		fang.WithVersion(version),
 		fang.WithColorSchemeFunc(styles.CLIColorScheme),
 	)
-	cancel()
 	if err != nil {
 		os.Exit(1)
 	}
