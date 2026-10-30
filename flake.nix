@@ -27,6 +27,12 @@
           vendorHash = "sha256-3SZZ9JubkWgz/fWeNdT7FTQ7AWLsWHc7gThCI4DPYm4=";
           ldflags = [ "-s" "-w" "-X github.com/hawkbawk/jt/cmd.version=${version}" ];
           doCheck = false;
+          nativeBuildInputs = [ pkgs.installShellFiles ];
+          postInstall = ''
+            export HOME=$TMPDIR
+            $out/bin/jt man > jt.1
+            installManPage jt.1
+          '';
           meta.mainProgram = "jt";
         };
 
