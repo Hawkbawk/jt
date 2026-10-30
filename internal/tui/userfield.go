@@ -19,27 +19,16 @@ func (v *fieldValue) isUser() bool {
 	return v.Kind == jira.FieldUser || v.Kind == jira.FieldMultiUser
 }
 
-// peoplePicker is what a user field needs from either picker.
+// peoplePicker builds the fields that edit a user field.
 type peoplePicker interface {
-	Fields() []huh.Field
-	Picked() []jira.Option
+	Field() huh.Field
 }
 
-// newPeoplePicker builds the picker that edits a user field. People taken off
-// stay listed so they can be put back.
+// newPeoplePicker builds the picker that edits a user field. The people on
+// the field when it loaded stay listed so they can be put back.
 func (v *fieldValue) newPeoplePicker(search usersearch.Func) peoplePicker {
 	if v.Kind == jira.FieldMultiUser {
-		return usermultiselect.New(v.Name, search).Value(&v.multi).Listed(v.Options...)
+		return usermultiselect.New(v.Name, search).Value(&v.multi).Listed(v.Chosen...)
 	}
-	return onePicker{userselect.New(v.Name, search).Value(&v.single).Required(v.Required).Listed(v.Options...)}
-}
-
-// onePicker gives a single picker's pick as a list.
-type onePicker struct{ *userselect.Picker }
-
-func (p onePicker) Picked() []jira.Option {
-	if o := p.Picker.Picked(); o.ID != "" {
-		return []jira.Option{o}
-	}
-	return nil
+	return userselect.New(v.Name, search).Value(&v.single).Required(v.Required).Listed(v.Chosen...)
 }

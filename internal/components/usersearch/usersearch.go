@@ -1,13 +1,19 @@
-// Package usersearch is the search box the people pickers sit under. It
-// looks people up as the query changes and remembers the names it finds.
+// Package usersearch is the field the people pickers are built on: a search
+// box above the list of people it finds. It looks people up as the query
+// changes.
 package usersearch
 
 import (
-	"slices"
-	"sync"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
@@ -21,157 +27,382 @@ var Delay = 300 * time.Millisecond
 // ListHeight is how many rows a list of people shows.
 const ListHeight = 8
 
-// Box is a search box for people. Input is debounced and results cached.
-type Box struct {
+// List is how a picker lists people and what its keys do to them.
+type List struct {
+	// Rows is who to list for query. found is who matches it, or nobody
+	// before anything is typed.
+	Rows func(query string, found []jira.Option) []jira.Option
+	// Checked marks the people picked. Leave it nil for a list without
+	// checkboxes.
+	Checked func(jira.Option) bool
+	// Toggle is what space does to the person under the cursor. Leave it nil
+	// when space does nothing.
+	Toggle func(jira.Option)
+	// Choose is what enter does to the person under the cursor, before the
+	// form moves on.
+	Choose func(jira.Option)
+	// Start is the id of who the cursor starts on.
+	Start string
+}
+
+// Field is a search box above the list of people it finds. Its rows only
+// change when the query does, so toggling people keeps the list in place.
+type Field struct {
 	title  string
 	search Func
 	delay  time.Duration
-	query  string
-	// known has the names of people the caller already knows about, by id.
-	known map[string]string
+	list   List
 
-	mu     sync.Mutex
-	latest string
-	found  map[string]result
-	names  map[string]jira.Option
+	input   textinput.Model
+	listing bool
+	rows    []jira.Option
+	cursor  int
+	top     int
+	seq     int
+	// found is who matched the query, once searching is done. Until then it
+	// is who matched an earlier one.
+	found     []jira.Option
+	searching bool
+	// err is why the search for the query failed.
+	err error
+
+	focused   bool
+	width     int
+	theme     huh.Theme
+	hasDarkBg bool
 }
 
-type result struct {
+// searchMsg says a query has waited long enough to be sent.
+type searchMsg struct {
+	field *Field
+	seq   int
+}
+
+// foundMsg brings back who matched a query.
+type foundMsg struct {
+	field  *Field
+	query  string
 	people []jira.Option
 	err    error
 }
 
-// New makes a box titled title that looks people up with search.
-func New(title string, search Func) *Box {
-	return &Box{
-		title:  title,
-		search: search,
-		delay:  Delay,
-		known:  map[string]string{},
-		found:  map[string]result{},
-		names:  map[string]jira.Option{},
+// New makes an empty search box titled title, over a list that works like l.
+// It looks people up with search.
+func New(title string, search Func, l List) *Field {
+	in := textinput.New()
+	in.Placeholder = "Search by name or email"
+	f := &Field{title: title, search: search, delay: Delay, list: l, input: in}
+	f.refresh()
+	for i, o := range f.rows {
+		if o.ID == l.Start {
+			f.cursor = i
+		}
 	}
+	f.scroll()
+	return f
 }
 
-// Know adds the names of people the caller already knows about.
-func (b *Box) Know(people ...jira.Option) {
+func (f *Field) query() string { return f.input.Value() }
+
+// refresh lists people for the query, with the cursor back at the top.
+func (f *Field) refresh() {
+	var found []jira.Option
+	if f.query() != "" {
+		found = f.found
+	}
+	f.rows = dedupe(f.list.Rows(f.query(), found))
+	f.cursor, f.top = 0, 0
+}
+
+func dedupe(people []jira.Option) []jira.Option {
+	var out []jira.Option
+	seen := map[string]bool{}
 	for _, o := range people {
-		b.known[o.ID] = o.Name
+		if !seen[o.ID] {
+			seen[o.ID] = true
+			out = append(out, o)
+		}
 	}
+	return out
 }
 
-// Field starts a new, empty search box.
-func (b *Box) Field() *huh.Input {
-	b.query = ""
-	return huh.NewInput().Title(b.title).Placeholder("Search by name or email").Value(&b.query)
-}
-
-// Query is what has been typed in the box.
-func (b *Box) Query() string { return b.query }
-
-// Results is who matches the query, or nobody before anything is typed.
-func (b *Box) Results() []jira.Option {
-	if b.query == "" {
+// queryChanged waits to look up the new query, keeping the people listed
+// until the answer comes back. Clearing the query lists people again at once.
+func (f *Field) queryChanged() tea.Cmd {
+	f.seq++
+	f.err = nil
+	f.searching = f.query() != ""
+	if !f.searching {
+		f.refresh()
 		return nil
 	}
-	return b.lookup(b.query).people
+	msg := searchMsg{field: f, seq: f.seq}
+	if f.delay <= 0 {
+		return f.lookup(msg)
+	}
+	return tea.Tick(f.delay, func(time.Time) tea.Msg { return msg })
 }
 
-// Status says why the list of people is empty.
-func (b *Box) Status() string {
-	if b.query == "" {
+// lookup sends the query, unless a newer one has replaced it.
+func (f *Field) lookup(msg searchMsg) tea.Cmd {
+	if msg.seq != f.seq {
+		return nil
+	}
+	q, search := f.query(), f.search
+	return func() tea.Msg {
+		people, err := search(q)
+		return foundMsg{field: f, query: q, people: people, err: err}
+	}
+}
+
+func (f *Field) answer(msg foundMsg) {
+	if !f.searching || msg.query != f.query() {
+		return
+	}
+	f.searching = false
+	if msg.err != nil {
+		f.err = msg.err
+		return
+	}
+	f.found = msg.people
+	f.refresh()
+}
+
+// status says why the list of people is empty, or that it may change.
+func (f *Field) status() string {
+	q := f.query()
+	if q == "" {
 		return ""
 	}
-	r := b.lookup(b.query)
 	switch {
-	case r.err != nil:
-		return "Error: " + r.err.Error()
-	case len(r.people) == 0:
+	case f.err != nil:
+		return "Error: " + f.err.Error()
+	case f.searching:
+		return "Searching…"
+	case len(f.found) == 0:
 		return "No matching people."
 	}
 	return ""
 }
 
-// Person finds the name of a person the caller knows or a search found.
-func (b *Box) Person(id string) jira.Option {
-	if name, ok := b.known[id]; ok {
-		return jira.Option{ID: id, Name: name}
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if o, ok := b.names[id]; ok {
-		return o
-	}
-	return jira.Option{ID: id, Name: id}
-}
+var (
+	toList   = key.NewBinding(key.WithKeys("enter", "tab", "down"), key.WithHelp("enter", "pick"))
+	toSearch = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "search"))
+	up       = key.NewBinding(key.WithKeys("up", "k", "ctrl+p"), key.WithHelp("↑", "up"))
+	down     = key.NewBinding(key.WithKeys("down", "j", "ctrl+n"), key.WithHelp("↓", "down"))
+	toggle   = key.NewBinding(key.WithKeys("space", "x"), key.WithHelp("space", "toggle"))
+	choose   = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done"))
+)
 
-func (b *Box) lookup(query string) result {
-	b.mu.Lock()
-	if r, ok := b.found[query]; ok {
-		b.mu.Unlock()
-		return r
-	}
-	b.latest = query
-	b.mu.Unlock()
+// Init implements huh.Field.
+func (f *Field) Init() tea.Cmd { return nil }
 
-	time.Sleep(b.delay)
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.latest != query {
-		// Superseded while waiting. huh drops the answer for an old query.
-		return result{}
-	}
-	if r, ok := b.found[query]; ok {
-		return r
-	}
-	people, err := b.search(query)
-	for _, o := range people {
-		b.names[o.ID] = o
-	}
-	r := result{people: people, err: err}
-	b.found[query] = r
-	return r
-}
-
-// Watch gives what a list of people binds to, so it updates when the query or
-// picks change. Call it again with each new Field.
-//
-// huh caches lists by a hash of their bindings and toggles the cached options
-// in place, so binding the query and picks themselves would bring back stale
-// toggles once they return to an earlier state. The hash gives every change
-// of query or picks a number that is never reused, so nothing cached is ever
-// picked up again.
-func (b *Box) Watch(picks func() []string) any {
-	return &rev{box: b, picks: picks}
-}
-
-type rev struct {
-	box   *Box
-	picks func() []string
-	n     uint64
-	query string
-	last  []string
-}
-
-func (r *rev) Hash() (uint64, error) {
-	picks := r.picks()
-	if r.box.query != r.query || !slices.Equal(picks, r.last) {
-		r.n++
-		r.query, r.last = r.box.query, slices.Clone(picks)
-	}
-	return r.n, nil
-}
-
-// Options lists people for a select, leaving out repeats.
-func Options(people []jira.Option) []huh.Option[string] {
-	var opts []huh.Option[string]
-	seen := map[string]bool{}
-	for _, o := range people {
-		if !seen[o.ID] {
-			seen[o.ID] = true
-			opts = append(opts, huh.NewOption(o.Name, o.ID))
+// Update implements huh.Field.
+func (f *Field) Update(msg tea.Msg) (huh.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.BackgroundColorMsg:
+		f.hasDarkBg = msg.IsDark()
+	case searchMsg:
+		if msg.field == f {
+			return f, f.lookup(msg)
+		}
+	case foundMsg:
+		if msg.field == f {
+			f.answer(msg)
+		}
+	case tea.KeyPressMsg:
+		if f.listing {
+			return f, f.updateList(msg)
+		}
+		return f, f.updateSearch(msg)
+	default:
+		if !f.listing {
+			return f, f.edit(msg)
 		}
 	}
-	return opts
+	return f, nil
 }
+
+func (f *Field) updateSearch(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, toList):
+		if len(f.rows) > 0 {
+			f.listing = true
+			f.input.Blur()
+		}
+		return nil
+	case key.Matches(msg, toSearch):
+		return huh.PrevField
+	}
+	return f.edit(msg)
+}
+
+// edit passes msg to the search box, looking people up if the query changed.
+func (f *Field) edit(msg tea.Msg) tea.Cmd {
+	before := f.query()
+	var cmd tea.Cmd
+	f.input, cmd = f.input.Update(msg)
+	if f.query() == before {
+		return cmd
+	}
+	return tea.Batch(cmd, f.queryChanged())
+}
+
+func (f *Field) updateList(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, toSearch) || len(f.rows) == 0:
+		f.listing = false
+		return f.input.Focus()
+	case key.Matches(msg, up):
+		f.cursor = max(0, f.cursor-1)
+	case key.Matches(msg, down):
+		f.cursor = min(len(f.rows)-1, f.cursor+1)
+	case key.Matches(msg, toggle) && f.list.Toggle != nil:
+		f.list.Toggle(f.rows[f.cursor])
+	case key.Matches(msg, choose):
+		if f.list.Choose != nil {
+			f.list.Choose(f.rows[f.cursor])
+		}
+		return huh.NextField
+	}
+	f.scroll()
+	return nil
+}
+
+// scroll keeps the cursor in view.
+func (f *Field) scroll() {
+	f.top = min(f.top, f.cursor)
+	f.top = max(f.top, f.cursor-ListHeight+1)
+}
+
+func (f *Field) styles() *huh.FieldStyles {
+	theme := f.theme
+	if theme == nil {
+		theme = huh.ThemeFunc(huh.ThemeCharm)
+	}
+	if f.focused {
+		return &theme.Theme(f.hasDarkBg).Focused
+	}
+	return &theme.Theme(f.hasDarkBg).Blurred
+}
+
+// View implements huh.Field.
+func (f *Field) View() string {
+	s := f.styles()
+	st := f.input.Styles()
+	st.Cursor.Color = s.TextInput.Cursor.GetForeground()
+	st.Focused.Prompt = s.TextInput.Prompt
+	st.Focused.Text = s.TextInput.Text
+	st.Focused.Placeholder = s.TextInput.Placeholder
+	f.input.SetStyles(st)
+
+	lines := []string{s.Title.Render(f.title), f.input.View()}
+	if status := f.status(); status != "" {
+		lines = append(lines, s.Description.Render(status))
+	}
+	for i := f.top; i < min(len(f.rows), f.top+ListHeight); i++ {
+		lines = append(lines, f.renderRow(s, i))
+	}
+	return s.Base.Width(f.width).Render(strings.Join(lines, "\n"))
+}
+
+func (f *Field) renderRow(s *huh.FieldStyles, i int) string {
+	o := f.rows[i]
+	cursor := s.SelectSelector.String()
+	if f.list.Checked != nil {
+		cursor = s.MultiSelectSelector.String()
+	}
+	parts := []string{strings.Repeat(" ", lipgloss.Width(cursor))}
+	if f.listing && i == f.cursor {
+		parts[0] = cursor
+	}
+	style := s.UnselectedOption
+	if f.list.Checked != nil {
+		if f.list.Checked(o) {
+			parts = append(parts, s.SelectedPrefix.String())
+			style = s.SelectedOption
+		} else {
+			parts = append(parts, s.UnselectedPrefix.String())
+		}
+	} else if f.listing && i == f.cursor {
+		style = s.SelectedOption
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, append(parts, style.Render(o.Name))...)
+}
+
+// Focus implements huh.Field.
+func (f *Field) Focus() tea.Cmd {
+	f.focused = true
+	if f.listing {
+		return nil
+	}
+	return f.input.Focus()
+}
+
+// Blur implements huh.Field.
+func (f *Field) Blur() tea.Cmd {
+	f.focused = false
+	f.input.Blur()
+	return nil
+}
+
+// KeyBinds implements huh.Field.
+func (f *Field) KeyBinds() []key.Binding {
+	if !f.listing {
+		return []key.Binding{toList, toSearch}
+	}
+	binds := []key.Binding{up, down}
+	if f.list.Toggle != nil {
+		binds = append(binds, toggle)
+	}
+	return append(binds, toSearch, choose)
+}
+
+// WithTheme implements huh.Field.
+func (f *Field) WithTheme(theme huh.Theme) huh.Field {
+	if f.theme == nil {
+		f.theme = theme
+	}
+	return f
+}
+
+// WithWidth implements huh.Field.
+func (f *Field) WithWidth(width int) huh.Field {
+	f.width = width
+	prompt := lipgloss.Width(f.input.Styles().Focused.Prompt.Render(f.input.Prompt))
+	f.input.SetWidth(width - f.styles().Base.GetHorizontalFrameSize() - prompt - 1)
+	return f
+}
+
+// Error implements huh.Field.
+func (f *Field) Error() error { return nil }
+
+// Run implements huh.Field.
+func (f *Field) Run() error { return huh.Run(f) }
+
+// RunAccessible implements huh.Field.
+func (f *Field) RunAccessible(w io.Writer, _ io.Reader) error {
+	_, err := fmt.Fprintln(w, "Searching for people isn't supported in accessible mode.")
+	return err
+}
+
+// Skip implements huh.Field.
+func (f *Field) Skip() bool { return false }
+
+// Zoom implements huh.Field.
+func (f *Field) Zoom() bool { return false }
+
+// WithKeyMap implements huh.Field. The field keeps its own keys.
+func (f *Field) WithKeyMap(*huh.KeyMap) huh.Field { return f }
+
+// WithHeight implements huh.Field. The list is always ListHeight rows.
+func (f *Field) WithHeight(int) huh.Field { return f }
+
+// WithPosition implements huh.Field.
+func (f *Field) WithPosition(huh.FieldPosition) huh.Field { return f }
+
+// GetKey implements huh.Field.
+func (f *Field) GetKey() string { return "" }
+
+// GetValue implements huh.Field. The pickers bind their own values.
+func (f *Field) GetValue() any { return nil }

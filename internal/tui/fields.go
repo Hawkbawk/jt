@@ -41,8 +41,8 @@ func loadFields(b Backend, iss jira.Issue) tea.Cmd {
 type fieldValue struct {
 	jira.EditField
 	text   string
-	single string
-	multi  []string
+	single jira.Option
+	multi  []jira.Option
 	input  huh.Field
 
 	// people edits a user field. It's only set for those.
@@ -54,8 +54,8 @@ type fieldValue struct {
 // entered is the values a form field is bound to.
 type entered struct {
 	text   string
-	single string
-	multi  []string
+	single jira.Option
+	multi  []jira.Option
 }
 
 func newFieldValue(f jira.EditField, search usersearch.Func) *fieldValue {
@@ -70,9 +70,9 @@ func newFieldValue(f jira.EditField, search usersearch.Func) *fieldValue {
 // reset puts the entered values back to how the field loaded.
 func (v *fieldValue) reset() {
 	v.multi = slices.Clone(v.Chosen)
-	v.text, v.single = v.Text, ""
+	v.text, v.single = v.Text, jira.Option{}
 	if v.Kind == jira.FieldLabels {
-		v.text = strings.Join(v.Chosen, " ")
+		v.text = strings.Join(jira.Names(v.Chosen), " ")
 	}
 	if len(v.Chosen) > 0 {
 		v.single = v.Chosen[0]
@@ -103,11 +103,14 @@ func (v *fieldValue) with(e entered) jira.EditField {
 	f := v.EditField
 	switch f.Kind {
 	case jira.FieldLabels:
-		f.Chosen = strings.Fields(e.text)
+		f.Chosen = nil
+		for _, l := range strings.Fields(e.text) {
+			f.Chosen = append(f.Chosen, jira.Option{ID: l, Name: l})
+		}
 	case jira.FieldSelect, jira.FieldUser:
 		f.Chosen = nil
-		if e.single != "" {
-			f.Chosen = []string{e.single}
+		if e.single.ID != "" {
+			f.Chosen = []jira.Option{e.single}
 		}
 	case jira.FieldMultiSelect, jira.FieldMultiUser:
 		f.Chosen = slices.Clone(e.multi)
@@ -146,23 +149,8 @@ func (v *fieldValue) Description() string {
 	f := v.current()
 	var s string
 	switch f.Kind {
-	case jira.FieldUser, jira.FieldMultiUser:
-		var names []string
-		for _, o := range v.people.Picked() {
-			names = append(names, o.Name)
-		}
-		s = strings.Join(names, ", ")
-	case jira.FieldSelect, jira.FieldMultiSelect:
-		var names []string
-		for _, id := range f.Chosen {
-			i := slices.IndexFunc(f.Options, func(o jira.Option) bool { return o.ID == id })
-			if i >= 0 {
-				names = append(names, f.Options[i].Name)
-			}
-		}
-		s = strings.Join(names, ", ")
-	case jira.FieldLabels:
-		s = strings.Join(f.Chosen, ", ")
+	case jira.FieldSelect, jira.FieldMultiSelect, jira.FieldUser, jira.FieldMultiUser, jira.FieldLabels:
+		s = strings.Join(jira.Names(f.Chosen), ", ")
 	default:
 		s, _, _ = strings.Cut(f.Text, "\n")
 	}
@@ -178,20 +166,20 @@ func (v *fieldValue) huhField() huh.Field {
 	case jira.FieldTextArea:
 		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).Value(&v.text)
 	case jira.FieldSelect:
-		var opts []huh.Option[string]
+		var opts []huh.Option[jira.Option]
 		if !v.Required {
-			opts = append(opts, huh.NewOption("(none)", ""))
+			opts = append(opts, huh.NewOption("(none)", jira.Option{}))
 		}
 		for _, o := range v.Options {
-			opts = append(opts, huh.NewOption(o.Name, o.ID))
+			opts = append(opts, huh.NewOption(o.Name, o))
 		}
-		return huh.NewSelect[string]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.single)
+		return huh.NewSelect[jira.Option]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.single)
 	case jira.FieldMultiSelect:
-		opts := make([]huh.Option[string], len(v.Options))
+		opts := make([]huh.Option[jira.Option], len(v.Options))
 		for i, o := range v.Options {
-			opts[i] = huh.NewOption(o.Name, o.ID).Selected(slices.Contains(v.multi, o.ID))
+			opts[i] = huh.NewOption(o.Name, o).Selected(jira.IndexID(v.multi, o.ID) >= 0)
 		}
-		return huh.NewMultiSelect[string]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.multi)
+		return huh.NewMultiSelect[jira.Option]().Title(v.Name).Options(opts...).Height(listHeight(len(opts))).Value(&v.multi)
 	}
 	in := huh.NewInput().Title(v.Name).Value(&v.text)
 	switch v.Kind {
@@ -300,25 +288,20 @@ func newFieldList(vals []*fieldValue) list.Model {
 func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
 	v.begin()
-	var fields []huh.Field
 	if v.isUser() {
-		fields = v.people.Fields()
+		v.input = v.people.Field()
 	} else {
-		fields = []huh.Field{v.huhField()}
+		v.input = v.huhField()
 	}
-	v.input = fields[0]
-	p.form = newForm(!v.isUser(), fields...)
+	p.form = newForm(v.input)
 	p.growText()
 	return p.form.Init()
 }
 
-// newForm puts fields in a themed form that leaves ctrl+c to the app. Forms
-// that search for people turn off filter so the search box does that job.
-func newForm(filter bool, fields ...huh.Field) *huh.Form {
+// newForm puts fields in a themed form that leaves ctrl+c to the app.
+func newForm(fields ...huh.Field) *huh.Form {
 	km := huh.NewDefaultKeyMap()
 	km.Quit = key.NewBinding(key.WithDisabled())
-	km.Select.Filter.SetEnabled(filter)
-	km.MultiSelect.Filter.SetEnabled(filter)
 	return huh.NewForm(huh.NewGroup(fields...)).
 		WithTheme(styles.FormTheme()).
 		WithKeyMap(km).
@@ -463,12 +446,17 @@ func (p *fieldsPane) hint() string {
 	return styles.Dim().Render("enter edit · u undo · / filter · esc close · ctrl+s save")
 }
 
-// sameSet reports whether a and b hold the same values in any order.
-func sameSet(a, b []string) bool {
-	a, b = slices.Clone(a), slices.Clone(b)
-	slices.Sort(a)
-	slices.Sort(b)
-	return slices.Equal(a, b)
+// sameSet reports whether a and b hold the same options, by id.
+func sameSet(a, b []jira.Option) bool {
+	ids := func(opts []jira.Option) []string {
+		out := make([]string, len(opts))
+		for i, o := range opts {
+			out[i] = o.ID
+		}
+		slices.Sort(out)
+		return out
+	}
+	return slices.Equal(ids(a), ids(b))
 }
 
 func plural(n int, word string) string {

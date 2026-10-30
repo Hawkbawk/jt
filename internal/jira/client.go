@@ -201,8 +201,8 @@ func (f issueFields) toIssue() Issue {
 		Type:     f.Fields.IssueType.Name,
 	}
 	if f.Fields.Assignee != nil {
-		iss.Assignee = f.Fields.Assignee.DisplayName
-		iss.AssigneeID = cmp.Or(f.Fields.Assignee.AccountID, f.Fields.Assignee.Name)
+		a := f.Fields.Assignee
+		iss.Assignee = Option{ID: cmp.Or(a.AccountID, a.Name), Name: a.DisplayName}
 	}
 	if f.Fields.Priority != nil {
 		iss.Priority = f.Fields.Priority.Name
@@ -244,7 +244,7 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 			Key:      iss.Key,
 			Summary:  f.Summary,
 			Status:   f.Status.Name,
-			Assignee: f.Assignee.Name,
+			Assignee: Option{Name: f.Assignee.Name},
 			Type:     f.IssueType.Name,
 			Priority: f.Priority.Name,
 		},

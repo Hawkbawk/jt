@@ -25,21 +25,19 @@ func testFields() []jira.EditField {
 		{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true, Text: "Fix it"},
 		{ID: "description", Name: "Description", Kind: jira.FieldTextArea, Text: "Steps"},
 		{
-			ID: "priority", Name: "Priority", Kind: jira.FieldSelect, Chosen: []string{"3"},
+			ID: "priority", Name: "Priority", Kind: jira.FieldSelect, Chosen: []jira.Option{{ID: "3", Name: "Medium"}},
 			Options: []jira.Option{{ID: "1", Name: "High"}, {ID: "3", Name: "Medium"}},
 		},
-		{ID: "labels", Name: "Labels", Kind: jira.FieldLabels, Chosen: []string{"api"}},
+		{ID: "labels", Name: "Labels", Kind: jira.FieldLabels, Chosen: []jira.Option{{ID: "api", Name: "api"}}},
 		{
 			ID: "components", Name: "Components", Kind: jira.FieldMultiSelect,
 			Options: []jira.Option{{ID: "c1", Name: "API"}, {ID: "c2", Name: "UI"}},
 		},
 		{
-			ID: "owner", Name: "Owner", Kind: jira.FieldUser, Chosen: []string{"u1"},
-			Options: []jira.Option{{ID: "u1", Name: "Ada"}},
+			ID: "owner", Name: "Owner", Kind: jira.FieldUser, Chosen: []jira.Option{{ID: "u1", Name: "Ada"}},
 		},
 		{
-			ID: "reviewers", Name: "Reviewers", Kind: jira.FieldMultiUser, Chosen: []string{"u1"},
-			Options: []jira.Option{{ID: "u1", Name: "Ada"}},
+			ID: "reviewers", Name: "Reviewers", Kind: jira.FieldMultiUser, Chosen: []jira.Option{{ID: "u1", Name: "Ada"}},
 		},
 	}
 }
@@ -72,6 +70,16 @@ func savedField(t *testing.T, fb *fakeBackend, id string) jira.EditField {
 	return fb.edited[0][i]
 }
 
+// chosen is the ids of the options saved for the field with id.
+func chosen(t *testing.T, fb *fakeBackend, id string) []string {
+	t.Helper()
+	var ids []string
+	for _, o := range savedField(t, fb, id).Chosen {
+		ids = append(ids, o.ID)
+	}
+	return ids
+}
+
 func TestFieldsSaveChangesTogether(t *testing.T) {
 	m, fb := fieldsModel(t)
 	m = pressDrain(t, m, "enter")
@@ -90,13 +98,13 @@ func TestFieldsSaveChangesTogether(t *testing.T) {
 	if got := savedField(t, fb, "summary").Text; got != "Fix it now" {
 		t.Errorf("summary = %q", got)
 	}
-	if got := savedField(t, fb, "priority").Chosen; !slices.Equal(got, []string{"1"}) {
+	if got := chosen(t, fb, "priority"); !slices.Equal(got, []string{"1"}) {
 		t.Errorf("priority = %v", got)
 	}
-	if got := savedField(t, fb, "labels").Chosen; !slices.Equal(got, []string{"api", "ui"}) {
+	if got := chosen(t, fb, "labels"); !slices.Equal(got, []string{"api", "ui"}) {
 		t.Errorf("labels = %v", got)
 	}
-	if got := savedField(t, fb, "components").Chosen; !slices.Equal(got, []string{"c1"}) {
+	if got := chosen(t, fb, "components"); !slices.Equal(got, []string{"c1"}) {
 		t.Errorf("components = %v", got)
 	}
 	if m.popup != nil || len(fb.boardCalls) != 2 || !strings.Contains(m.status, "Updated 4 fields on T-2") {
@@ -195,7 +203,7 @@ func TestFieldsFilterNarrowsList(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, " ui")
 	pressDrain(t, m, "enter", "ctrl+s")
-	if got := savedField(t, fb, "labels").Chosen; !slices.Equal(got, []string{"api", "ui"}) {
+	if got := chosen(t, fb, "labels"); !slices.Equal(got, []string{"api", "ui"}) {
 		t.Errorf("labels = %v", got)
 	}
 }
@@ -225,7 +233,7 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 func TestFieldsSelectCanClearOptionalField(t *testing.T) {
 	m, fb := fieldsModel(t)
 	pressDrain(t, m, "j", "j", "enter", "k", "k", "enter", "ctrl+s")
-	if got := savedField(t, fb, "priority").Chosen; len(got) != 0 {
+	if got := chosen(t, fb, "priority"); len(got) != 0 {
 		t.Errorf("priority = %v", got)
 	}
 }
@@ -320,12 +328,12 @@ func TestUserFieldSearchesAndPicksOne(t *testing.T) {
 	if !slices.Equal(fb.searches, []string{"b", "bo"}) {
 		t.Fatalf("searches = %v", fb.searches)
 	}
-	m = pressDrain(t, m, "enter", "enter")
+	m = pressDrain(t, m, "enter", "down", "enter")
 	if !strings.Contains(m.View().Content, "Cy") {
 		t.Fatalf("expected the picked person in the list:\n%s", m.View().Content)
 	}
 	pressDrain(t, m, "ctrl+s")
-	if got := savedField(t, fb, "owner").Chosen; !slices.Equal(got, []string{"u3"}) {
+	if got := chosen(t, fb, "owner"); !slices.Equal(got, []string{"u3"}) {
 		t.Errorf("owner = %v", got)
 	}
 }
@@ -336,7 +344,7 @@ func TestUserFieldShowsCurrentPeopleAndCanClear(t *testing.T) {
 		t.Fatalf("expected the current person and a way to clear:\n%s", m.View().Content)
 	}
 	pressDrain(t, m, "enter", "up", "enter", "ctrl+s")
-	if got := savedField(t, fb, "owner").Chosen; len(got) != 0 {
+	if got := chosen(t, fb, "owner"); len(got) != 0 {
 		t.Errorf("owner = %v", got)
 	}
 }
@@ -361,7 +369,7 @@ func TestUserFieldMultiKeepsPicksAcrossSearches(t *testing.T) {
 		t.Fatalf("expected the picked person's name in the list:\n%s", m.View().Content)
 	}
 	pressDrain(t, m, "ctrl+s")
-	if got := savedField(t, fb, "reviewers").Chosen; !slices.Equal(got, []string{"u1", "u3"}) {
+	if got := chosen(t, fb, "reviewers"); !slices.Equal(got, []string{"u1", "u3"}) {
 		t.Errorf("reviewers = %v", got)
 	}
 }
@@ -374,7 +382,7 @@ func TestUserFieldMultiTogglesTwiceCleanly(t *testing.T) {
 		t.Errorf("toggling twice should leave the field unchanged, got %v", fb.edited)
 	}
 	pressDrain(t, m, "enter", "enter", " ", " ", " ", "enter", "ctrl+s")
-	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
+	if got := chosen(t, fb, "reviewers"); len(got) != 0 {
 		t.Errorf("reviewers = %v", got)
 	}
 }
@@ -382,7 +390,7 @@ func TestUserFieldMultiTogglesTwiceCleanly(t *testing.T) {
 func TestUserFieldMultiRemovesCurrentPerson(t *testing.T) {
 	m, fb := userModel(t, 6)
 	pressDrain(t, m, "enter", " ", "enter", "ctrl+s")
-	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
+	if got := chosen(t, fb, "reviewers"); len(got) != 0 {
 		t.Errorf("reviewers = %v", got)
 	}
 }
@@ -393,6 +401,18 @@ func TestUserFieldShowsSearchError(t *testing.T) {
 	m = typeText(t, m, "x")
 	if !strings.Contains(m.View().Content, "forbidden") {
 		t.Fatalf("expected the error:\n%s", m.View().Content)
+	}
+}
+
+func TestUserFieldRetriesFailedSearch(t *testing.T) {
+	m, fb := userModel(t, 6)
+	fb.searchErr = errors.New("timeout")
+	m = typeText(t, m, "x")
+	fb.searchErr = nil
+	m = pressDrain(t, m, "backspace")
+	m = typeText(t, m, "x")
+	if !slices.Equal(fb.searches, []string{"x", "x"}) || strings.Contains(m.View().Content, "timeout") {
+		t.Fatalf("searches = %v, view:\n%s", fb.searches, m.View().Content)
 	}
 }
 

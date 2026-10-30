@@ -13,57 +13,54 @@ import (
 
 // Picker is a search box above the list of people it finds.
 type Picker struct {
-	box    *usersearch.Box
-	value  *[]string
+	title  string
+	search usersearch.Func
+	value  *[]jira.Option
 	listed []jira.Option
 }
 
 // New makes a picker titled title that looks people up with search.
 func New(title string, search usersearch.Func) *Picker {
-	return &Picker{box: usersearch.New(title, search), value: new([]string)}
+	return &Picker{title: title, search: search, value: new([]jira.Option)}
 }
 
-// Value binds the ids of the people picked.
-func (p *Picker) Value(ids *[]string) *Picker {
-	p.value = ids
+// Value binds the people picked.
+func (p *Picker) Value(people *[]jira.Option) *Picker {
+	p.value = people
 	return p
 }
 
 // Listed is who shows before anything is typed, besides the people picked.
 // Any of them may already be picked.
 func (p *Picker) Listed(people ...jira.Option) *Picker {
-	p.box.Know(people...)
 	p.listed = people
 	return p
 }
 
-// Picked is the people picked so far.
-func (p *Picker) Picked() []jira.Option {
-	people := make([]jira.Option, len(*p.value))
-	for i, id := range *p.value {
-		people[i] = p.box.Person(id)
-	}
-	return people
+// Field builds a new search box over the list of people it finds. Space
+// toggles the person under the cursor.
+func (p *Picker) Field() huh.Field {
+	return usersearch.New(p.title, p.search, usersearch.List{
+		Rows:    p.rows,
+		Checked: func(o jira.Option) bool { return jira.IndexID(*p.value, o.ID) >= 0 },
+		Toggle:  p.toggle,
+	})
 }
 
-// Fields builds the search box and the list of people it finds. The form they
-// go in should turn off filtering, since the search box does that job.
-func (p *Picker) Fields() []huh.Field {
-	search := p.box.Field()
-	bind := []any{p.box.Watch(func() []string { return *p.value })}
-	return []huh.Field{search, huh.NewMultiSelect[string]().
-		OptionsFunc(p.options, bind).
-		DescriptionFunc(p.box.Status, bind).
-		Height(usersearch.ListHeight).
-		Value(p.value)}
+func (p *Picker) toggle(o jira.Option) {
+	if i := jira.IndexID(*p.value, o.ID); i >= 0 {
+		*p.value = slices.Delete(slices.Clone(*p.value), i, i+1)
+		return
+	}
+	*p.value = append(slices.Clone(*p.value), o)
 }
 
-// options lists the people listed and picked until something is typed, then
-// the search results. Picked people stay in the list either way, since a
-// multi-select drops anything that isn't in it.
-func (p *Picker) options() []huh.Option[string] {
-	if p.box.Query() != "" {
-		return usersearch.Options(slices.Concat(p.Picked(), p.box.Results()))
+// rows lists the people listed and picked until something is typed, then
+// the search results. Picked people stay in the list either way, so they can
+// be taken off whatever is typed.
+func (p *Picker) rows(query string, found []jira.Option) []jira.Option {
+	if query != "" {
+		return slices.Concat(*p.value, found)
 	}
-	return usersearch.Options(slices.Concat(p.listed, p.Picked()))
+	return slices.Concat(p.listed, *p.value)
 }

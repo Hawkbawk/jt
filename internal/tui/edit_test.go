@@ -17,8 +17,7 @@ func issueModel(t *testing.T) (Model, *fakeBackend) {
 		transitions: []jira.Transition{{ID: "11", Name: "Start Work", To: "In Progress"}},
 		editFields:  testFields(),
 	}
-	fb.board.Columns[0].Issues[1].Assignee = "Bob"
-	fb.board.Columns[0].Issues[1].AssigneeID = "b"
+	fb.board.Columns[0].Issues[1].Assignee = jira.Option{ID: "b", Name: "Bob"}
 	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
 	m, _ = press(t, m, "j")

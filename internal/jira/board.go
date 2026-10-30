@@ -87,14 +87,12 @@ func assigneeFilters(issues []Issue) []Filter {
 	seen := make(map[string]bool)
 	var out []Filter
 	for _, iss := range issues {
-		if iss.AssigneeID == "" {
+		a := iss.Assignee
+		if a.ID == "" || seen[a.ID] {
 			continue
 		}
-		if seen[iss.AssigneeID] {
-			continue
-		}
-		seen[iss.AssigneeID] = true
-		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID)})
+		seen[a.ID] = true
+		out = append(out, Filter{Name: a.Name, JQL: fmt.Sprintf("assignee = %q", a.ID)})
 	}
 	slices.SortFunc(out, func(a, b Filter) int { return strings.Compare(a.Name, b.Name) })
 	return append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})

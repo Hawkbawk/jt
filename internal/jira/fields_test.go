@@ -57,25 +57,23 @@ func TestEditFieldsFromEditMeta(t *testing.T) {
 		{ID: "summary", Name: "Summary", Kind: FieldText, Required: true, Text: "Fix the thing"},
 		{ID: "description", Name: "Description", Kind: FieldTextArea, Text: "h1. Steps"},
 		{
-			ID: "priority", Name: "Priority", Kind: FieldSelect, Chosen: []string{"3"},
+			ID: "priority", Name: "Priority", Kind: FieldSelect, Chosen: []Option{{ID: "3", Name: "Medium"}},
 			Options: []Option{{ID: "1", Name: "High"}, {ID: "3", Name: "Medium"}},
 		},
-		{ID: "labels", Name: "Labels", Kind: FieldLabels, Chosen: []string{"backend"}},
+		{ID: "labels", Name: "Labels", Kind: FieldLabels, Chosen: []Option{{ID: "backend", Name: "backend"}}},
 		{
-			ID: "fixVersions", Name: "Fix versions", Kind: FieldMultiSelect, Chosen: []string{"v1"},
+			ID: "fixVersions", Name: "Fix versions", Kind: FieldMultiSelect, Chosen: []Option{{ID: "v1", Name: "1.0"}},
 			Options: []Option{{ID: "v1", Name: "1.0"}, {ID: "v2", Name: "2.0"}},
 		},
 		{ID: "customfield_3", Name: "Notes", Kind: FieldTextArea},
 		{
-			ID: "customfield_7", Name: "Owner", Kind: FieldUser, Chosen: []string{"u1"},
-			Options: []Option{{ID: "u1", Name: "Ada"}},
+			ID: "customfield_7", Name: "Owner", Kind: FieldUser, Chosen: []Option{{ID: "u1", Name: "Ada"}},
 		},
 		{
-			ID: "customfield_8", Name: "Reviewer(s)", Kind: FieldMultiUser, Chosen: []string{"u2", "u3"},
-			Options: []Option{{ID: "u2", Name: "Bo"}, {ID: "u3", Name: "Cy"}},
+			ID: "customfield_8", Name: "Reviewer(s)", Kind: FieldMultiUser, Chosen: []Option{{ID: "u2", Name: "Bo"}, {ID: "u3", Name: "Cy"}},
 		},
 		{
-			ID: "customfield_2", Name: "Sprint Team", Kind: FieldSelect, Chosen: []string{"o2"},
+			ID: "customfield_2", Name: "Sprint Team", Kind: FieldSelect, Chosen: []Option{{ID: "o2", Name: "Team B"}},
 			Options: []Option{{ID: "o1", Name: "Team A"}, {ID: "o2", Name: "Team B"}},
 		},
 		{ID: "customfield_1", Name: "Story Points", Kind: FieldNumber, Text: "3"},
@@ -89,15 +87,15 @@ func TestEditPayload(t *testing.T) {
 	got, err := editPayload([]EditField{
 		{ID: "summary", Kind: FieldText, Text: "New"},
 		{ID: "description", Kind: FieldTextArea, Text: "  "},
-		{ID: "priority", Kind: FieldSelect, Chosen: []string{"1"}},
+		{ID: "priority", Kind: FieldSelect, Chosen: []Option{{ID: "1"}}},
 		{ID: "cf_team", Kind: FieldSelect},
-		{ID: "components", Kind: FieldMultiSelect, Chosen: []string{"c1", "c2"}},
-		{ID: "labels", Kind: FieldLabels},
+		{ID: "components", Kind: FieldMultiSelect, Chosen: []Option{{ID: "c1"}, {ID: "c2"}}},
+		{ID: "labels", Kind: FieldLabels, Chosen: []Option{{ID: "api", Name: "api"}}},
 		{ID: "cf_points", Kind: FieldNumber, Text: " 5.5 "},
 		{ID: "duedate", Kind: FieldDate, Text: "2026-11-01"},
-		{ID: "cf_owner", Kind: FieldUser, Chosen: []string{"u1"}},
+		{ID: "cf_owner", Kind: FieldUser, Chosen: []Option{{ID: "u1"}}},
 		{ID: "cf_nobody", Kind: FieldUser},
-		{ID: "cf_reviewers", Kind: FieldMultiUser, Chosen: []string{"u2", "u3"}},
+		{ID: "cf_reviewers", Kind: FieldMultiUser, Chosen: []Option{{ID: "u2"}, {ID: "u3"}}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +103,7 @@ func TestEditPayload(t *testing.T) {
 	body, _ := json.Marshal(got)
 	want := `{"cf_nobody":null,"cf_owner":{"accountId":"u1"},"cf_points":5.5,` +
 		`"cf_reviewers":[{"accountId":"u2"},{"accountId":"u3"}],"cf_team":null,"components":[{"id":"c1"},{"id":"c2"}],"description":null,` +
-		`"duedate":"2026-11-01","labels":[],"priority":{"id":"1"},"summary":"New"}`
+		`"duedate":"2026-11-01","labels":["api"],"priority":{"id":"1"},"summary":"New"}`
 	if string(body) != want {
 		t.Fatalf("got  %s\nwant %s", body, want)
 	}

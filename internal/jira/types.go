@@ -1,7 +1,10 @@
 // Package jira adapts jira-cli's client to the data jt displays.
 package jira
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Project is a Jira project.
 type Project struct {
@@ -15,11 +18,11 @@ type Issue struct {
 	Summary  string
 	StatusID string
 	Status   string
-	Assignee string
-	// AssigneeID identifies the assignee in JQL by account ID.
-	AssigneeID string
-	Type       string
-	Priority   string
+	// Assignee is the zero Option when nobody is assigned. The ID is their
+	// account ID, which identifies them in JQL.
+	Assignee Option
+	Type     string
+	Priority string
 }
 
 // BoardSummary is a board as listed for a project, without its issues.
@@ -95,8 +98,7 @@ const (
 	// FieldLabels holds free-form words rather than options.
 	FieldLabels
 	// FieldUser and FieldMultiUser pick people. Their options aren't known up
-	// front, so they are searched for. Options holds only the people already
-	// set on the issue.
+	// front, so they are searched for and Options is empty.
 	FieldUser
 	FieldMultiUser
 )
@@ -108,9 +110,24 @@ type Option struct {
 	Name string
 }
 
+// IndexID finds the option with id in opts, or -1 when none has it.
+func IndexID(opts []Option, id string) int {
+	return slices.IndexFunc(opts, func(o Option) bool { return o.ID == id })
+}
+
+// Names lists the names of opts.
+func Names(opts []Option) []string {
+	names := make([]string, len(opts))
+	for i, o := range opts {
+		names[i] = o.Name
+	}
+	return names
+}
+
 // EditField is a field that can be edited on an issue, with its current value.
-// Text holds the value of text, number and date kinds. Chosen holds the option
-// IDs of select and user kinds, or the labels of a labels field.
+// Text holds the value of text, number and date kinds. Chosen holds the
+// options picked for select and user kinds, or the labels of a labels field,
+// each label being both the ID and name of its option.
 type EditField struct {
 	ID       string
 	Name     string
@@ -118,7 +135,7 @@ type EditField struct {
 	Required bool
 	Options  []Option
 	Text     string
-	Chosen   []string
+	Chosen   []Option
 }
 
 // Label describes the transition as a menu entry.

@@ -23,7 +23,7 @@ type assignDoneMsg struct {
 type assignPane struct {
 	issueKey string
 	backend  Backend
-	assignee string
+	assignee jira.Option
 	picker   *userselect.Picker
 	form     *huh.Form
 
@@ -33,12 +33,9 @@ type assignPane struct {
 
 // newAssignPane starts on the issue's current assignee.
 func newAssignPane(b Backend, iss jira.Issue) *assignPane {
-	p := &assignPane{issueKey: iss.Key, backend: b, assignee: iss.AssigneeID}
+	p := &assignPane{issueKey: iss.Key, backend: b, assignee: iss.Assignee}
 	p.picker = userselect.New("Assignee", searchUsers(b, iss.Key)).Value(&p.assignee)
-	if iss.AssigneeID != "" {
-		p.picker.Listed(jira.Option{ID: iss.AssigneeID, Name: iss.Assignee})
-	}
-	p.form = newForm(false, p.picker.Fields()...)
+	p.form = newForm(p.picker.Field())
 	return p
 }
 
@@ -55,7 +52,7 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 		if msg.issueKey == p.issueKey {
 			p.applying, p.err = false, msg.err
 			// The form finished to send the assignment, so a retry needs a new one.
-			p.form = newForm(false, p.picker.Fields()...)
+			p.form = newForm(p.picker.Field())
 			return p.form.Init()
 		}
 		return nil
@@ -68,7 +65,7 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 	p.applying, p.err = true, nil
-	who := p.picker.Picked()
+	who := p.assignee
 	b, issueKey := p.backend, p.issueKey
 	return func() tea.Msg {
 		return assignDoneMsg{issueKey: issueKey, to: who.Name, cleared: who.ID == "", err: b.Assign(issueKey, who.ID)}
