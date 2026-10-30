@@ -2,11 +2,36 @@ package jira
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/ankitpokhrel/jira-cli/pkg/adf"
+
+	"github.com/hawkbawk/jt/internal/config"
 )
+
+func TestNewUsesSettingsAndToken(t *testing.T) {
+	var gotPath, gotUser, gotPass string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotUser, gotPass, _ = r.BasicAuth()
+		_, _ = w.Write([]byte(`{"key": "A-1", "fields": {}}`))
+	}))
+	defer ts.Close()
+
+	c := New(config.Jira{Server: ts.URL, Login: "me@example.com", Project: "A", BoardID: 3}, "secret")
+	if _, err := c.Issue("A-1"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/rest/api/3/issue/A-1" || gotUser != "me@example.com" || gotPass != "secret" {
+		t.Errorf("path %q, auth %q:%q", gotPath, gotUser, gotPass)
+	}
+	if c.DefaultProject() != "A" || c.IssueURL("A-1") != ts.URL+"/browse/A-1" {
+		t.Errorf("project %q, url %q", c.DefaultProject(), c.IssueURL("A-1"))
+	}
+}
 
 func TestIssueFieldsToIssueHandlesNullFields(t *testing.T) {
 	var f issueFields

@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/fang/v2"
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
 	"charm.land/huh/v2"
@@ -154,6 +155,32 @@ func Help() help.Model {
 func FormTheme() huh.Theme {
 	t := get().tint
 	return huh.ThemeFunc(func(bool) *huh.Styles { return form(t) })
+}
+
+// CLIColorScheme returns fang's colors for help and error output, drawn from
+// the current tint.
+func CLIColorScheme(lipgloss.LightDarkFunc) fang.ColorScheme {
+	t := get().tint
+	fade := lipgloss.Blend1D(101, t.Bg, t.Fg)
+	gray := fade[70]
+	return fang.ColorScheme{
+		Base:           t.Fg,
+		Title:          t.Blue,
+		Description:    t.Fg,
+		Codeblock:      fade[8],
+		Program:        t.Cyan,
+		DimmedArgument: gray,
+		Comment:        gray,
+		Flag:           t.Green,
+		FlagDefault:    gray,
+		Command:        t.Purple,
+		QuotedString:   t.Yellow,
+		Argument:       t.Fg,
+		Help:           gray,
+		Dash:           gray,
+		ErrorHeader:    [2]color.Color{t.Bg, t.Red},
+		ErrorDetails:   t.Red,
+	}
 }
 
 // TextArea returns textarea styles with a muted placeholder and blurred text.

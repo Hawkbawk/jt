@@ -98,7 +98,7 @@ func TestEditPayload(t *testing.T) {
 		{ID: "cf_owner", Kind: FieldUser, Chosen: []string{"u1"}},
 		{ID: "cf_nobody", Kind: FieldUser},
 		{ID: "cf_reviewers", Kind: FieldMultiUser, Chosen: []string{"u2", "u3"}},
-	}, false)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,18 +111,8 @@ func TestEditPayload(t *testing.T) {
 	}
 }
 
-func TestEditPayloadUsesUsernamesOnLocalInstallations(t *testing.T) {
-	got, err := editPayload([]EditField{{ID: "cf", Kind: FieldMultiUser, Chosen: []string{"ada"}}}, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if body, _ := json.Marshal(got); string(body) != `{"cf":[{"name":"ada"}]}` {
-		t.Fatalf("got %s", body)
-	}
-}
-
 func TestEditPayloadRejectsBadNumber(t *testing.T) {
-	if _, err := editPayload([]EditField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}, false); err == nil {
+	if _, err := editPayload([]EditField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}); err == nil {
 		t.Fatal("expected an error for a non-numeric value")
 	}
 }

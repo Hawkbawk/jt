@@ -16,11 +16,17 @@ type Issue struct {
 	StatusID string
 	Status   string
 	Assignee string
-	// AssigneeID identifies the assignee in JQL: the account ID on cloud, the
-	// username on server.
+	// AssigneeID identifies the assignee in JQL by account ID.
 	AssigneeID string
 	Type       string
 	Priority   string
+}
+
+// BoardSummary is a board as listed for a project, without its issues.
+type BoardSummary struct {
+	ID   int
+	Name string
+	Type string
 }
 
 // Column is a board column and the issues whose status maps to it.
@@ -97,7 +103,7 @@ const (
 )
 
 // Option is one of a select field's allowed values, or a person for user
-// fields, where ID is the account ID (the username on Jira Server).
+// fields, where ID is the account ID.
 type Option struct {
 	ID   string
 	Name string
