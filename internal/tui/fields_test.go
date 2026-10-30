@@ -6,17 +6,17 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
 func TestMain(m *testing.M) {
-	searchDelay = 0
+	usersearch.Delay = 0
 	os.Exit(m.Run())
 }
 
@@ -376,25 +376,6 @@ func TestUserFieldMultiTogglesTwiceCleanly(t *testing.T) {
 	pressDrain(t, m, "enter", "enter", " ", " ", " ", "enter", "ctrl+s")
 	if got := savedField(t, fb, "reviewers").Chosen; len(got) != 0 {
 		t.Errorf("reviewers = %v", got)
-	}
-}
-
-func TestUserSearchSkipsSupersededQueries(t *testing.T) {
-	fb := &fakeBackend{users: []jira.Option{{ID: "u2", Name: "Bo"}}}
-	s := newUserSearch(fb, "T-1")
-	s.delay = 50 * time.Millisecond
-	var wg sync.WaitGroup
-	for _, q := range []string{"b", "bo", "bob"} {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.lookup(q)
-		}()
-		time.Sleep(5 * time.Millisecond)
-	}
-	wg.Wait()
-	if !slices.Equal(fb.searches, []string{"bob"}) {
-		t.Errorf("searches = %v", fb.searches)
 	}
 }
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,11 +17,7 @@ func issueModel(t *testing.T) (Model, *fakeBackend) {
 		transitions: []jira.Transition{{ID: "11", Name: "Start Work", To: "In Progress"}},
 		editFields:  testFields(),
 	}
-	fb.board.Assignees = []jira.Filter{
-		{Name: "Alice", AssigneeID: "a"},
-		{Name: "Bob", AssigneeID: "b"},
-		{Name: "Unassigned"},
-	}
+	fb.board.Columns[0].Issues[1].Assignee = "Bob"
 	fb.board.Columns[0].Issues[1].AssigneeID = "b"
 	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
@@ -59,13 +56,18 @@ func TestMoveErrorKeepsPopupOpen(t *testing.T) {
 	}
 }
 
-func TestAssignReloadsBoard(t *testing.T) {
+func TestAssignSearchesForPeople(t *testing.T) {
 	m, fb := issueModel(t)
+	fb.users = []jira.Option{{ID: "a", Name: "Alice"}}
 	m = pressDrain(t, m, "a")
-	if c := m.popup.(*panePopup).pane.(*assignPane).cursor; c != 1 {
-		t.Errorf("cursor should start on the current assignee, got %d", c)
+	if v := m.View().Content; !strings.Contains(v, "Bob") || !strings.Contains(v, "(none)") {
+		t.Fatalf("expected the current assignee and a way to unassign:\n%s", v)
 	}
-	m = pressDrain(t, m, "k", "enter")
+	m = typeText(t, m, "al")
+	if !slices.Equal(fb.searches, []string{"a", "al"}) {
+		t.Fatalf("searches = %v", fb.searches)
+	}
+	m = pressDrain(t, m, "enter", "enter")
 	if len(fb.assigned) != 1 || fb.assigned[0] != "T-2:a" {
 		t.Fatalf("assigned = %v", fb.assigned)
 	}
@@ -77,19 +79,33 @@ func TestAssignReloadsBoard(t *testing.T) {
 	}
 }
 
+func TestAssignKeysTypeIntoSearch(t *testing.T) {
+	m, fb := issueModel(t)
+	m = pressDrain(t, m, "a")
+	m = typeText(t, m, "qjk")
+	if m.popup == nil || fb.searches[len(fb.searches)-1] != "qjk" {
+		t.Fatalf("typing should go to the search, searches = %v", fb.searches)
+	}
+}
+
 func TestUnassign(t *testing.T) {
 	m, fb := issueModel(t)
-	m = pressDrain(t, m, "a", "j", "enter")
-	if fb.assigned[0] != "T-2:" || !strings.Contains(m.status, "Unassigned T-2") {
+	m = pressDrain(t, m, "a", "enter", "up", "enter")
+	if len(fb.assigned) != 1 || fb.assigned[0] != "T-2:" || !strings.Contains(m.status, "Unassigned T-2") {
 		t.Fatalf("assigned = %v, status = %q", fb.assigned, m.status)
 	}
 }
 
-func TestAssignErrorKeepsPopupOpen(t *testing.T) {
+func TestAssignErrorKeepsPopupOpenForRetry(t *testing.T) {
 	m, fb := issueModel(t)
 	fb.assignErr = errors.New("no permission")
-	m = pressDrain(t, m, "a", "enter")
+	m = pressDrain(t, m, "a", "enter", "enter")
 	if m.popup == nil || !strings.Contains(m.View().Content, "no permission") {
 		t.Fatal("failed assign should leave the popup open with the error")
+	}
+	fb.assignErr = nil
+	m = pressDrain(t, m, "enter", "enter")
+	if len(fb.assigned) != 1 || fb.assigned[0] != "T-2:b" || m.popup != nil {
+		t.Fatalf("retry should assign, got %v", fb.assigned)
 	}
 }

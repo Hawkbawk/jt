@@ -109,8 +109,8 @@ func TestAssigneeFilters(t *testing.T) {
 		{Assignee: "Amy", AssigneeID: "a1"},
 	})
 	want := []Filter{
-		{Name: "Amy", JQL: `assignee = "a1"`, AssigneeID: "a1"},
-		{Name: "Zed", JQL: `assignee = "z1"`, AssigneeID: "z1"},
+		{Name: "Amy", JQL: `assignee = "a1"`},
+		{Name: "Zed", JQL: `assignee = "z1"`},
 		{Name: "Unassigned", JQL: "assignee is EMPTY"},
 	}
 	if len(got) != len(want) {

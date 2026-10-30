@@ -94,7 +94,7 @@ func assigneeFilters(issues []Issue) []Filter {
 			continue
 		}
 		seen[iss.AssigneeID] = true
-		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID), AssigneeID: iss.AssigneeID})
+		out = append(out, Filter{Name: iss.Assignee, JQL: fmt.Sprintf("assignee = %q", iss.AssigneeID)})
 	}
 	slices.SortFunc(out, func(a, b Filter) int { return strings.Compare(a.Name, b.Name) })
 	return append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})

@@ -51,9 +51,8 @@ type Board struct {
 
 // Filter narrows a board to the issues matching JQL.
 type Filter struct {
-	Name       string
-	JQL        string
-	AssigneeID string
+	Name string
+	JQL  string
 }
 
 // Comment is a single issue comment rendered as markdown.

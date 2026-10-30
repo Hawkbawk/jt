@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 )
@@ -44,10 +45,8 @@ type fieldValue struct {
 	multi  []string
 	input  huh.Field
 
-	// query and people are only set while a user field is edited.
-	query  string
-	people *userSearch
-	rev    peopleRev
+	// people edits a user field. It's only set for those.
+	people peoplePicker
 	// before is the entered values when editing began, to put back on esc.
 	before entered
 }
@@ -59,9 +58,12 @@ type entered struct {
 	multi  []string
 }
 
-func newFieldValue(f jira.EditField) *fieldValue {
+func newFieldValue(f jira.EditField, search usersearch.Func) *fieldValue {
 	v := &fieldValue{EditField: f}
 	v.reset()
+	if v.isUser() {
+		v.people = v.newPeoplePicker(search)
+	}
 	return v
 }
 
@@ -144,7 +146,13 @@ func (v *fieldValue) Description() string {
 	f := v.current()
 	var s string
 	switch f.Kind {
-	case jira.FieldSelect, jira.FieldMultiSelect, jira.FieldUser, jira.FieldMultiUser:
+	case jira.FieldUser, jira.FieldMultiUser:
+		var names []string
+		for _, o := range v.people.Picked() {
+			names = append(names, o.Name)
+		}
+		s = strings.Join(names, ", ")
+	case jira.FieldSelect, jira.FieldMultiSelect:
 		var names []string
 		for _, id := range f.Chosen {
 			i := slices.IndexFunc(f.Options, func(o jira.Option) bool { return o.ID == id })
@@ -292,29 +300,29 @@ func newFieldList(vals []*fieldValue) list.Model {
 func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
 	v.begin()
-	fields := []huh.Field{}
+	var fields []huh.Field
 	if v.isUser() {
-		v.query, v.people = "", newUserSearch(p.backend, p.key)
-		fields = v.userFields()
-		v.input = fields[0]
+		fields = v.people.Fields()
 	} else {
-		v.input = v.huhField()
-		fields = append(fields, v.input)
+		fields = []huh.Field{v.huhField()}
 	}
+	v.input = fields[0]
+	p.form = newForm(!v.isUser(), fields...)
+	p.growText()
+	return p.form.Init()
+}
+
+// newForm puts fields in a themed form that leaves ctrl+c to the app. Forms
+// that search for people turn off filter so the search box does that job.
+func newForm(filter bool, fields ...huh.Field) *huh.Form {
 	km := huh.NewDefaultKeyMap()
-	// ctrl+c is the app's to handle.
 	km.Quit = key.NewBinding(key.WithDisabled())
-	if v.isUser() {
-		// The search box above the list is the way to narrow people down.
-		km.Select.Filter.SetEnabled(false)
-		km.MultiSelect.Filter.SetEnabled(false)
-	}
-	p.form = huh.NewForm(huh.NewGroup(fields...)).
+	km.Select.Filter.SetEnabled(filter)
+	km.MultiSelect.Filter.SetEnabled(filter)
+	return huh.NewForm(huh.NewGroup(fields...)).
 		WithTheme(styles.FormTheme()).
 		WithKeyMap(km).
 		WithShowHelp(false)
-	p.growText()
-	return p.form.Init()
 }
 
 // closeForm goes back to the list of fields.
@@ -330,7 +338,7 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		}
 		p.loaded, p.err = true, msg.err
 		for _, f := range msg.fields {
-			p.vals = append(p.vals, newFieldValue(f))
+			p.vals = append(p.vals, newFieldValue(f, searchUsers(p.backend, p.key)))
 		}
 		p.list = newFieldList(p.vals)
 		return nil
@@ -370,9 +378,6 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	_, cmd := p.form.Update(msg)
-	if p.editing.isUser() {
-		p.editing.rememberPeople()
-	}
 	p.growText()
 	if p.form.State == huh.StateCompleted {
 		p.editing.normalizeTime(time.Now())
