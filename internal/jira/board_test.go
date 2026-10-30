@@ -8,14 +8,14 @@ import (
 func TestPickBoardPrefersBoardLocatedInProject(t *testing.T) {
 	var boards []boardInfo
 	err := json.Unmarshal([]byte(`[
-		{"id": 630, "name": "Canvas PM", "type": "kanban"},
-		{"id": 1848, "name": "Interop - Coconut", "type": "scrum", "location": {"projectKey": "INTEROP"}}
+		{"id": 630, "name": "Team Board", "type": "kanban"},
+		{"id": 1848, "name": "Widgets Sprint", "type": "scrum", "location": {"projectKey": "WIDGETS"}}
 	]`), &boards)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := pickBoard("INTEROP", boards)
+	b, err := pickBoard("WIDGETS", boards)
 	if err != nil {
 		t.Fatal(err)
 	}
