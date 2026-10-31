@@ -81,9 +81,9 @@ func quickFilters(res quickFilterList) []Filter {
 	return out
 }
 
-// assigneeFilters builds one filter per distinct assignee, sorted by name,
+// AssigneeFilters builds one filter per distinct assignee, sorted by name,
 // with Unassigned always last.
-func assigneeFilters(issues []Issue) []Filter {
+func AssigneeFilters(issues []Issue) []Filter {
 	seen := make(map[string]bool)
 	var out []Filter
 	for _, iss := range issues {
@@ -92,7 +92,7 @@ func assigneeFilters(issues []Issue) []Filter {
 			continue
 		}
 		seen[a.ID] = true
-		out = append(out, Filter{Name: a.Name, JQL: fmt.Sprintf("assignee = %q", a.ID)})
+		out = append(out, Filter{Name: a.Name, JQL: fmt.Sprintf("assignee = %q", a.ID), AssigneeID: a.ID})
 	}
 	slices.SortFunc(out, func(a, b Filter) int { return strings.Compare(a.Name, b.Name) })
 	return append(out, Filter{Name: "Unassigned", JQL: "assignee is EMPTY"})

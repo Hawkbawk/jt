@@ -70,3 +70,26 @@ func TestCommentsSendErrorKeepsDraft(t *testing.T) {
 		t.Fatal("send error not shown")
 	}
 }
+
+func TestCommentsTopAndBottom(t *testing.T) {
+	fb := detailBackend()
+	for i := range 40 {
+		fb.detail.Comments = append(fb.detail.Comments, fb.detail.Comments[i%2])
+	}
+	m := openComments(t, fb)
+
+	m, _ = press(t, m, "G")
+	if p := m.popup.(*commentsPopup); !p.vp.AtBottom() || p.vp.YOffset() == 0 {
+		t.Fatalf("G should jump to the bottom, YOffset=%d", p.vp.YOffset())
+	}
+	m, _ = press(t, m, "g")
+	if p := m.popup.(*commentsPopup); !p.vp.AtTop() {
+		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
+	}
+
+	m, _ = press(t, m, "enter", "g", "G")
+	p := m.popup.(*commentsPopup)
+	if p.input.Value() != "gG" || !p.vp.AtTop() {
+		t.Fatalf("g/G should type into the focused input; value=%q YOffset=%d", p.input.Value(), p.vp.YOffset())
+	}
+}

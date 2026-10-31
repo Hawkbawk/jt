@@ -13,13 +13,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui"
 )
 
 // version is set at build time with
-// -ldflags "-X github.com/hawkbawk/jt/cmd.version=...".
+// -ldflags "-X github.com/hawkbawk/jt/cmd.version=...". Builds without one are
+// development builds.
 var version string
 
 var (
@@ -29,6 +31,10 @@ var (
 	cfg      config.Config
 	cfgErr   error
 	themeErr error
+
+	// fake runs the board on in-memory demo data. It's only allowed in
+	// development builds.
+	fake bool
 )
 
 var rootCmd = &cobra.Command{
@@ -42,15 +48,26 @@ Environment:
 	RunE: runBoard,
 }
 
+func init() {
+	rootCmd.Flags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
+	if version != "" {
+		_ = rootCmd.Flags().MarkHidden("fake")
+	}
+}
+
 // Execute runs the command named by the arguments, opening the board when
 // there isn't one.
 func Execute() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cfg, cfgErr = config.Load()
-	theme := cfg.Theme
-	if cfgErr != nil {
-		theme = styles.FallbackID()
+	fake = fakeRequested(os.Args[1:])
+	theme := ""
+	if !fake {
+		cfg, cfgErr = config.Load()
+		theme = cfg.Theme
+		if cfgErr != nil {
+			theme = styles.FallbackID()
+		}
 	}
 	themeErr = styles.Start(ctx, theme)
 
@@ -63,16 +80,47 @@ func Execute() {
 	}
 }
 
-func runBoard(*cobra.Command, []string) error {
-	if cfgErr != nil {
-		return cfgErr
+// fakeRequested reports whether --fake was passed. It runs before cobra parses
+// the command line, since fake mode skips loading the settings file that the
+// theme is read from.
+func fakeRequested(args []string) bool {
+	allowlist := rootCmd.FParseErrWhitelist
+	rootCmd.FParseErrWhitelist.UnknownFlags = true
+	defer func() { rootCmd.FParseErrWhitelist = allowlist }()
+	if rootCmd.ParseFlags(args) != nil {
+		return false
 	}
-	client, err := connect(cfg.Jira)
-	if err != nil {
-		return err
+	on, _ := rootCmd.Flags().GetBool("fake")
+	return on
+}
+
+// sessionSettings keeps choices for the current session only.
+type sessionSettings struct{}
+
+func (sessionSettings) SaveTheme(string) error { return nil }
+
+func runBoard(*cobra.Command, []string) error {
+	var (
+		backend  tui.Backend
+		settings tui.Settings
+	)
+	if fake {
+		if version != "" {
+			return errors.New("the --fake flag is only available in development builds")
+		}
+		backend, settings = fakejira.New(), sessionSettings{}
+	} else {
+		if cfgErr != nil {
+			return cfgErr
+		}
+		client, err := connect(cfg.Jira)
+		if err != nil {
+			return err
+		}
+		backend, settings = client, cfg
 	}
 
-	m := tui.New(client, cfg)
+	m := tui.New(backend, settings)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
@@ -85,7 +133,7 @@ func runBoard(*cobra.Command, []string) error {
 		}
 	})()
 
-	_, err = p.Run()
+	_, err := p.Run()
 	return err
 }
 

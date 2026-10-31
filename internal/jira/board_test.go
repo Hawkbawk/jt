@@ -102,15 +102,15 @@ func TestCombineJQL(t *testing.T) {
 }
 
 func TestAssigneeFilters(t *testing.T) {
-	got := assigneeFilters([]Issue{
+	got := AssigneeFilters([]Issue{
 		{Assignee: Option{ID: "z1", Name: "Zed"}},
 		{},
 		{Assignee: Option{ID: "a1", Name: "Amy"}},
 		{Assignee: Option{ID: "a1", Name: "Amy"}},
 	})
 	want := []Filter{
-		{Name: "Amy", JQL: `assignee = "a1"`},
-		{Name: "Zed", JQL: `assignee = "z1"`},
+		{Name: "Amy", JQL: `assignee = "a1"`, AssigneeID: "a1"},
+		{Name: "Zed", JQL: `assignee = "z1"`, AssigneeID: "z1"},
 		{Name: "Unassigned", JQL: "assignee is EMPTY"},
 	}
 	if len(got) != len(want) {
@@ -124,7 +124,7 @@ func TestAssigneeFilters(t *testing.T) {
 }
 
 func TestAssigneeFiltersAlwaysIncludeUnassigned(t *testing.T) {
-	got := assigneeFilters([]Issue{{Assignee: Option{ID: "a1", Name: "Amy"}}})
+	got := AssigneeFilters([]Issue{{Assignee: Option{ID: "a1", Name: "Amy"}}})
 	if len(got) != 2 || got[1].Name != "Unassigned" {
 		t.Fatalf("got %v", got)
 	}
