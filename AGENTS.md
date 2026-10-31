@@ -14,6 +14,7 @@ The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `G
 - Test all: `go test ./...`
 - Single test: `go test ./internal/tui -run TestName`
 - Lint: `golangci-lint run` (config in `.golangci.yml`; formatters are gofumpt and goimports)
+- Fake Jira: `go run ./tools/fakejira`, then `JT_CONFIG_FILE=/tmp/jt-fakejira.yaml go run .` (see README).
 - Nix build: `nix build`. After changing `go.mod`/`go.sum`, update `vendorHash` in `flake.nix`.
 
 ## Architecture
@@ -24,6 +25,8 @@ Two layers, wired together by the cobra commands in `cmd/`, plus `jt init`. `mai
 - `internal/jira`: wraps jira-cli's `pkg/jira` client. `New` takes the `config.Jira` settings and the token. Don't use jira-cli's `api` package, since it reads jira-cli's config through the global viper. Only Jira Cloud is supported. The default project is `jira.project`, and `jira.board_id` is used for it when set. `board.go` picks the board otherwise, builds the JQL, and maps board column config to `Column`s. Scrum boards load open sprints. Kanban boards load open work plus issues resolved in the last 14 days.
 - `internal/setup`: `jt init`. A sequence of standalone huh forms and spinners that collects the site, email and token, checks them with `CheckLogin`, picks a project and board, then saves to the keyring and settings file.
 - `internal/tui`: the bubbletea UI. The root `Model` in `app.go` owns the board state (`boardNav` in `nav.go`), the project `picker`, and at most one `popup` (issue view, comments, move menu). It depends on the `Backend` interface defined in `app.go`, not on `*jira.Client`, so tests use fakes. Network calls run as `tea.Cmd`s that return `*LoadedMsg`/`*DoneMsg` types. `Update` routes them, and popups receive their results through `forwardToPopup`.
+
+`internal/fakejira` is an in-memory, stateful fake of every Jira endpoint jt calls, served by `tools/fakejira`. Its tests drive the real `internal/jira` client against it, so when jt starts calling a new endpoint, add it to the fake too.
 
 `system.go` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into `Model` as `copyText` and `openURL` so tests can stub them.
 

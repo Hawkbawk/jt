@@ -125,3 +125,19 @@ go build ./...
 go test ./...
 golangci-lint run
 ```
+
+### Fake Jira server
+
+`tools/fakejira` serves an in-memory fake of the Jira Cloud API with demo projects, boards and issues, so you can run `jt` without a Jira site:
+
+```sh
+go run ./tools/fakejira
+```
+
+It listens on `127.0.0.1:8080` (change it with `-addr`), points a settings file at itself (`jt-fakejira.yaml` in the temp directory, change it with `-config`), and saves a token for its login to your keyring. Then run the command it prints in another terminal, for example:
+
+```sh
+JT_CONFIG_FILE=/tmp/jt-fakejira.yaml go run .
+```
+
+The fake accepts any login and token, and keeps moves, assignments, comments and edits in memory until it stops. Its JQL support only covers jt's filters: `assignee = x`, `assignee is EMPTY`, `issuetype = x` and `labels = x`.
