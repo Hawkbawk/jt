@@ -36,6 +36,10 @@ var (
 	fake           bool
 )
 
+func init() {
+	rootCmd.Flags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "jt",
 	Short: "jt is a terminal kanban board for Jira.",
@@ -76,9 +80,6 @@ func Execute() {
 // the command line, since fake mode skips loading the settings file that the
 // theme is read from.
 func fakeRequested(args []string) bool {
-	if newFakeBackend == nil {
-		return false
-	}
 	allowlist := rootCmd.FParseErrWhitelist
 	rootCmd.FParseErrWhitelist.UnknownFlags = true
 	defer func() { rootCmd.FParseErrWhitelist = allowlist }()
@@ -100,6 +101,9 @@ func runBoard(*cobra.Command, []string) error {
 		settings tui.Settings
 	)
 	if fake {
+		if newFakeBackend == nil {
+			return errors.New("--fake is only available in development builds")
+		}
 		backend, settings = newFakeBackend(), sessionSettings{}
 	} else {
 		if cfgErr != nil {

@@ -8,6 +8,5 @@ import (
 )
 
 func init() {
-	rootCmd.Flags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
 	newFakeBackend = func() tui.Backend { return fakejira.New() }
 }

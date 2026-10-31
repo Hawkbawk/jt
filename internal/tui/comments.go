@@ -12,6 +12,29 @@ import (
 
 const commentInputHeight = 5
 
+type commentsPopupKeys struct {
+	focused bool
+}
+
+func (k commentsPopupKeys) ShortHelp() []key.Binding {
+	if k.focused {
+		return []key.Binding{
+			key.NewBinding(key.WithHelp("ctrl+s", "send")),
+			key.NewBinding(key.WithHelp("esc", "stop writing")),
+		}
+	}
+	return []key.Binding{
+		key.NewBinding(key.WithHelp("↑↓←→", "scroll")),
+		keys.topBottom,
+		key.NewBinding(key.WithHelp("enter", "write")),
+		key.NewBinding(key.WithHelp("esc/q", "close")),
+	}
+}
+
+func (k commentsPopupKeys) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
 type commentSentMsg struct {
 	key string
 	err error
@@ -110,11 +133,12 @@ func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
 
 func (p *commentsPopup) view(spin string) string {
 	border := styles.Input()
-	hint := "↑↓←→ scroll · g/G top/bottom · enter write · esc close"
-	if p.input.Focused() {
+	focused := p.input.Focused()
+	if focused {
 		border = border.BorderForeground(styles.Highlight())
-		hint = "ctrl+s send · esc stop writing"
 	}
+	p.help.SetWidth(p.width - styles.Popup().GetHorizontalFrameSize())
+	hint := p.help.View(commentsPopupKeys{focused: focused})
 	switch {
 	case p.sending:
 		hint = spin + " Sending…"

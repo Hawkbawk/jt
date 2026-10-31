@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -38,12 +39,27 @@ type markdownRenderer func(md string, width int) string
 // issueRenderer turns a loaded issue into popup content for a given width.
 type issueRenderer func(d *jira.IssueDetail, width int, md markdownRenderer) string
 
+type textPopupKeys struct{}
+
+func (textPopupKeys) ShortHelp() []key.Binding {
+	return []key.Binding{
+		key.NewBinding(key.WithHelp("↑↓←→", "scroll")),
+		keys.topBottom,
+		key.NewBinding(key.WithHelp("esc/q", "close")),
+	}
+}
+
+func (k textPopupKeys) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.ShortHelp()}
+}
+
 // textPopup shows scrollable, issue-derived content.
 type textPopup struct {
 	title  string
 	key    string
 	render issueRenderer
 	md     markdownRenderer
+	help   help.Model
 
 	detail *jira.IssueDetail
 	err    error
@@ -59,7 +75,7 @@ type textPopup struct {
 func newTextPopup(title, issueKey string, render issueRenderer, md markdownRenderer) *textPopup {
 	vp := viewport.New()
 	vp.SetHorizontalStep(4)
-	return &textPopup{title: title, key: issueKey, render: render, md: md, vp: vp}
+	return &textPopup{title: title, key: issueKey, render: render, md: md, vp: vp, help: styles.Help()}
 }
 
 func (p *textPopup) setSize(width, height int) {
@@ -107,7 +123,9 @@ func (p *textPopup) loading() bool {
 }
 
 func (p *textPopup) view(spin string) string {
-	return p.compose(spin, "", styles.Dim().Render(fmt.Sprintf("%3.f%% · ↑↓←→ scroll · g/G top/bottom · esc close", p.vp.ScrollPercent()*100)))
+	p.help.SetWidth(p.width - styles.Popup().GetHorizontalFrameSize())
+	hint := styles.Dim().Render(fmt.Sprintf("%3.f%%", p.vp.ScrollPercent()*100)) + " · " + p.help.View(textPopupKeys{})
+	return p.compose(spin, "", hint)
 }
 
 // compose lays out the title, content, optional below block and hint. The hint
