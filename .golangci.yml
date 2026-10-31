@@ -1,5 +1,10 @@
 version: "2"
 
+run:
+  # Development builds add the --fake flag.
+  build-tags:
+    - dev
+
 linters:
   enable:
     - errorlint

@@ -142,7 +142,7 @@ func (c *Client) Board(project, filterJQL string) (*Board, error) {
 
 	return &Board{
 		ID: info.ID, Name: info.Name, Type: info.Type, Project: project, Columns: cols,
-		QuickFilters: quick, Assignees: assigneeFilters(issues),
+		QuickFilters: quick, Assignees: AssigneeFilters(issues),
 	}, nil
 }
 
