@@ -13,13 +13,15 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui"
 )
 
 // version is set at build time with
-// -ldflags "-X github.com/hawkbawk/jt/cmd.version=...".
+// -ldflags "-X github.com/hawkbawk/jt/cmd.version=...". Builds without one are
+// development builds.
 var version string
 
 var (
@@ -30,10 +32,9 @@ var (
 	cfgErr   error
 	themeErr error
 
-	// newFakeBackend is set in development builds (-tags dev), where the
-	// --fake flag runs the board on in-memory demo data.
-	newFakeBackend func() tui.Backend
-	fake           bool
+	// fake runs the board on in-memory demo data. It's only allowed in
+	// development builds.
+	fake bool
 )
 
 var rootCmd = &cobra.Command{
@@ -45,6 +46,13 @@ Environment:
   JT_CONFIG_FILE    Path to the jt settings file`,
 	Args: cobra.NoArgs,
 	RunE: runBoard,
+}
+
+func init() {
+	rootCmd.Flags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
+	if version != "" {
+		_ = rootCmd.Flags().MarkHidden("fake")
+	}
 }
 
 // Execute runs the command named by the arguments, opening the board when
@@ -76,9 +84,6 @@ func Execute() {
 // the command line, since fake mode skips loading the settings file that the
 // theme is read from.
 func fakeRequested(args []string) bool {
-	if newFakeBackend == nil {
-		return false
-	}
 	allowlist := rootCmd.FParseErrWhitelist
 	rootCmd.FParseErrWhitelist.UnknownFlags = true
 	defer func() { rootCmd.FParseErrWhitelist = allowlist }()
@@ -100,7 +105,10 @@ func runBoard(*cobra.Command, []string) error {
 		settings tui.Settings
 	)
 	if fake {
-		backend, settings = newFakeBackend(), sessionSettings{}
+		if version != "" {
+			return errors.New("the --fake flag is only available in development builds")
+		}
+		backend, settings = fakejira.New(), sessionSettings{}
 	} else {
 		if cfgErr != nil {
 			return cfgErr

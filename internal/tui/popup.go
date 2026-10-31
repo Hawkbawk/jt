@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -107,7 +108,15 @@ func (p *textPopup) loading() bool {
 }
 
 func (p *textPopup) view(spin string) string {
-	return p.compose(spin, "", styles.Dim().Render(fmt.Sprintf("%3.f%% · ↑↓←→ scroll · g/G top/bottom · esc close", p.vp.ScrollPercent()*100)))
+	prefix := styles.Dim().Render(fmt.Sprintf("%3.f%% · ", p.vp.ScrollPercent()*100))
+	return p.compose(spin, "", prefix+p.helpView(viewHelpKeys, lipgloss.Width(prefix)))
+}
+
+// helpView renders the help footer in the width left after used columns.
+func (p *textPopup) helpView(km help.KeyMap, used int) string {
+	h := styles.Help()
+	h.SetWidth(max(0, p.width-styles.Popup().GetHorizontalFrameSize()-used))
+	return h.View(km)
 }
 
 // compose lays out the title, content, optional below block and hint. The hint

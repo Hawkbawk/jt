@@ -125,15 +125,3 @@ go build ./...
 go test ./...
 golangci-lint run
 ```
-
-### Demo data
-
-Development builds have a `--fake` flag that runs the board on in-memory demo projects, boards and issues instead of Jira:
-
-```sh
-go run -tags dev . --fake
-```
-
-It doesn't read or write the settings file or the keyring. Moves, assignments, comments and edits last until `jt` exits, and you can switch themes, but the choice isn't saved. Filters only understand the JQL `jt` builds: `assignee = x`, `assignee is EMPTY`, `issuetype = x` and `labels = x`.
-
-Release builds leave out the flag and the demo data.

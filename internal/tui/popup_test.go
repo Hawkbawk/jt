@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -73,6 +75,9 @@ func TestViewPopupTopAndBottom(t *testing.T) {
 	m, _ = press(t, m, "g")
 	if p := m.popup.(*textPopup); !p.vp.AtTop() {
 		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
+	}
+	if v := ansi.Strip(m.popup.view("")); !strings.Contains(v, "g/G top/bottom") {
+		t.Fatalf("footer is missing g/G:\n%s", v)
 	}
 }
 

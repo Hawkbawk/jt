@@ -4,8 +4,8 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// boardKeys holds the key bindings jt matches against. navigate and topBottom
-// only appear in the help footer; the bindings next to them do the matching.
+// boardKeys holds the key bindings jt matches against. navigate, topBottom,
+// scroll and write only appear in help footers; other bindings do the matching.
 type boardKeys struct {
 	left, right, up, down, top, bottom key.Binding
 	view, comments, edit, yank, open   key.Binding
@@ -16,7 +16,7 @@ type boardKeys struct {
 	deny, accept, send, blur           key.Binding
 	toggle, undo, theme                key.Binding
 
-	navigate, topBottom key.Binding
+	navigate, topBottom, scroll, write key.Binding
 }
 
 var keys = boardKeys{
@@ -41,21 +41,24 @@ var keys = boardKeys{
 	quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 
 	// close dismisses a popup.
-	close:     key.NewBinding(key.WithKeys("esc", "q")),
+	close:     key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close")),
 	forceQuit: key.NewBinding(key.WithKeys("ctrl+d")),
 	interrupt: key.NewBinding(key.WithKeys("ctrl+c")),
 	confirm:   key.NewBinding(key.WithKeys("y", "Y")),
 	deny:      key.NewBinding(key.WithKeys("n", "N", "esc")),
 	accept:    key.NewBinding(key.WithKeys("enter")),
-	send:      key.NewBinding(key.WithKeys("ctrl+s")),
-	blur:      key.NewBinding(key.WithKeys("esc")),
+	send:      key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "send")),
+	blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop writing")),
 	toggle:    key.NewBinding(key.WithKeys("space")),
 	undo:      key.NewBinding(key.WithKeys("u")),
 	nextTab:   key.NewBinding(key.WithKeys("tab")),
 	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),
 
-	navigate:  key.NewBinding(key.WithHelp("hjkl", "navigate")),
-	topBottom: key.NewBinding(key.WithHelp("g/G", "top/bottom")),
+	// help hides bindings without keys, so the help-only ones list theirs.
+	navigate:  key.NewBinding(key.WithKeys("h", "j", "k", "l"), key.WithHelp("hjkl", "navigate")),
+	topBottom: key.NewBinding(key.WithKeys("g", "G"), key.WithHelp("g/G", "top/bottom")),
+	scroll:    key.NewBinding(key.WithKeys("up", "down", "left", "right"), key.WithHelp("↑↓←→", "scroll")),
+	write:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "write")),
 }
 
 // ShortHelp implements help.KeyMap.
@@ -67,3 +70,18 @@ func (k boardKeys) ShortHelp() []key.Binding {
 func (k boardKeys) FullHelp() [][]key.Binding {
 	return [][]key.Binding{k.ShortHelp()}
 }
+
+// helpKeys is a help footer made of a fixed list of bindings.
+type helpKeys []key.Binding
+
+// ShortHelp implements help.KeyMap.
+func (k helpKeys) ShortHelp() []key.Binding { return k }
+
+// FullHelp implements help.KeyMap.
+func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
+
+var (
+	viewHelpKeys     = helpKeys{keys.scroll, keys.topBottom, keys.close}
+	commentsHelpKeys = helpKeys{keys.scroll, keys.topBottom, keys.write, keys.close}
+	writingHelpKeys  = helpKeys{keys.send, keys.blur}
+)
