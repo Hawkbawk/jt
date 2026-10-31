@@ -110,17 +110,17 @@ func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
 
 func (p *commentsPopup) view(spin string) string {
 	border := styles.Input()
-	hint := "↑↓←→ scroll · enter write · esc close"
+	hint := p.helpView(commentsHelpKeys, 0)
 	if p.input.Focused() {
 		border = border.BorderForeground(styles.Highlight())
-		hint = "ctrl+s send · esc stop writing"
+		hint = p.helpView(writingHelpKeys, 0)
 	}
 	switch {
 	case p.sending:
-		hint = spin + " Sending…"
+		hint = styles.Dim().Render(spin + " Sending…")
 	case p.sendErr != nil:
 		hint = styles.Error().Render("Error: " + p.sendErr.Error())
 	}
 	below := border.Render(p.input.View())
-	return p.compose(spin, below, styles.Dim().Render(hint))
+	return p.compose(spin, below, hint)
 }

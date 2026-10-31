@@ -81,9 +81,9 @@ func quickFilters(res quickFilterList) []Filter {
 	return out
 }
 
-// assigneeFilters builds one filter per distinct assignee, sorted by name,
+// AssigneeFilters builds one filter per distinct assignee, sorted by name,
 // with Unassigned always last.
-func assigneeFilters(issues []Issue) []Filter {
+func AssigneeFilters(issues []Issue) []Filter {
 	seen := make(map[string]bool)
 	var out []Filter
 	for _, iss := range issues {
