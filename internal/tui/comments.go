@@ -110,7 +110,7 @@ func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
 
 func (p *commentsPopup) view(spin string) string {
 	border := styles.Input()
-	hint := "↑↓←→ scroll · enter write · esc close"
+	hint := "↑↓←→ scroll · g/G top/bottom · enter write · esc close"
 	if p.input.Focused() {
 		border = border.BorderForeground(styles.Highlight())
 		hint = "ctrl+s send · esc stop writing"

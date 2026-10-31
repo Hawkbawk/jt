@@ -56,6 +56,26 @@ func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	}
 }
 
+func TestViewPopupTopAndBottom(t *testing.T) {
+	m := loadedDetailModel(t)
+	m, cmd := press(t, m, "v")
+	m = drain(t, m, cmd)
+
+	m, _ = press(t, m, "G")
+	p := m.popup.(*textPopup)
+	if !p.vp.AtBottom() || p.vp.YOffset() == 0 {
+		t.Fatalf("G should jump to the bottom, YOffset=%d", p.vp.YOffset())
+	}
+	if m.board.nav.row != 0 {
+		t.Fatal("G moved the board while the popup was open")
+	}
+
+	m, _ = press(t, m, "g")
+	if p := m.popup.(*textPopup); !p.vp.AtTop() {
+		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
+	}
+}
+
 func TestViewPopupHorizontalScroll(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := press(t, m, "v")

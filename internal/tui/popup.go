@@ -86,8 +86,15 @@ func (p *textPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		p.refresh()
 		return p, nil
 	case tea.KeyPressMsg:
-		if key.Matches(msg, keys.close) {
+		switch {
+		case key.Matches(msg, keys.close):
 			return nil, nil
+		case key.Matches(msg, keys.top):
+			p.vp.GotoTop()
+			return p, nil
+		case key.Matches(msg, keys.bottom):
+			p.vp.GotoBottom()
+			return p, nil
 		}
 	}
 	var cmd tea.Cmd
@@ -100,7 +107,7 @@ func (p *textPopup) loading() bool {
 }
 
 func (p *textPopup) view(spin string) string {
-	return p.compose(spin, "", styles.Dim().Render(fmt.Sprintf("%3.f%% · ↑↓←→ scroll · esc close", p.vp.ScrollPercent()*100)))
+	return p.compose(spin, "", styles.Dim().Render(fmt.Sprintf("%3.f%% · ↑↓←→ scroll · g/G top/bottom · esc close", p.vp.ScrollPercent()*100)))
 }
 
 // compose lays out the title, content, optional below block and hint. The hint
