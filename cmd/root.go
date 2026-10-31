@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/fang/v2"
+	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 	"github.com/spf13/cobra"
 
@@ -60,38 +62,30 @@ func init() {
 func Execute() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	fake = fakeRequested(os.Args[1:])
-	theme := ""
-	if !fake {
-		cfg, cfgErr = config.Load()
-		theme = cfg.Theme
-		if cfgErr != nil {
-			theme = styles.FallbackID()
+	initialize := sync.OnceFunc(func() {
+		theme := ""
+		if !fake {
+			cfg, cfgErr = config.Load()
+			theme = cfg.Theme
+			if cfgErr != nil {
+				theme = styles.FallbackID()
+			}
 		}
-	}
-	themeErr = styles.Start(ctx, theme)
+		themeErr = styles.Start(ctx, theme)
+	})
+	cobra.OnInitialize(initialize)
 
 	err := fang.Execute(ctx, rootCmd,
 		fang.WithVersion(version),
-		fang.WithColorSchemeFunc(styles.CLIColorScheme),
+		fang.WithColorSchemeFunc(func(lightDark lipgloss.LightDarkFunc) fang.ColorScheme {
+			// Help and parse errors bypass Cobra's initializers.
+			initialize()
+			return styles.CLIColorScheme(lightDark)
+		}),
 	)
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-// fakeRequested reports whether --fake was passed. It runs before cobra parses
-// the command line, since fake mode skips loading the settings file that the
-// theme is read from.
-func fakeRequested(args []string) bool {
-	allowlist := rootCmd.FParseErrWhitelist
-	rootCmd.FParseErrWhitelist.UnknownFlags = true
-	defer func() { rootCmd.FParseErrWhitelist = allowlist }()
-	if rootCmd.ParseFlags(args) != nil {
-		return false
-	}
-	on, _ := rootCmd.Flags().GetBool("fake")
-	return on
 }
 
 // sessionSettings keeps choices for the current session only.
