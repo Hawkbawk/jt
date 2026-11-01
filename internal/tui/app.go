@@ -2,8 +2,6 @@
 package tui
 
 import (
-	"fmt"
-
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
@@ -97,6 +95,9 @@ func (m Model) bodyHeight() int {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if e, ok := editResult(msg); ok {
+		return m.finishEdit(msg, e)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -146,19 +147,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case filterSelectedMsg:
 		m.status = ""
 		return m, m.startBusy(m.board.setFilter(msg.filter))
-
-	case transitionDoneMsg:
-		return m.finishEdit(msg, msg.err, msg.key, "Moved "+msg.key+" to "+msg.to)
-
-	case assignDoneMsg:
-		status := "Assigned " + msg.issueKey + " to " + msg.to
-		if msg.cleared {
-			status = "Unassigned " + msg.issueKey
-		}
-		return m.finishEdit(msg, msg.err, msg.issueKey, status)
-
-	case fieldsSavedMsg:
-		return m.finishEdit(msg, msg.err, msg.key, fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key))
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -226,17 +214,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	b := m.actions.backend
-	switch {
-	case key.Matches(msg, keys.move):
-		return m, m.openPopup(newMovePopup(b, *sel), loadTransitions(b, *sel))
-	case key.Matches(msg, keys.assign):
-		p := newAssignPane(b, *sel)
-		return m, m.openPopup(newAssignPopup(p), p.init())
-	case key.Matches(msg, keys.edit):
-		return m, m.openPopup(newEditPopup(b, *sel), loadFields(b, *sel))
-	}
-	p, cmd := m.actions.handle(msg, sel.Key)
+	p, cmd := m.actions.handle(msg, *sel)
 	if p != nil {
 		return m, m.openPopup(p, cmd)
 	}
@@ -245,13 +223,13 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // finishEdit closes the popup and reloads the board after a successful change.
 // A failure goes back to the popup to show.
-func (m Model) finishEdit(msg tea.Msg, err error, issueKey, status string) (tea.Model, tea.Cmd) {
-	if err != nil {
+func (m Model) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
+	if e.err != nil {
 		return m.forwardToPopup(msg)
 	}
 	m.popup = nil
-	m.status = status
-	return m, m.startBusy(m.board.reload(issueKey))
+	m.status = e.status
+	return m, m.startBusy(m.board.reload(e.key))
 }
 
 func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
