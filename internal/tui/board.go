@@ -93,7 +93,7 @@ func renderCard(iss jira.Issue, selected bool, width int) string {
 	}
 	inner := max(1, width-style.GetHorizontalFrameSize())
 
-	assignee := iss.Assignee
+	assignee := iss.Assignee.Name
 	if assignee == "" {
 		assignee = "Unassigned"
 	}

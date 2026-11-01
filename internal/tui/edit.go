@@ -80,9 +80,8 @@ func newMovePopup(b Backend, iss jira.Issue) *panePopup {
 	return newPanePopup("Move", iss.Key, &p)
 }
 
-func newAssignPopup(b Backend, iss jira.Issue, assignees []jira.Filter) *panePopup {
-	p := newAssignPane(b, iss, assignees)
-	return newPanePopup("Assign", iss.Key, &p)
+func newAssignPopup(p *assignPane) *panePopup {
+	return newPanePopup("Assign", p.issueKey, p)
 }
 
 func newEditPopup(b Backend, iss jira.Issue) *panePopup {

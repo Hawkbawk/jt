@@ -38,11 +38,21 @@ type fieldMeta struct {
 	} `json:"schema"`
 	Operations    []string `json:"operations"`
 	AllowedValues []struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Value    string `json:"value"`
-		Archived bool   `json:"archived"`
+		optionValue
+		Archived bool `json:"archived"`
 	} `json:"allowedValues"`
+}
+
+// optionValue is how Jira sends a select option, which is named by one of
+// name or value depending on the field.
+type optionValue struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+func (v optionValue) option() Option {
+	return Option{ID: v.ID, Name: cmp.Or(v.Name, v.Value)}
 }
 
 // fieldsKey identifies the issues that share field definitions. Workflow
@@ -158,11 +168,17 @@ func editFields(meta map[string]fieldMeta, values map[string]json.RawMessage) []
 		f := EditField{ID: id, Name: m.Name, Kind: kind, Required: m.Required}
 		f.setValue(values[id])
 		for _, v := range m.AllowedValues {
+			o := v.option()
+			i := IndexID(f.Chosen, o.ID)
 			// Archived versions can't be picked, but stay listed while chosen.
-			if v.Archived && !slices.Contains(f.Chosen, v.ID) {
+			if v.Archived && i < 0 {
 				continue
 			}
-			f.Options = append(f.Options, Option{ID: v.ID, Name: cmp.Or(v.Name, v.Value)})
+			if i >= 0 {
+				// The same option everywhere, so options compare equal.
+				f.Chosen[i] = o
+			}
+			f.Options = append(f.Options, o)
 		}
 		if (kind == FieldSelect || kind == FieldMultiSelect) && len(f.Options) == 0 {
 			continue
@@ -229,19 +245,15 @@ func (f *EditField) setValue(raw json.RawMessage) {
 			f.Text = strconv.FormatFloat(*n, 'f', -1, 64)
 		}
 	case FieldSelect:
-		var v *struct {
-			ID string `json:"id"`
-		}
+		var v *optionValue
 		if json.Unmarshal(raw, &v) == nil && v != nil && v.ID != "" {
-			f.Chosen = []string{v.ID}
+			f.Chosen = []Option{v.option()}
 		}
 	case FieldMultiSelect:
-		var vs []struct {
-			ID string `json:"id"`
-		}
+		var vs []optionValue
 		_ = json.Unmarshal(raw, &vs)
 		for _, v := range vs {
-			f.Chosen = append(f.Chosen, v.ID)
+			f.Chosen = append(f.Chosen, v.option())
 		}
 	case FieldUser, FieldMultiUser:
 		var vs []userValue
@@ -255,11 +267,14 @@ func (f *EditField) setValue(raw json.RawMessage) {
 		}
 		for _, v := range vs {
 			id := cmp.Or(v.AccountID, v.Name)
-			f.Chosen = append(f.Chosen, id)
-			f.Options = append(f.Options, Option{ID: id, Name: cmp.Or(v.DisplayName, id)})
+			f.Chosen = append(f.Chosen, Option{ID: id, Name: cmp.Or(v.DisplayName, id)})
 		}
 	case FieldLabels:
-		_ = json.Unmarshal(raw, &f.Chosen)
+		var labels []string
+		_ = json.Unmarshal(raw, &labels)
+		for _, l := range labels {
+			f.Chosen = append(f.Chosen, Option{ID: l, Name: l})
+		}
 	default:
 		_ = json.Unmarshal(raw, &f.Text)
 	}
@@ -287,11 +302,11 @@ func editPayload(fields []EditField) (map[string]any, error) {
 				out[f.ID] = nil
 				break
 			}
-			out[f.ID] = map[string]string{"id": f.Chosen[0]}
+			out[f.ID] = map[string]string{"id": f.Chosen[0].ID}
 		case FieldMultiSelect:
 			ids := make([]map[string]string, len(f.Chosen))
-			for i, id := range f.Chosen {
-				ids[i] = map[string]string{"id": id}
+			for i, o := range f.Chosen {
+				ids[i] = map[string]string{"id": o.ID}
 			}
 			out[f.ID] = ids
 		case FieldUser:
@@ -299,15 +314,15 @@ func editPayload(fields []EditField) (map[string]any, error) {
 				out[f.ID] = nil
 				break
 			}
-			out[f.ID] = userRef(f.Chosen[0])
+			out[f.ID] = userRef(f.Chosen[0].ID)
 		case FieldMultiUser:
 			users := make([]map[string]string, len(f.Chosen))
-			for i, id := range f.Chosen {
-				users[i] = userRef(id)
+			for i, o := range f.Chosen {
+				users[i] = userRef(o.ID)
 			}
 			out[f.ID] = users
 		case FieldLabels:
-			out[f.ID] = append([]string{}, f.Chosen...)
+			out[f.ID] = Names(f.Chosen)
 		default:
 			if text == "" {
 				out[f.ID] = nil

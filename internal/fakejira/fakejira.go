@@ -44,7 +44,7 @@ func New() *Backend {
 		boards:   seedBoards(),
 		fields:   fieldDefs(),
 	}
-	b.issues = seedIssues(b.now())
+	b.issues = seedIssues(b.now(), b.users)
 	return b
 }
 
@@ -88,7 +88,7 @@ func (b *Backend) Board(project, filterJQL string) (*jira.Board, error) {
 		}
 		card := b.card(iss)
 		loaded = append(loaded, card)
-		if c, ok := byStatus[iss.StatusID]; ok {
+		if c, ok := byStatus[iss.Status.ID]; ok {
 			cols[c].Issues = append(cols[c].Issues, card)
 		}
 	}
@@ -109,14 +109,16 @@ func (b *Backend) Issue(key string) (*jira.IssueDetail, error) {
 	d := &jira.IssueDetail{
 		Issue:       b.card(iss),
 		Description: iss.Values["description"].Text,
-		Reporter:    b.userName(iss.ReporterID),
-		Labels:      slices.Clone(iss.Values["labels"].Chosen),
+		Reporter:    iss.Reporter.Name,
 		Created:     iss.Created.Local().Format(displayLayout),
 		Updated:     iss.Updated.Local().Format(displayLayout),
 	}
+	for _, l := range iss.Values["labels"].Chosen {
+		d.Labels = append(d.Labels, l.Name)
+	}
 	for _, c := range iss.Comments {
 		d.Comments = append(d.Comments, jira.Comment{
-			Author:  b.userName(c.AuthorID),
+			Author:  c.Author.Name,
 			Created: c.Created.Local().Format(displayLayout),
 			Body:    c.Body,
 		})
@@ -134,7 +136,7 @@ func (b *Backend) Transitions(iss jira.Issue) ([]jira.Transition, error) {
 	}
 	var out []jira.Transition
 	for _, st := range allStatuses {
-		if st.ID != stored.StatusID {
+		if st.ID != stored.Status.ID {
 			out = append(out, jira.Transition{ID: st.ID, Name: st.Name, To: st.Name})
 		}
 	}
@@ -149,10 +151,11 @@ func (b *Backend) Transition(key, transitionID string) error {
 	if err != nil {
 		return err
 	}
-	if transitionID == iss.StatusID || !slices.ContainsFunc(allStatuses, func(st status) bool { return st.ID == transitionID }) {
+	i := jira.IndexID(allStatuses, transitionID)
+	if transitionID == iss.Status.ID || i < 0 {
 		return fmt.Errorf("transition %q is not valid for %s", transitionID, key)
 	}
-	iss.StatusID = transitionID
+	iss.Status = allStatuses[i]
 	iss.Updated = b.now()
 	return nil
 }
@@ -165,12 +168,15 @@ func (b *Backend) Assign(key, assigneeID string) error {
 	if err != nil {
 		return err
 	}
+	var assignee jira.Option
 	if assigneeID != "" {
-		if u := b.user(assigneeID); u == nil || !u.Active {
+		u := b.user(assigneeID)
+		if u == nil || !u.Active {
 			return fmt.Errorf("user %q cannot be assigned issues", assigneeID)
 		}
+		assignee = u.Option
 	}
-	iss.AssigneeID = assigneeID
+	iss.Assignee = assignee
 	iss.Updated = b.now()
 	return nil
 }
@@ -187,7 +193,7 @@ func (b *Backend) AddComment(key, body string) error {
 		return errors.New("comment body can not be empty")
 	}
 	now := b.now()
-	iss.Comments = append(iss.Comments, comment{AuthorID: b.users[0].ID, Body: body, Created: now})
+	iss.Comments = append(iss.Comments, comment{Author: b.users[0].Option, Body: body, Created: now})
 	iss.Updated = now
 	return nil
 }
@@ -205,11 +211,10 @@ func (b *Backend) EditFields(iss jira.Issue) ([]jira.EditField, error) {
 		f := def
 		f.Options = slices.Clone(def.Options)
 		v := stored.Values[def.ID]
-		f.Text, f.Chosen = v.Text, slices.Clone(v.Chosen)
+		f.Text = v.Text
+		f.Chosen = slices.Clone(v.Chosen)
 		if def.Kind == jira.FieldUser || def.Kind == jira.FieldMultiUser {
-			for _, id := range f.Chosen {
-				f.Options = append(f.Options, jira.Option{ID: id, Name: b.userName(id)})
-			}
+			f.Options = append(f.Options, v.Chosen...)
 		}
 		out = append(out, f)
 	}
@@ -275,20 +280,28 @@ func (b *Backend) validate(def, f jira.EditField) (value, error) {
 		if def.Kind == jira.FieldSelect && len(f.Chosen) > 1 {
 			return value{}, fmt.Errorf("%s takes one value", def.Name)
 		}
-		for _, id := range f.Chosen {
-			if !slices.ContainsFunc(def.Options, func(o jira.Option) bool { return o.ID == id }) {
+		chosen := make([]jira.Option, len(f.Chosen))
+		for i, option := range f.Chosen {
+			j := jira.IndexID(def.Options, option.ID)
+			if j < 0 {
 				return value{}, fmt.Errorf("specify a valid value for %s", def.Name)
 			}
+			chosen[i] = def.Options[j]
 		}
+		return value{Chosen: chosen}, nil
 	case jira.FieldUser, jira.FieldMultiUser:
 		if def.Kind == jira.FieldUser && len(f.Chosen) > 1 {
 			return value{}, fmt.Errorf("%s takes one person", def.Name)
 		}
-		for _, id := range f.Chosen {
-			if b.user(id) == nil {
-				return value{}, fmt.Errorf("user %q does not exist", id)
+		chosen := make([]jira.Option, len(f.Chosen))
+		for i, option := range f.Chosen {
+			u := b.user(option.ID)
+			if u == nil {
+				return value{}, fmt.Errorf("user %q does not exist", option.ID)
 			}
+			chosen[i] = u.Option
 		}
+		return value{Chosen: chosen}, nil
 	}
 	return value{Chosen: slices.Clone(f.Chosen)}, nil
 }
@@ -304,7 +317,7 @@ func (b *Backend) SearchUsers(_, query string) ([]jira.Option, error) {
 			break
 		}
 		if u.Active && (strings.Contains(strings.ToLower(u.Name), query) || strings.Contains(strings.ToLower(u.Email), query)) {
-			out = append(out, jira.Option{ID: u.ID, Name: u.Name})
+			out = append(out, u.Option)
 		}
 	}
 	return out, nil
@@ -332,29 +345,17 @@ func (b *Backend) user(id string) *user {
 	return &b.users[i]
 }
 
-func (b *Backend) userName(id string) string {
-	if u := b.user(id); u != nil {
-		return u.Name
-	}
-	return ""
-}
-
 func (b *Backend) card(iss *issue) jira.Issue {
 	out := jira.Issue{
-		Key:        iss.Key,
-		Summary:    iss.Values["summary"].Text,
-		StatusID:   iss.StatusID,
-		Assignee:   b.userName(iss.AssigneeID),
-		AssigneeID: iss.AssigneeID,
-		Type:       iss.Type,
-	}
-	if i := slices.IndexFunc(allStatuses, func(st status) bool { return st.ID == iss.StatusID }); i >= 0 {
-		out.Status = allStatuses[i].Name
+		Key:      iss.Key,
+		Summary:  iss.Values["summary"].Text,
+		StatusID: iss.Status.ID,
+		Status:   iss.Status.Name,
+		Assignee: iss.Assignee,
+		Type:     iss.Type,
 	}
 	if p := iss.Values["priority"].Chosen; len(p) > 0 {
-		if i := slices.IndexFunc(priorities, func(o jira.Option) bool { return o.ID == p[0] }); i >= 0 {
-			out.Priority = priorities[i].Name
-		}
+		out.Priority = p[0].Name
 	}
 	return out
 }
@@ -373,10 +374,10 @@ func jqlMatcher(jql string) func(*issue) bool {
 	var conds []func(*issue) bool
 	for _, m := range jqlAssigneeRe.FindAllStringSubmatch(jql, -1) {
 		id := m[1]
-		conds = append(conds, func(i *issue) bool { return i.AssigneeID == id })
+		conds = append(conds, func(i *issue) bool { return i.Assignee.ID == id })
 	}
 	if jqlEmptyRe.MatchString(jql) {
-		conds = append(conds, func(i *issue) bool { return i.AssigneeID == "" })
+		conds = append(conds, func(i *issue) bool { return i.Assignee.ID == "" })
 	}
 	for _, m := range jqlTypeRe.FindAllStringSubmatch(jql, -1) {
 		typ := m[1]
@@ -384,7 +385,7 @@ func jqlMatcher(jql string) func(*issue) bool {
 	}
 	for _, m := range jqlLabelRe.FindAllStringSubmatch(jql, -1) {
 		label := m[1]
-		conds = append(conds, func(i *issue) bool { return slices.Contains(i.Values["labels"].Chosen, label) })
+		conds = append(conds, func(i *issue) bool { return jira.IndexID(i.Values["labels"].Chosen, label) >= 0 })
 	}
 	return func(i *issue) bool {
 		for _, c := range conds {

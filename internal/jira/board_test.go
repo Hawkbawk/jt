@@ -8,14 +8,14 @@ import (
 func TestPickBoardPrefersBoardLocatedInProject(t *testing.T) {
 	var boards []boardInfo
 	err := json.Unmarshal([]byte(`[
-		{"id": 630, "name": "Canvas PM", "type": "kanban"},
-		{"id": 1848, "name": "Interop - Coconut", "type": "scrum", "location": {"projectKey": "INTEROP"}}
+		{"id": 630, "name": "Team Board", "type": "kanban"},
+		{"id": 1848, "name": "Widgets Sprint", "type": "scrum", "location": {"projectKey": "WIDGETS"}}
 	]`), &boards)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	b, err := pickBoard("INTEROP", boards)
+	b, err := pickBoard("WIDGETS", boards)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +103,10 @@ func TestCombineJQL(t *testing.T) {
 
 func TestAssigneeFilters(t *testing.T) {
 	got := AssigneeFilters([]Issue{
-		{Assignee: "Zed", AssigneeID: "z1"},
+		{Assignee: Option{ID: "z1", Name: "Zed"}},
 		{},
-		{Assignee: "Amy", AssigneeID: "a1"},
-		{Assignee: "Amy", AssigneeID: "a1"},
+		{Assignee: Option{ID: "a1", Name: "Amy"}},
+		{Assignee: Option{ID: "a1", Name: "Amy"}},
 	})
 	want := []Filter{
 		{Name: "Amy", JQL: `assignee = "a1"`, AssigneeID: "a1"},
@@ -124,7 +124,7 @@ func TestAssigneeFilters(t *testing.T) {
 }
 
 func TestAssigneeFiltersAlwaysIncludeUnassigned(t *testing.T) {
-	got := AssigneeFilters([]Issue{{Assignee: "Amy", AssigneeID: "a1"}})
+	got := AssigneeFilters([]Issue{{Assignee: Option{ID: "a1", Name: "Amy"}}})
 	if len(got) != 2 || got[1].Name != "Unassigned" {
 		t.Fatalf("got %v", got)
 	}

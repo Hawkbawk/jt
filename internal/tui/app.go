@@ -231,7 +231,8 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.move):
 		return m, m.openPopup(newMovePopup(b, *sel), loadTransitions(b, *sel))
 	case key.Matches(msg, keys.assign):
-		return m, m.openPopup(newAssignPopup(b, *sel, m.board.assignees), nil)
+		p := newAssignPane(b, *sel)
+		return m, m.openPopup(newAssignPopup(p), p.init())
 	case key.Matches(msg, keys.edit):
 		return m, m.openPopup(newEditPopup(b, *sel), loadFields(b, *sel))
 	}

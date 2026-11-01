@@ -26,7 +26,7 @@ func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
 	b.WriteString("\n\n")
 	for _, line := range []string{
 		field("Type", d.Type) + "   " + field("Status", d.Status) + "   " + field("Priority", d.Priority),
-		field("Assignee", d.Assignee) + "   " + field("Reporter", d.Reporter),
+		field("Assignee", d.Assignee.Name) + "   " + field("Reporter", d.Reporter),
 		field("Created", d.Created) + "   " + field("Updated", d.Updated),
 		field("Labels", strings.Join(d.Labels, ", ")),
 	} {
