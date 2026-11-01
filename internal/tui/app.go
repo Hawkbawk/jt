@@ -2,6 +2,8 @@
 package tui
 
 import (
+	"context"
+
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -15,7 +17,7 @@ type Backend interface {
 	DefaultProject() string
 	Projects() ([]jira.Project, error)
 	IssueTypes() ([]string, error)
-	Search(jql string) ([]jira.Issue, error)
+	Search(ctx context.Context, jql string) ([]jira.Issue, error)
 	Board(project, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(iss jira.Issue) ([]jira.Transition, error)
@@ -28,11 +30,11 @@ type Backend interface {
 	IssueURL(key string) string
 }
 
-// Model is the root bubbletea model. It routes input and messages to the
+// BoardModel is the board's root bubbletea model. It routes input and messages to the
 // board, project picker and at most one popup, and controls high-level
 // or broadly used state.
-type Model struct {
-	chrome
+type BoardModel struct {
+	layout
 
 	board   boardPane
 	picker  picker
@@ -41,9 +43,9 @@ type Model struct {
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend, settings Settings) Model {
-	m := Model{
-		chrome:  newChrome(settings),
+func New(backend Backend, settings Settings) BoardModel {
+	m := BoardModel{
+		layout:  newLayout(settings),
 		board:   newBoardPane(backend),
 		picker:  newPicker(backend),
 		actions: newIssueActions(backend),
@@ -55,30 +57,30 @@ func New(backend Backend, settings Settings) Model {
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
-func (m Model) WithWarning(text string) Model {
+func (m BoardModel) WithWarning(text string) BoardModel {
 	m.status = styles.Warn().Render(text)
 	return m
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd {
+func (m BoardModel) Init() tea.Cmd {
 	if m.board.project == "" {
-		return m.startBusy(m.picker.fetch())
+		return m.runWithSpinner(m.picker.fetch())
 	}
-	return m.startBusy(m.board.fetch(m.board.project, ""))
+	return m.runWithSpinner(m.board.fetch(m.board.project, ""))
 }
 
 // busy reports whether anything is waiting on the network.
-func (m Model) busy() bool {
+func (m BoardModel) busy() bool {
 	return m.popupLoading() || m.board.loading || m.picker.loading()
 }
 
 // Update implements tea.Model.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if e, ok := editResult(msg); ok {
-		return m.finishEdit(msg, e)
-	}
+func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
+		return m.finishEdit(msg, editResult(msg))
+
 	case tea.WindowSizeMsg:
 		m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
@@ -94,7 +96,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case themeSavedMsg:
-		m.themeSaved(msg)
+		m.onThemeSaved(msg)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -105,7 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectSelectedMsg:
 		m.status = ""
-		return m, m.startBusy(m.board.open(msg.key))
+		return m, m.runWithSpinner(m.board.open(msg.key))
 
 	case boardLoadedMsg:
 		m.board.update(msg)
@@ -116,7 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filterSelectedMsg:
 		m.status = ""
-		return m, m.startBusy(m.board.setFilter(msg.filter))
+		return m, m.runWithSpinner(m.board.setFilter(msg.filter))
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -125,17 +127,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The picker's list filters asynchronously and a popup's form runs on its
 	// own messages, so both get what's left.
 	pm, popupCmd := m.forwardToPopup(msg)
-	m = pm.(Model)
+	m = pm.(BoardModel)
 	return m, tea.Batch(popupCmd, m.picker.update(msg))
 }
 
 // restyle rebuilds what the model copied from the styles when it was built.
-func (m *Model) restyle() {
-	m.chrome.restyle()
+func (m *BoardModel) restyle() {
+	m.layout.restyle()
 	m.picker.restyle()
 }
 
-func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
@@ -149,7 +151,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			return m, nil
 		}
-		return m, m.startBusy(m.picker.show(m.board.nav != nil))
+		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
 	case m.popup != nil:
@@ -158,7 +160,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleBoardKey(msg)
 }
 
-func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.quit) {
 		return m, tea.Quit
 	}
@@ -172,7 +174,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			focusKey = sel.Key
 		}
 		m.status = ""
-		return m, m.startBusy(m.board.reload(focusKey))
+		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.theme) {
 		return m, m.openPopup(newThemePopup(), nil)
@@ -192,15 +194,15 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // finishEdit closes the popup and reloads the board after a successful change.
 // A failure goes back to the popup to show.
-func (m Model) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
+func (m BoardModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	if e.err != nil {
 		return m.forwardToPopup(msg)
 	}
 	m.popup = nil
 	m.status = e.status
-	return m, m.startBusy(m.board.reload(e.key))
+	return m, m.runWithSpinner(m.board.reload(e.key))
 }
 
-func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m, m.chrome.forwardToPopup(msg, m.board.loading || m.picker.loading())
+func (m BoardModel) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
+	return m, m.layout.forwardToPopup(msg, m.board.loading || m.picker.loading())
 }

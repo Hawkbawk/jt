@@ -28,7 +28,7 @@ func TestSearchQueryJQL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.q.JQL(); got != tt.want {
+			if got := tt.q.String(); got != tt.want {
 				t.Errorf("JQL() = %q, want %q", got, tt.want)
 			}
 		})

@@ -39,7 +39,6 @@ var (
 	// The help-only bindings carry keys since help hides those without.
 	formMoveHelp   = key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab/shift+tab", "next/previous field"))
 	formChooseHelp = key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "change option"))
-	jqlSearchHelp  = key.NewBinding(key.WithKeys("enter", "ctrl+s"), key.WithHelp("enter", "search"))
 	formSearchHelp = key.NewBinding(key.WithKeys("enter", "ctrl+s"), key.WithHelp("ctrl+s", "search"))
 	formPickHelp   = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "pick project"))
 )
@@ -65,12 +64,11 @@ const leftColumn = fieldKey
 // searchField is one control of the search form: a text box, or a value picked
 // from options. The project field's options are chosen in the project picker.
 type searchField struct {
-	label       string
-	input       textinput.Model
-	options     []string
-	index       int
-	isText      bool
-	placeholder string
+	label   string
+	input   textinput.Model
+	options []string
+	index   int
+	isText  bool
 }
 
 func newTextField(label, placeholder string) *searchField {
@@ -129,7 +127,7 @@ func newSearchForm(project string) *searchForm {
 func sortLabels() []string {
 	labels := make([]string, len(jira.SortFields))
 	for i, s := range jira.SortFields {
-		labels[i] = s.Label()
+		labels[i] = s.String()
 	}
 	return labels
 }

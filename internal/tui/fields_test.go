@@ -43,13 +43,13 @@ func testFields() []jira.EditField {
 }
 
 // fieldsModel opens the edit popup.
-func fieldsModel(t *testing.T) (Model, *fakeBackend) {
+func fieldsModel(t *testing.T) (BoardModel, *fakeBackend) {
 	t.Helper()
 	m, fb := issueModel(t)
 	return pressDrain(t, m, "e"), fb
 }
 
-func typeText(t *testing.T, m Model, s string) Model {
+func typeText(t *testing.T, m BoardModel, s string) BoardModel {
 	t.Helper()
 	for _, r := range s {
 		m = pressDrain(t, m, string(r))
@@ -312,7 +312,7 @@ func TestFieldsCtrlDQuitsWithoutAsking(t *testing.T) {
 }
 
 // userModel opens the user field that is field rows down the list.
-func userModel(t *testing.T, field int) (Model, *fakeBackend) {
+func userModel(t *testing.T, field int) (BoardModel, *fakeBackend) {
 	t.Helper()
 	m, fb := fieldsModel(t)
 	fb.users = []jira.Option{{ID: "u2", Name: "Bo"}, {ID: "u3", Name: "Cy"}}

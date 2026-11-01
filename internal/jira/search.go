@@ -33,9 +33,12 @@ const (
 // SortFields lists the sort fields in the order they're offered.
 var SortFields = []SortField{SortCreated, SortUpdated, SortPriority, SortStatus, SortKey, SortSummary}
 
-// Label is the field's name as shown to people.
-func (f SortField) Label() string {
+// String is the field's name as shown to people.
+func (f SortField) String() string {
 	s := string(f)
+	if s == "" {
+		return ""
+	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
@@ -72,8 +75,8 @@ func ParseKeys(s string) ([]string, error) {
 	return keys, nil
 }
 
-// JQL renders the query as JQL.
-func (q SearchQuery) JQL() string {
+// String renders the query as JQL.
+func (q SearchQuery) String() string {
 	var conds []string
 	if q.Project != "" {
 		conds = append(conds, "project = "+quoteJQL(q.Project))

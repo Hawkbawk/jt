@@ -250,7 +250,7 @@ func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 
 // Search returns the issues matching jql, up to a limit, in the order the JQL
 // asks for.
-func (c *Client) Search(jql string) ([]Issue, error) {
+func (c *Client) Search(ctx context.Context, jql string) ([]Issue, error) {
 	var out []Issue
 	token := ""
 	for len(out) < maxIssues {
@@ -263,7 +263,7 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 			Issues        []issueFields `json:"issues"`
 			NextPageToken string        `json:"nextPageToken"`
 		}
-		if err := c.getJSON(c.jc.Get, path, &page); err != nil {
+		if err := c.getJSONContext(ctx, c.jc.Get, path, &page); err != nil {
 			return nil, err
 		}
 		for _, f := range page.Issues {
@@ -379,7 +379,11 @@ func (c *Client) IssueURL(key string) string {
 type getFunc func(ctx context.Context, path string, headers jcli.Header) (*http.Response, error)
 
 func (c *Client) getJSON(get getFunc, path string, out any) error {
-	res, err := get(context.Background(), path, nil)
+	return c.getJSONContext(context.Background(), get, path, out)
+}
+
+func (c *Client) getJSONContext(ctx context.Context, get getFunc, path string, out any) error {
+	res, err := get(ctx, path, nil)
 	if err != nil {
 		return err
 	}

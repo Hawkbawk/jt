@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -26,9 +27,9 @@ type searchLoadedMsg struct {
 	err      error
 }
 
-func runSearch(b Backend, id int, jql, focusKey string) tea.Cmd {
+func runSearch(ctx context.Context, b Backend, id int, jql, focusKey string) tea.Cmd {
 	return func() tea.Msg {
-		issues, err := b.Search(jql)
+		issues, err := b.Search(ctx, jql)
 		return searchLoadedMsg{id: id, issues: issues, focusKey: focusKey, err: err}
 	}
 }

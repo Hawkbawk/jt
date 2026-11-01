@@ -31,7 +31,7 @@ func TestBoardLoadsAndMovesPersist(t *testing.T) {
 
 func TestSearch(t *testing.T) {
 	f := fakejira.New()
-	all, err := f.Search("project = \"DEMO\" ORDER BY key ASC")
+	all, err := f.Search(t.Context(), "project = \"DEMO\" ORDER BY key ASC")
 	if err != nil || len(all) < 2 {
 		t.Fatalf("all = %v, %v", all, err)
 	}
@@ -41,17 +41,17 @@ func TestSearch(t *testing.T) {
 		}
 	}
 
-	one, err := f.Search("key = " + all[1].Key)
+	one, err := f.Search(t.Context(), "key = "+all[1].Key)
 	if err != nil || len(one) != 1 || one[0].Key != all[1].Key {
 		t.Fatalf("by key = %v, %v", one, err)
 	}
 
-	desc, _ := f.Search("project = \"DEMO\" ORDER BY key DESC")
+	desc, _ := f.Search(t.Context(), "project = \"DEMO\" ORDER BY key DESC")
 	if desc[0].Key != all[len(all)-1].Key {
 		t.Errorf("descending starts with %s, want %s", desc[0].Key, all[len(all)-1].Key)
 	}
 
-	none, _ := f.Search(`created >= "2999-01-01 00:00"`)
+	none, _ := f.Search(t.Context(), `created >= "2999-01-01 00:00"`)
 	if len(none) != 0 {
 		t.Errorf("future search found %d issues", len(none))
 	}

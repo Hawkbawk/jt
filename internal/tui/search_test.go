@@ -68,8 +68,8 @@ func TestSearchStartsOnDefaultProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := jira.SearchQuery{Project: "DEMO", Sort: jira.SortUpdated, Descending: true}
-	if q.JQL() != want.JQL() {
-		t.Errorf("JQL = %q, want %q", q.JQL(), want.JQL())
+	if q.String() != want.String() {
+		t.Errorf("JQL = %q, want %q", q.String(), want.String())
 	}
 	if !strings.Contains(m.render(), `JQL: project = "DEMO" ORDER BY updated DESC`) {
 		t.Errorf("preview missing from view:\n%s", m.render())
@@ -110,8 +110,8 @@ func TestSearchFormFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `sprint in openSprints() AND key in (DEMO-1, DEMO-2) AND created >= "2026-03-01 00:00" AND created <= "2026-03-02 23:59" AND updated >= "2026-03-09 12:00" ORDER BY updated ASC`
-	if q.JQL() != want {
-		t.Errorf("JQL = %q, want %q", q.JQL(), want)
+	if q.String() != want {
+		t.Errorf("JQL = %q, want %q", q.String(), want)
 	}
 }
 

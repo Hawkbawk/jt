@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -26,10 +27,10 @@ func loadIssueTypes(b Backend) tea.Cmd {
 	}
 }
 
-// SearchModel is the root model of the search screen. It shares its chrome and
+// SearchModel is the root model of the search screen. It shares its layout and
 // project picker with the board.
 type SearchModel struct {
-	chrome
+	layout
 	backend Backend
 	picker  picker
 	form    *searchForm
@@ -47,15 +48,16 @@ type SearchModel struct {
 	searchErr      error
 	// searchID tells results apart so a slow, older search can't replace a
 	// newer one.
-	searchID int
-	lastJQL  string
+	searchID     int
+	lastJQL      string
+	cancelSearch context.CancelFunc
 }
 
 // NewSearch builds the search screen. The backend's default project is
 // selected to start with.
 func NewSearch(backend Backend, settings Settings) SearchModel {
 	m := SearchModel{
-		chrome:  newChrome(settings),
+		layout:  newLayout(settings),
 		backend: backend,
 		picker:  newPicker(backend),
 		form:    newSearchForm(backend.DefaultProject()),
@@ -87,7 +89,7 @@ func (m SearchModel) otherBusy() bool {
 }
 
 func (m SearchModel) restyle() SearchModel {
-	m.chrome.restyle()
+	m.layout.restyle()
 	m.picker.restyle()
 	m.form.restyle()
 	m.jql.restyle()
@@ -96,10 +98,10 @@ func (m SearchModel) restyle() SearchModel {
 
 // Update implements tea.Model.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if e, ok := editResult(msg); ok {
-		return m.finishEdit(msg, e)
-	}
 	switch msg := msg.(type) {
+	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
+		return m.finishEdit(msg, editResult(msg))
+
 	case tea.WindowSizeMsg:
 		m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
@@ -113,7 +115,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.restyle(), cmd
 
 	case themeSavedMsg:
-		m.themeSaved(msg)
+		m.onThemeSaved(msg)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -143,7 +145,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openProjectsMsg:
-		cmd := m.startBusy(m.picker.show(true))
+		cmd := m.runWithSpinner(m.picker.show(true))
 		return m, cmd
 
 	case projectSelectedMsg:
@@ -190,7 +192,7 @@ func (m SearchModel) currentJQL() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return q.JQL(), nil
+	return q.String(), nil
 }
 
 // submit runs the search the form or the editor describes.
@@ -206,9 +208,19 @@ func (m *SearchModel) submit() tea.Cmd {
 
 // search runs jql and keeps the cursor on focusKey when that issue is found.
 func (m *SearchModel) search(jql, focusKey string) tea.Cmd {
+	m.stopSearch()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.cancelSearch = cancel
 	m.searchID++
 	m.searching, m.searchErr, m.lastJQL = true, nil, jql
-	return m.startBusy(runSearch(m.backend, m.searchID, jql, focusKey))
+	return m.runWithSpinner(runSearch(ctx, m.backend, m.searchID, jql, focusKey))
+}
+
+func (m *SearchModel) stopSearch() {
+	if m.cancelSearch != nil {
+		m.cancelSearch()
+		m.cancelSearch = nil
+	}
 }
 
 // applyResults shows a finished search and moves to the issues it found.
@@ -216,6 +228,7 @@ func (m *SearchModel) applyResults(msg searchLoadedMsg) {
 	if msg.id != m.searchID {
 		return
 	}
+	m.stopSearch()
 	m.searching, m.searched = false, true
 	if msg.err != nil {
 		m.searchErr = msg.err
@@ -266,7 +279,7 @@ func (m *SearchModel) toggleMode() tea.Cmd {
 	}
 	if strings.TrimSpace(m.jql.value()) == "" {
 		if q, err := m.form.query(m.now()); err == nil {
-			m.jql.setValue(q.JQL())
+			m.jql.setValue(q.String())
 		}
 	}
 	return m.jql.focus()
@@ -275,6 +288,7 @@ func (m *SearchModel) toggleMode() tea.Cmd {
 func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
+			m.stopSearch()
 			return m, tea.Quit
 		}
 		return m, nil
@@ -309,6 +323,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	sel := m.results.selected()
 	switch {
 	case key.Matches(msg, keys.quit):
+		m.stopSearch()
 		return m, tea.Quit
 	case m.results.move(msg):
 		return m, nil
@@ -339,7 +354,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 // View implements tea.Model.
 func (m SearchModel) View() tea.View {
-	return m.newView(m.render())
+	return m.withView(m.render())
 }
 
 func (m SearchModel) render() string {
@@ -403,7 +418,7 @@ func (m SearchModel) formView() string {
 	if q, err := m.form.query(m.now()); err != nil {
 		preview = styles.Error().Render(ansi.Truncate("Error: "+err.Error(), inner, "…"))
 	} else {
-		preview = styles.Dim().Render(ansi.Truncate("JQL: "+q.JQL(), inner, "…"))
+		preview = styles.Dim().Render(ansi.Truncate("JQL: "+q.String(), inner, "…"))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.form.view(inner), "", preview)
 }

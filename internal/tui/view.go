@@ -6,11 +6,11 @@ import (
 )
 
 // View implements tea.Model.
-func (m Model) View() tea.View {
-	return m.newView(m.render())
+func (m BoardModel) View() tea.View {
+	return m.withView(m.render())
 }
 
-func (m Model) render() string {
+func (m BoardModel) render() string {
 	if m.width == 0 {
 		return ""
 	}

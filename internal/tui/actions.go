@@ -73,22 +73,21 @@ type issueEdit struct {
 	err    error
 }
 
-// editResult reports whether msg is the result of moving, assigning or
-// editing an issue, and what happened.
-func editResult(msg tea.Msg) (issueEdit, bool) {
+// editResult describes a transitionDoneMsg, assignDoneMsg or fieldsSavedMsg.
+func editResult(msg tea.Msg) issueEdit {
 	switch msg := msg.(type) {
 	case transitionDoneMsg:
-		return issueEdit{key: msg.key, status: "Moved " + msg.key + " to " + msg.to, err: msg.err}, true
+		return issueEdit{key: msg.key, status: "Moved " + msg.key + " to " + msg.to, err: msg.err}
 	case assignDoneMsg:
 		status := "Assigned " + msg.issueKey + " to " + msg.to
 		if msg.cleared {
 			status = "Unassigned " + msg.issueKey
 		}
-		return issueEdit{key: msg.issueKey, status: status, err: msg.err}, true
+		return issueEdit{key: msg.issueKey, status: status, err: msg.err}
 	case fieldsSavedMsg:
-		return issueEdit{key: msg.key, status: fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key), err: msg.err}, true
+		return issueEdit{key: msg.key, status: fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key), err: msg.err}
 	}
-	return issueEdit{}, false
+	panic(fmt.Sprintf("unexpected edit result %T", msg))
 }
 
 // runAction calls fn with url off the update loop and reports the outcome.
