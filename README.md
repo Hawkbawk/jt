@@ -91,9 +91,12 @@ jt
 | `tab` / `shift+tab` | Next / previous field |
 | `←` / `→` | Change the option of the focused selector |
 | `enter` | On the project field, pick a project (`backspace` clears it) |
+| `ctrl+s` | Run the search (`enter` in advanced mode) |
 | `ctrl+t` | Switch between the basic form and advanced mode |
 
 In advanced mode you write JQL directly. Switching to it with an empty box starts from the JQL the form builds.
+
+Results appear below the form. `tab` from the last field moves to them, and `esc` or `/` goes back. In the list, `j`/`k`/`g`/`G` navigate, `v` views, `c` comments, `m` moves, `a` assigns, `e` edits, `y` copies the key, `o` opens in the browser, `r` re-runs the search, `t` changes the theme and `q` quits. `jt s --fake` runs on demo data.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
 

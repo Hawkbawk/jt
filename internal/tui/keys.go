@@ -14,7 +14,7 @@ type boardKeys struct {
 	filter, nextTab, prevTab           key.Binding
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
-	toggle, undo, theme                key.Binding
+	toggle, undo, theme, back          key.Binding
 
 	navigate, topBottom, scroll, write key.Binding
 }
@@ -51,6 +51,7 @@ var keys = boardKeys{
 	blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop writing")),
 	toggle:    key.NewBinding(key.WithKeys("space")),
 	undo:      key.NewBinding(key.WithKeys("u")),
+	back:      key.NewBinding(key.WithKeys("esc", "/", "shift+tab"), key.WithHelp("esc", "edit search")),
 	nextTab:   key.NewBinding(key.WithKeys("tab")),
 	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),
 
@@ -60,6 +61,8 @@ var keys = boardKeys{
 	scroll:    key.NewBinding(key.WithKeys("up", "down", "left", "right"), key.WithHelp("↑↓←→", "scroll")),
 	write:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "write")),
 }
+
+var resultsNavigateHelp = key.NewBinding(key.WithKeys("j", "k", "up", "down"), key.WithHelp("j/k", "navigate"))
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeys) ShortHelp() []key.Binding {
@@ -81,9 +84,10 @@ func (k helpKeys) ShortHelp() []key.Binding { return k }
 func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
 
 var (
-	viewHelpKeys     = helpKeys{keys.scroll, keys.topBottom, keys.close}
-	commentsHelpKeys = helpKeys{keys.scroll, keys.topBottom, keys.write, keys.close}
-	searchFormHelp   = helpKeys{formMoveHelp, formChooseHelp, formPickHelp, modeKey}
-	searchJQLHelp    = helpKeys{modeKey}
-	writingHelpKeys  = helpKeys{keys.send, keys.blur}
+	viewHelpKeys      = helpKeys{keys.scroll, keys.topBottom, keys.close}
+	commentsHelpKeys  = helpKeys{keys.scroll, keys.topBottom, keys.write, keys.close}
+	searchFormHelp    = helpKeys{formMoveHelp, formChooseHelp, formSearchHelp, formPickHelp, modeKey}
+	searchJQLHelp     = helpKeys{formSearchHelp, formPickHelp, modeKey}
+	searchResultsHelp = helpKeys{resultsNavigateHelp, keys.topBottom, keys.view, keys.comments, keys.move, keys.assign, keys.edit, keys.yank, keys.open, keys.refresh, keys.theme, keys.back, keys.quit}
+	writingHelpKeys   = helpKeys{keys.send, keys.blur}
 )

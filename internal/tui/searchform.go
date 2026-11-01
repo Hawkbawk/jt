@@ -39,6 +39,8 @@ var (
 	// The help-only bindings carry keys since help hides those without.
 	formMoveHelp   = key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab/shift+tab", "next/previous field"))
 	formChooseHelp = key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "change option"))
+	jqlSearchHelp  = key.NewBinding(key.WithKeys("enter", "ctrl+s"), key.WithHelp("enter", "search"))
+	formSearchHelp = key.NewBinding(key.WithKeys("enter", "ctrl+s"), key.WithHelp("ctrl+s", "search"))
 	formPickHelp   = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "pick project"))
 )
 
@@ -100,10 +102,12 @@ type searchForm struct {
 	fields  [fieldCount]*searchField
 	project string
 	focus   int
+	// focused is false while the results have focus, so no field is lit.
+	focused bool
 }
 
 func newSearchForm(project string) *searchForm {
-	f := &searchForm{project: project}
+	f := &searchForm{project: project, focused: true}
 	f.fields = [fieldCount]*searchField{
 		fieldProject:     {label: "Project"},
 		fieldType:        newChoiceField("Issue type", anyOption),
@@ -162,6 +166,7 @@ func (f *searchForm) restyle() {
 // focusCmd focuses the current field and returns the command that starts its
 // cursor.
 func (f *searchForm) focusCmd() tea.Cmd {
+	f.focused = true
 	for i, fld := range f.fields {
 		if fld.isText && i != f.focus {
 			fld.input.Blur()
@@ -173,6 +178,19 @@ func (f *searchForm) focusCmd() tea.Cmd {
 	return nil
 }
 
+// blur takes focus off every field.
+func (f *searchForm) blur() {
+	f.focused = false
+	for _, fld := range f.fields {
+		if fld.isText {
+			fld.input.Blur()
+		}
+	}
+}
+
+// atEnd reports whether the last field has focus.
+func (f *searchForm) atEnd() bool { return f.focus == fieldCount-1 }
+
 func (f *searchForm) move(delta int) tea.Cmd {
 	f.focus = (f.focus + delta + fieldCount) % fieldCount
 	return f.focusCmd()
@@ -180,6 +198,9 @@ func (f *searchForm) move(delta int) tea.Cmd {
 
 // openProjectsMsg asks for the project picker.
 type openProjectsMsg struct{}
+
+// submitSearchMsg asks to run the search the form describes.
+type submitSearchMsg struct{}
 
 // update applies a message to the focused field.
 func (f *searchForm) update(msg tea.Msg) tea.Cmd {
@@ -190,6 +211,8 @@ func (f *searchForm) update(msg tea.Msg) tea.Cmd {
 		return f.move(1)
 	case isKey && key.Matches(km, formPrevKey):
 		return f.move(-1)
+	case isKey && (key.Matches(km, keys.send) || key.Matches(km, keys.accept) && f.focus != fieldProject):
+		return func() tea.Msg { return submitSearchMsg{} }
 	case f.focus == fieldProject && isKey:
 		switch {
 		case key.Matches(km, keys.accept):
@@ -202,7 +225,7 @@ func (f *searchForm) update(msg tea.Msg) tea.Cmd {
 		switch {
 		case key.Matches(km, formLeftKey):
 			fld.cycle(-1)
-		case key.Matches(km, formRightKey, keys.accept):
+		case key.Matches(km, formRightKey, keys.toggle):
 			fld.cycle(1)
 		}
 		return nil
@@ -282,7 +305,7 @@ func (f *searchForm) view(width int) string {
 
 func (f *searchForm) cell(i, width int) string {
 	fld := f.fields[i]
-	focused := i == f.focus
+	focused := f.focused && i == f.focus
 	label := styles.Dim().Width(labelWidth).Render(fld.label)
 	if focused {
 		label = lipgloss.NewStyle().Foreground(styles.Highlight()).Bold(true).Width(labelWidth).Render(fld.label)

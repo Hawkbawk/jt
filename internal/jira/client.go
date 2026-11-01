@@ -248,6 +248,35 @@ func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 	return out, nil
 }
 
+// Search returns the issues matching jql, up to a limit, in the order the JQL
+// asks for.
+func (c *Client) Search(jql string) ([]Issue, error) {
+	var out []Issue
+	token := ""
+	for len(out) < maxIssues {
+		path := fmt.Sprintf("/search/jql?jql=%s&fields=summary,status,assignee,issuetype,priority&maxResults=%d",
+			url.QueryEscape(jql), pageSize)
+		if token != "" {
+			path += "&nextPageToken=" + url.QueryEscape(token)
+		}
+		var page struct {
+			Issues        []issueFields `json:"issues"`
+			NextPageToken string        `json:"nextPageToken"`
+		}
+		if err := c.getJSON(c.jc.Get, path, &page); err != nil {
+			return nil, err
+		}
+		for _, f := range page.Issues {
+			out = append(out, f.toIssue())
+		}
+		if len(page.Issues) == 0 || page.NextPageToken == "" {
+			break
+		}
+		token = page.NextPageToken
+	}
+	return out[:min(len(out), maxIssues)], nil
+}
+
 // Issue fetches an issue with its description and all comments.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
 	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(1<<16))
