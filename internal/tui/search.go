@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -30,7 +32,10 @@ type SearchModel struct {
 	backend Backend
 	picker  picker
 	form    *searchForm
-	now     func() time.Time
+	jql     *jqlEditor
+	// advanced is set while writing JQL rather than filling in the form.
+	advanced bool
+	now      func() time.Time
 }
 
 // NewSearch builds the search screen. The backend's default project is
@@ -41,6 +46,7 @@ func NewSearch(backend Backend, settings Settings) SearchModel {
 		backend: backend,
 		picker:  newPicker(backend),
 		form:    newSearchForm(backend.DefaultProject()),
+		jql:     newJQLEditor(),
 		now:     time.Now,
 	}
 	return m
@@ -65,6 +71,7 @@ func (m SearchModel) restyle() SearchModel {
 	m.chrome.restyle()
 	m.picker.restyle()
 	m.form.restyle()
+	m.jql.restyle()
 	return m
 }
 
@@ -121,7 +128,31 @@ func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
 	if m.picker.open {
 		return nil
 	}
+	return m.focused(msg)
+}
+
+// focused gives msg to whichever mode is showing.
+func (m *SearchModel) focused(msg tea.Msg) tea.Cmd {
+	if m.advanced {
+		return m.jql.update(msg)
+	}
 	return m.form.update(msg)
+}
+
+// toggleMode switches between the form and the JQL editor. Entering the editor
+// with nothing written starts from the JQL the form stands for.
+func (m *SearchModel) toggleMode() tea.Cmd {
+	m.advanced = !m.advanced
+	if !m.advanced {
+		m.jql.blur()
+		return m.form.focusCmd()
+	}
+	if strings.TrimSpace(m.jql.value()) == "" {
+		if q, err := m.form.query(m.now()); err == nil {
+			m.jql.setValue(q.JQL())
+		}
+	}
+	return m.jql.focus()
 }
 
 func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -137,7 +168,10 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case m.popup != nil:
 		return m, m.forwardToPopup(msg, m.picker.loading())
 	}
-	return m, m.form.update(msg)
+	if key.Matches(msg, modeKey) {
+		return m, m.toggleMode()
+	}
+	return m, m.focused(msg)
 }
 
 // View implements tea.Model.
@@ -149,8 +183,13 @@ func (m SearchModel) render() string {
 	if m.width == 0 {
 		return ""
 	}
+	top := m.formView()
+	help := searchFormHelp
+	if m.advanced {
+		top, help = m.jql.view(m.width-2), searchJQLHelp
+	}
 	body := lipgloss.NewStyle().Width(m.width).Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).
-		Padding(1, 1, 0).Render(m.formView())
+		Padding(1, 1, 0).Render(top)
 	switch {
 	case m.picker.open:
 		body = overlay(body, m.picker.view(m.spinner.View()), m.width)
@@ -158,7 +197,14 @@ func (m SearchModel) render() string {
 		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left,
-		m.headerView([]string{"search"}), body, m.footerView(searchFormHelp))
+		m.headerView([]string{"search", styles.Dim().Render(m.modeName())}), body, m.footerView(help))
+}
+
+func (m SearchModel) modeName() string {
+	if m.advanced {
+		return "advanced"
+	}
+	return "basic"
 }
 
 // formView draws the form above a preview of the JQL it stands for.

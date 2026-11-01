@@ -91,6 +91,9 @@ jt
 | `tab` / `shift+tab` | Next / previous field |
 | `←` / `→` | Change the option of the focused selector |
 | `enter` | On the project field, pick a project (`backspace` clears it) |
+| `ctrl+t` | Switch between the basic form and advanced mode |
+
+In advanced mode you write JQL directly. Switching to it with an empty box starts from the JQL the form builds.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
 

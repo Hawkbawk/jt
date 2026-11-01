@@ -48,7 +48,10 @@ func focusField(m SearchModel, field int) SearchModel {
 }
 
 func typeInto(m SearchModel, field int, text string) SearchModel {
-	m = focusField(m, field)
+	return searchType(focusField(m, field), text)
+}
+
+func searchType(m SearchModel, text string) SearchModel {
 	for _, r := range text {
 		m, _ = searchSend(m, tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
@@ -163,5 +166,41 @@ func TestSearchQuitKeys(t *testing.T) {
 	m = typeInto(m, fieldKey, "q")
 	if m.quit.confirming || m.form.fields[fieldKey].value() != "q" {
 		t.Error("q should be typed into the field")
+	}
+}
+
+func TestSearchAdvancedMode(t *testing.T) {
+	m := newTestSearch(t, &fakeBackend{defaultProject: "DEMO"})
+	m = searchPress(m, "ctrl+t")
+	if !m.advanced || m.jql.value() != `project = "DEMO" ORDER BY updated DESC` {
+		t.Fatalf("advanced = %v, jql = %q", m.advanced, m.jql.value())
+	}
+	if !strings.Contains(m.render(), "advanced") {
+		t.Error("header doesn't show the mode")
+	}
+
+	// Keys go to the editor, so q is typed rather than quitting.
+	m = searchType(m, " q")
+	if !strings.HasSuffix(m.jql.value(), " q") || m.quit.confirming {
+		t.Errorf("jql = %q", m.jql.value())
+	}
+
+	// What was written survives a trip through the form.
+	m = searchPress(m, "ctrl+t", "ctrl+t")
+	if m.jql.value() != `project = "DEMO" ORDER BY updated DESC q` {
+		t.Errorf("jql = %q after switching back", m.jql.value())
+	}
+	m = searchPress(m, "ctrl+t")
+	if m.advanced {
+		t.Error("should be back in basic mode")
+	}
+}
+
+func TestSearchAdvancedStartsEmptyWhenFormInvalid(t *testing.T) {
+	m := newTestSearch(t, &fakeBackend{})
+	m = typeInto(m, fieldKey, "nope")
+	m = searchPress(m, "ctrl+t")
+	if m.jql.value() != "" {
+		t.Errorf("jql = %q, want empty", m.jql.value())
 	}
 }
