@@ -2,11 +2,9 @@
 package tui
 
 import (
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -32,29 +30,21 @@ type Backend interface {
 // board, project picker and at most one popup, and controls high-level
 // or broadly used state.
 type Model struct {
-	settings      Settings
-	width, height int
-	spinner       spinner.Model
-	status        string
-	help          help.Model
+	chrome
 
 	board   boardPane
 	picker  picker
-	popup   popup
 	actions issueActions
-	quit    quitGuard
 }
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
 func New(backend Backend, settings Settings) Model {
 	m := Model{
-		settings: settings,
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
-		help:     styles.Help(),
-		board:    newBoardPane(backend),
-		picker:   newPicker(backend),
-		actions:  newIssueActions(backend),
+		chrome:  newChrome(settings),
+		board:   newBoardPane(backend),
+		picker:  newPicker(backend),
+		actions: newIssueActions(backend),
 	}
 	if m.board.project == "" {
 		m.picker.show(false)
@@ -76,21 +66,9 @@ func (m Model) Init() tea.Cmd {
 	return m.startBusy(m.board.fetch(m.board.project, ""))
 }
 
-// startBusy runs cmd alongside the spinner.
-func (m Model) startBusy(cmd tea.Cmd) tea.Cmd {
-	return tea.Batch(cmd, m.spinner.Tick)
-}
-
 // busy reports whether anything is waiting on the network.
 func (m Model) busy() bool {
-	if p, ok := m.popup.(interface{ loading() bool }); ok && p.loading() {
-		return true
-	}
-	return m.board.loading || m.picker.loading()
-}
-
-func (m Model) bodyHeight() int {
-	return max(0, m.height-2)
+	return m.popupLoading() || m.board.loading || m.picker.loading()
 }
 
 // Update implements tea.Model.
@@ -100,11 +78,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
-		if m.popup != nil {
-			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
-		}
 		return m, nil
 
 	case ThemeChangedMsg:
@@ -112,26 +87,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case themeSelectedMsg:
-		tint.SetTint(msg.tint)
-		m.restyle()
-		return m, saveTheme(m.settings, msg.id)
+		cmd := m.selectTheme(msg)
+		m.picker.restyle()
+		return m, cmd
 
 	case themeSavedMsg:
-		if msg.err != nil {
-			m.status = styles.Error().Render("saving theme: " + msg.err.Error())
-		}
+		m.themeSaved(msg)
 		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if !m.busy() {
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return m, m.tick(msg, m.busy())
 
 	case projectSelectedMsg:
 		m.status = ""
@@ -161,8 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // restyle rebuilds what the model copied from the styles when it was built.
 func (m *Model) restyle() {
-	m.spinner.Style = styles.Title()
-	m.help = styles.Help()
+	m.chrome.restyle()
 	m.picker.restyle()
 }
 
@@ -233,23 +200,5 @@ func (m Model) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.popup == nil {
-		return m, nil
-	}
-	wasBusy := m.busy()
-	var cmd tea.Cmd
-	m.popup, cmd = m.popup.update(msg)
-	// Popups start their own loads (sending or reloading a comment), so the
-	// spinner has to be started here once they become busy.
-	if !wasBusy && m.busy() {
-		cmd = m.startBusy(cmd)
-	}
-	return m, cmd
-}
-
-// openPopup shows p and runs load, the command that fills it.
-func (m *Model) openPopup(p popup, load tea.Cmd) tea.Cmd {
-	p.setSize(popupSize(m.width, m.bodyHeight()))
-	m.popup = p
-	return m.startBusy(load)
+	return m, m.chrome.forwardToPopup(msg, m.board.loading || m.picker.loading())
 }
