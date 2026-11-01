@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/fang/v2"
 	"charm.land/glamour/v2"
 	"charm.land/glamour/v2/ansi"
@@ -188,6 +189,19 @@ func TextArea() textarea.Styles {
 	s := get()
 	ts := textarea.DefaultStyles(s.tint.Dark)
 	ts.Cursor.Blink = false
+	ts.Focused.Placeholder = ts.Focused.Placeholder.Foreground(s.muted)
+	ts.Blurred.Placeholder = ts.Blurred.Placeholder.Foreground(s.muted)
+	ts.Blurred.Text = ts.Blurred.Text.Foreground(s.muted)
+	return ts
+}
+
+// TextInput returns text input styles with a muted placeholder.
+func TextInput() textinput.Styles {
+	s := get()
+	ts := textinput.DefaultStyles(s.tint.Dark)
+	ts.Cursor.Blink = false
+	ts.Focused.Prompt = lipgloss.NewStyle()
+	ts.Blurred.Prompt = lipgloss.NewStyle()
 	ts.Focused.Placeholder = ts.Focused.Placeholder.Foreground(s.muted)
 	ts.Blurred.Placeholder = ts.Blurred.Placeholder.Foreground(s.muted)
 	ts.Blurred.Text = ts.Blurred.Text.Foreground(s.muted)

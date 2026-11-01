@@ -70,6 +70,22 @@ func (c *Client) Projects() ([]Project, error) {
 	return out, nil
 }
 
+// IssueTypes lists the names of the issue types on the site, sorted.
+func (c *Client) IssueTypes() ([]string, error) {
+	var res []struct {
+		Name string `json:"name"`
+	}
+	if err := c.getJSON(c.jc.Get, "/issuetype", &res); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, t := range res {
+		out = append(out, t.Name)
+	}
+	slices.Sort(out)
+	return slices.Compact(out), nil
+}
+
 // CheckLogin checks that Jira accepts the login and token.
 func (c *Client) CheckLogin() error {
 	_, err := c.jc.Me()

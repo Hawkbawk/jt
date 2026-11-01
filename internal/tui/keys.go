@@ -83,5 +83,6 @@ func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
 var (
 	viewHelpKeys     = helpKeys{keys.scroll, keys.topBottom, keys.close}
 	commentsHelpKeys = helpKeys{keys.scroll, keys.topBottom, keys.write, keys.close}
+	searchFormHelp   = helpKeys{formMoveHelp, formChooseHelp, formPickHelp}
 	writingHelpKeys  = helpKeys{keys.send, keys.blur}
 )

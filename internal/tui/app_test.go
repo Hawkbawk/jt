@@ -30,6 +30,7 @@ type fakeBackend struct {
 	editFields     []jira.EditField
 	editErr        error
 	edited         [][]jira.EditField
+	issueTypes     []string
 	users          []jira.Option
 	searches       []string
 	searchErr      error
@@ -38,6 +39,8 @@ type fakeBackend struct {
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
 
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
+
+func (f *fakeBackend) IssueTypes() ([]string, error) { return f.issueTypes, nil }
 
 func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)

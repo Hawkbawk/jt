@@ -82,6 +82,16 @@ jt
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
+### Search
+
+`jt search` (or `jt s`) opens a search screen. Its form filters by project, issue type, sprint, issue key, and created and updated dates, and sorts by a field in either direction. The JQL it builds is shown under the form. Dates can be absolute (`2026-03-01`, `2026-03-01T09:30`) or relative (`-2d`).
+
+| Key | Action |
+| --- | --- |
+| `tab` / `shift+tab` | Next / previous field |
+| `←` / `→` | Change the option of the focused selector |
+| `enter` | On the project field, pick a project (`backspace` clears it) |
+
 Run `jt --version` to see the installed version and `jt --help` for usage.
 
 ## Settings

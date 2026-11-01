@@ -14,6 +14,7 @@ import (
 type Backend interface {
 	DefaultProject() string
 	Projects() ([]jira.Project, error)
+	IssueTypes() ([]string, error)
 	Board(project, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(iss jira.Issue) ([]jira.Transition, error)
