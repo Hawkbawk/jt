@@ -88,7 +88,7 @@ func TestSearchFormHasTwoColumns(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &fakeBackend{})
 	for _, line := range strings.Split(ansi.Strip(m.render()), "\n") {
-		if strings.Contains(line, "Issue key") && strings.Contains(line, "Sort by") {
+		if strings.Contains(line, "Issue key") && strings.Contains(line, "Order") {
 			return
 		}
 	}

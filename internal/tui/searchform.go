@@ -154,11 +154,11 @@ func (f *searchForm) basicColumns() (left, right []huh.Field) {
 				huh.NewOption("In an active sprint", jira.SprintActive),
 				huh.NewOption("Not in an active sprint", jira.SprintNotActive),
 			).Inline(true).Value(&v.sprint),
+	}
+	right = []huh.Field{
 		huh.NewSelect[bool]().Key(fieldOrder).Title("Order").
 			Options(huh.NewOption("Ascending", false), huh.NewOption("Descending", true)).
 			Inline(true).Value(&v.descending),
-	}
-	right = []huh.Field{
 		huh.NewSelect[jira.SortField]().Key(fieldSort).Title("Sort by").
 			Options(sortOptions...).Inline(true).Value(&v.sort),
 		f.timeInput(fieldCreated, "Created", &v.created),
