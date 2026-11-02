@@ -108,7 +108,10 @@ func (p *picker) show(cancellable bool) tea.Cmd {
 }
 
 func (p picker) fetch() tea.Cmd {
-	backend := p.backend
+	return loadProjects(p.backend)
+}
+
+func loadProjects(backend Backend) tea.Cmd {
 	return func() tea.Msg {
 		ps, err := backend.Projects()
 		return projectsLoadedMsg{projects: ps, err: err}

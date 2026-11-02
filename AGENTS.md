@@ -28,7 +28,9 @@ Two layers, wired together by the cobra commands in `cmd/`, plus `jt init`. `mai
 
 `internal/fakejira` is an in-memory, stateful implementation of `tui.Backend` seeded with demo data. The root command's `--fake` flag uses it, and only works in development builds, which have no `version` set by ldflags. `Execute` checks for the flag before loading settings, and theme changes go to `sessionSettings`, which saves nothing. When `tui.Backend` gains a method, implement it in the fake too.
 
-`system.go` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into `Model` as `copyText` and `openURL` so tests can stub them.
+`system.go` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into the shared `issueActions` as `copyText` and `openURL` so tests can stub them.
+
+Search uses one embedded huh form for basic filters or advanced JQL and a dynamically rebuilt results select. Result shortcuts use `Select.Hovered()` rather than the submitted value. `Backend.Search` accepts a context; replacing a search or quitting cancels it, and request IDs also reject already-queued stale replies.
 
 Quit behavior: `ctrl-d` exits immediately. `ctrl-c` sets `confirmQuit`, and a second `ctrl-c` exits.
 

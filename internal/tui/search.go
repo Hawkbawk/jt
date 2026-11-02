@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/styles"
 )
@@ -27,45 +25,31 @@ func loadIssueTypes(b Backend) tea.Cmd {
 	}
 }
 
-// SearchModel is the root model of the search screen. It shares its layout and
-// project picker with the board.
+// SearchModel is the search screen, with one huh form and the board's issue popups.
 type SearchModel struct {
 	layout
 	backend Backend
-	picker  picker
 	form    *searchForm
-	jql     *jqlEditor
-	// advanced is set while writing JQL rather than filling in the form.
-	advanced bool
-	now      func() time.Time
-
 	actions issueActions
 	results resultList
-	// resultsFocused is set while the issue list has the keys, not the form.
-	resultsFocused bool
-	searched       bool
-	searching      bool
-	searchErr      error
-	// searchID tells results apart so a slow, older search can't replace a
-	// newer one.
+
+	searched  bool
+	searching bool
+	searchErr error
+	// Cancellation saves work; the ID also rejects replies queued before cancellation.
 	searchID     int
 	lastJQL      string
 	cancelSearch context.CancelFunc
 }
 
-// NewSearch builds the search screen. The backend's default project is
-// selected to start with.
+// NewSearch builds the search screen with the backend's default project selected.
 func NewSearch(backend Backend, settings Settings) SearchModel {
-	m := SearchModel{
+	return SearchModel{
 		layout:  newLayout(settings),
 		backend: backend,
-		picker:  newPicker(backend),
 		form:    newSearchForm(backend.DefaultProject()),
-		jql:     newJQLEditor(),
 		actions: newIssueActions(backend),
-		now:     time.Now,
 	}
-	return m
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
@@ -76,24 +60,15 @@ func (m SearchModel) WithWarning(text string) SearchModel {
 
 // Init implements tea.Model.
 func (m SearchModel) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), m.form.focusCmd())
+	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend), m.form.form.Init())
 }
 
-func (m SearchModel) busy() bool {
-	return m.popupLoading() || m.otherBusy()
-}
+func (m SearchModel) busy() bool { return m.popupLoading() || m.searching }
 
-// otherBusy reports whether anything but the popup is waiting on the network.
-func (m SearchModel) otherBusy() bool {
-	return m.picker.loading() || m.searching
-}
-
-func (m SearchModel) restyle() SearchModel {
+func (m *SearchModel) restyle() tea.Cmd {
 	m.layout.restyle()
-	m.picker.restyle()
 	m.form.restyle()
-	m.jql.restyle()
-	return m
+	return m.form.update(nil)
 }
 
 // Update implements tea.Model.
@@ -104,22 +79,27 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.resize(msg)
-		m.picker.setSize(m.width, m.bodyHeight())
-		return m, nil
+		m.results.resize(m.width-2, m.bodyHeight())
+		m.form.resize(m.width-2, m.bodyHeight())
+		cmd := m.form.update(msg)
+		return m, cmd
 
 	case ThemeChangedMsg:
-		return m.restyle(), nil
+		cmd := m.restyle()
+		return m, cmd
 
 	case themeSelectedMsg:
 		cmd := m.selectTheme(msg)
-		return m.restyle(), cmd
+		cmd = tea.Batch(cmd, m.restyle())
+		return m, cmd
 
 	case themeSavedMsg:
 		m.onThemeSaved(msg)
 		return m, nil
 
 	case spinner.TickMsg:
-		return m, m.tick(msg, m.busy())
+		cmd := m.tick(msg, m.busy())
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -130,72 +110,52 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.form.setIssueTypes(msg.types)
-		return m, nil
+		cmd := m.form.update(nil)
+		return m, cmd
 
-	case submitSearchMsg:
-		cmd := m.submit()
+	case projectsLoadedMsg:
+		if msg.err != nil {
+			m.status = styles.Error().Render("loading projects: " + msg.err.Error())
+			return m, nil
+		}
+		m.form.setProjects(msg.projects)
+		cmd := m.form.update(nil)
 		return m, cmd
 
 	case searchLoadedMsg:
-		m.applyResults(msg)
-		return m, nil
+		cmd := m.applyResults(msg)
+		return m, cmd
 
 	case actionDoneMsg:
 		m.status = msg.display()
 		return m, nil
-
-	case openProjectsMsg:
-		cmd := m.runWithSpinner(m.picker.show(true))
-		return m, cmd
-
-	case projectSelectedMsg:
-		m.form.setProject(msg.key)
-		return m, nil
 	}
-	cmd := tea.Batch(m.picker.update(msg), m.forwardMsg(msg))
+	cmd := m.forwardMsg(msg)
 	return m, cmd
 }
 
-// forwardMsg gives messages nothing above claimed, such as cursor blinks, to
-// the popup or the form.
 func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
 	if m.popup != nil {
-		return m.forwardToPopup(msg, m.otherBusy())
-	}
-	if m.picker.open {
-		return nil
-	}
-	return m.focused(msg)
-}
-
-// focused gives msg to whichever mode is showing.
-func (m *SearchModel) focused(msg tea.Msg) tea.Cmd {
-	switch {
-	case m.resultsFocused:
-		return nil
-	case m.advanced:
-		return m.jql.update(msg)
+		return m.forwardToPopup(msg, m.searching)
 	}
 	return m.form.update(msg)
 }
 
-// currentJQL is the JQL the form or the editor stands for.
 func (m SearchModel) currentJQL() (string, error) {
-	if m.advanced {
-		jql := strings.TrimSpace(m.jql.value())
+	if m.form.advanced {
+		jql := strings.TrimSpace(m.form.jql)
 		if jql == "" {
 			return "", errors.New("write some JQL to search with")
 		}
 		return jql, nil
 	}
-	q, err := m.form.query(m.now())
+	q, err := m.form.query(m.form.now())
 	if err != nil {
 		return "", err
 	}
 	return q.String(), nil
 }
 
-// submit runs the search the form or the editor describes.
 func (m *SearchModel) submit() tea.Cmd {
 	jql, err := m.currentJQL()
 	if err != nil {
@@ -206,7 +166,6 @@ func (m *SearchModel) submit() tea.Cmd {
 	return m.search(jql, "")
 }
 
-// search runs jql and keeps the cursor on focusKey when that issue is found.
 func (m *SearchModel) search(jql, focusKey string) tea.Cmd {
 	m.stopSearch()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -223,44 +182,47 @@ func (m *SearchModel) stopSearch() {
 	}
 }
 
-// applyResults shows a finished search and moves to the issues it found.
-func (m *SearchModel) applyResults(msg searchLoadedMsg) {
+func (m *SearchModel) applyResults(msg searchLoadedMsg) tea.Cmd {
 	if msg.id != m.searchID {
-		return
+		return nil
 	}
 	m.stopSearch()
-	m.searching, m.searched = false, true
+	m.searching, m.searched, m.searchErr = false, true, msg.err
 	if msg.err != nil {
-		m.searchErr = msg.err
+		m.status = styles.Error().Render("searching: " + msg.err.Error())
 		m.results.set(nil, "")
-		return
+	} else {
+		m.results.set(msg.issues, msg.focusKey)
 	}
-	m.results.set(msg.issues, msg.focusKey)
-	if len(msg.issues) > 0 {
-		m.focusResults()
+	focus := m.firstField()
+	if len(m.results.issues) > 0 {
+		focus = fieldResults
 	}
+	return m.form.build(&m.results, m.resultsMessage(), focus)
 }
 
-func (m *SearchModel) focusResults() {
-	m.resultsFocused = true
-	m.form.blur()
-	m.jql.blur()
-}
-
-// focusInput moves the keys back to the form or editor.
-func (m *SearchModel) focusInput() tea.Cmd {
-	m.resultsFocused = false
-	if m.advanced {
-		return m.jql.focus()
+func (m SearchModel) resultsMessage() string {
+	switch {
+	case m.searchErr != nil:
+		return "Error: " + m.searchErr.Error()
+	case m.searched && len(m.results.issues) == 0:
+		return "No issues found."
 	}
-	return m.form.focusCmd()
+	return ""
 }
 
-// finishEdit closes the popup and searches again after a successful change, so
-// the list shows it. A failure goes back to the popup to show.
+func (m SearchModel) firstField() string {
+	if m.form.advanced {
+		return fieldJQL
+	}
+	return fieldProject
+}
+
+func (m SearchModel) resultsFocused() bool { return m.form.focused() == fieldResults }
+
 func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	if e.err != nil {
-		cmd := m.forwardToPopup(msg, m.otherBusy())
+		cmd := m.forwardToPopup(msg, m.searching)
 		return m, cmd
 	}
 	m.popup = nil
@@ -269,20 +231,14 @@ func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// toggleMode switches between the form and the JQL editor. Entering the editor
-// with nothing written starts from the JQL the form stands for.
 func (m *SearchModel) toggleMode() tea.Cmd {
-	m.advanced = !m.advanced
-	if !m.advanced {
-		m.jql.blur()
-		return m.form.focusCmd()
-	}
-	if strings.TrimSpace(m.jql.value()) == "" {
-		if q, err := m.form.query(m.now()); err == nil {
-			m.jql.setValue(q.String())
+	m.form.advanced = !m.form.advanced
+	if m.form.advanced && strings.TrimSpace(m.form.jql) == "" {
+		if q, err := m.form.query(m.form.now()); err == nil {
+			m.form.jql = q.String()
 		}
 	}
-	return m.jql.focus()
+	return m.form.build(&m.results, m.resultsMessage(), m.firstField())
 }
 
 func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -293,46 +249,42 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	switch {
-	case m.picker.open:
-		return m, m.picker.update(msg)
-	case m.popup != nil:
-		cmd := m.forwardToPopup(msg, m.otherBusy())
+	if m.popup != nil {
+		cmd := m.forwardToPopup(msg, m.searching)
 		return m, cmd
 	}
-	if key.Matches(msg, modeKey) {
-		m.resultsFocused = false
+	switch {
+	case key.Matches(msg, modeKey):
 		cmd := m.toggleMode()
 		return m, cmd
-	}
-	if m.resultsFocused {
-		return m.handleResultsKey(msg)
-	}
-	switch {
-	case key.Matches(msg, keys.accept, keys.send) && m.advanced:
+	case key.Matches(msg, keys.send):
 		cmd := m.submit()
 		return m, cmd
-	case key.Matches(msg, formNextKey) && len(m.results.issues) > 0 && (m.advanced || m.form.atEnd()):
-		m.focusResults()
-		return m, nil
+	case m.resultsFocused():
+		return m.handleResultsKey(msg)
+	case key.Matches(msg, keys.accept) && (m.form.advanced || m.form.focused() == fieldUpdatedTo):
+		cmd := m.submit()
+		return m, cmd
+	case key.Matches(msg, keys.nextTab) && len(m.results.issues) == 0 &&
+		(m.form.advanced || m.form.focused() == fieldUpdatedTo):
+		cmd := m.form.focus(m.firstField())
+		return m, cmd
 	}
-	return m, m.focused(msg)
+	cmd := m.form.update(msg)
+	return m, cmd
 }
 
 func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	sel := m.results.selected()
 	switch {
 	case key.Matches(msg, keys.quit):
 		m.stopSearch()
 		return m, tea.Quit
-	case m.results.move(msg):
-		return m, nil
-	case key.Matches(msg, keys.back):
-		cmd := m.focusInput()
+	case key.Matches(msg, keys.blur, keys.nextTab) || msg.String() == "/":
+		cmd := m.form.focus(m.firstField())
 		return m, cmd
 	case key.Matches(msg, keys.refresh) && m.lastJQL != "" && !m.searching:
 		focusKey := ""
-		if sel != nil {
+		if sel := m.results.selected(); sel != nil {
 			focusKey = sel.Key
 		}
 		m.status = ""
@@ -341,84 +293,51 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	case key.Matches(msg, keys.theme):
 		cmd := m.openPopup(newThemePopup(), nil)
 		return m, cmd
-	case sel == nil:
-		return m, nil
 	}
-	p, cmd := m.actions.handle(msg, *sel)
-	if p != nil {
-		cmd = m.openPopup(p, cmd)
-		return m, cmd
+	if sel := m.results.selected(); sel != nil {
+		if key.Matches(msg, keys.accept) {
+			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
+		}
+		p, cmd := m.actions.handle(msg, *sel)
+		if p != nil {
+			cmd = m.openPopup(p, cmd)
+			return m, cmd
+		}
+		if cmd != nil {
+			return m, cmd
+		}
 	}
+	cmd := m.form.update(msg)
 	return m, cmd
 }
 
 // View implements tea.Model.
-func (m SearchModel) View() tea.View {
-	return m.withView(m.render())
-}
+func (m SearchModel) View() tea.View { return m.withView(m.render()) }
 
 func (m SearchModel) render() string {
 	if m.width == 0 {
 		return ""
 	}
-	top := m.formView()
-	help := searchFormHelp
-	switch {
-	case m.resultsFocused:
+	help := helpKeys(append(m.form.form.KeyBinds(), formSearchHelp, modeKey))
+	if m.form.advanced {
+		help = append(help, jqlSearchHelp)
+	}
+	if m.resultsFocused() {
 		help = searchResultsHelp
-	case m.advanced:
-		help = searchJQLHelp
 	}
-	if m.advanced {
-		top = m.jql.view(m.width - 2)
-	}
-	top = lipgloss.NewStyle().Padding(1, 1, 0).Render(top)
-	rest := max(0, m.bodyHeight()-lipgloss.Height(top))
-	body := lipgloss.NewStyle().Width(m.width).Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).
-		Render(lipgloss.JoinVertical(lipgloss.Left, top, m.resultsView(m.width-2, rest)))
-	switch {
-	case m.picker.open:
-		body = overlay(body, m.picker.view(m.spinner.View()), m.width)
-	case m.popup != nil:
+	body := lipgloss.NewStyle().Padding(0, 1).Width(m.width).MaxWidth(m.width).
+		Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).Render(m.form.form.View())
+	if m.popup != nil {
 		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left,
-		m.headerView([]string{"search", styles.Dim().Render(m.modeName())}), body, m.footerView(help))
-}
-
-// resultsView draws the issues found in the height left under the form.
-func (m SearchModel) resultsView(width, height int) string {
-	var body string
-	switch {
-	case m.searching:
-		body = m.spinner.View() + " Searching…"
-	case m.searchErr != nil:
-		body = styles.Error().Render(ansi.Truncate("Error: "+m.searchErr.Error(), width, "…"))
-	case !m.searched:
-		return ""
-	case len(m.results.issues) == 0:
-		body = styles.Dim().Render("No issues found.")
-	default:
-		return lipgloss.NewStyle().Padding(0, 1).Render(m.results.view(width, height, m.resultsFocused))
+	mode := "basic"
+	if m.form.advanced {
+		mode = "advanced"
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Render(body)
-}
-
-func (m SearchModel) modeName() string {
-	if m.advanced {
-		return "advanced"
+	parts := []string{"search", styles.Dim().Render(mode)}
+	if m.searching {
+		parts = append(parts, m.spinner.View()+" Searching…")
 	}
-	return "basic"
-}
-
-// formView draws the form above a preview of the JQL it stands for.
-func (m SearchModel) formView() string {
-	inner := m.width - 2
-	var preview string
-	if q, err := m.form.query(m.now()); err != nil {
-		preview = styles.Error().Render(ansi.Truncate("Error: "+err.Error(), inner, "…"))
-	} else {
-		preview = styles.Dim().Render(ansi.Truncate("JQL: "+q.String(), inner, "…"))
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, m.form.view(inner), "", preview)
+	content := lipgloss.JoinVertical(lipgloss.Left, m.headerView(parts), body, m.footerView(help))
+	return lipgloss.NewStyle().MaxWidth(m.width).MaxHeight(m.height).Render(content)
 }
