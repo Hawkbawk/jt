@@ -1,0 +1,19 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Prepare Nix development environment
+        run: |
+          nix develop --command go version
+          nix develop --command golangci-lint version
+          nix develop --command go mod download
