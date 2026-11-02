@@ -8,7 +8,11 @@ This file provides guidance to agents when working with code in this repository.
 
 ## Commands
 
-The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `GOFLAGS=-timeout=10s`.
+The Nix flake provides the dev shell and sets `GOFLAGS=-timeout=10s`.
+
+Agents must run Go tools through `nix develop --command <command>` so they use the tooling versions pinned by `flake.lock`, rather than installing tools separately or using host versions. For example, run `nix develop --command golangci-lint run` and `nix develop --command go test ./...`. Run lint locally before handing off Go changes; do not rely on CI to discover lint errors.
+
+`.github/workflows/copilot-setup-steps.yml` installs Nix and preloads the development shell and Go dependencies before Copilot cloud agent sessions. It takes effect once merged into the default branch. The setup step does not keep later agent commands inside the shell, so continue to use `nix develop --command` for each invocation.
 
 - Build/run: `go build ./...` / `go run .`
 - Test all: `go test ./...`
