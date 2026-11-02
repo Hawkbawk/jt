@@ -50,10 +50,14 @@ type resultList struct {
 
 func (l *resultList) restyle() {
 	l.table = l.table.
-		WithBaseStyle(lipgloss.NewStyle()).
+		WithBaseStyle(lipgloss.NewStyle().BorderForeground(styles.Grid())).
 		HeaderStyle(styles.ColumnHeader().Padding(0)).
 		HighlightStyle(lipgloss.NewStyle().Bold(true).Foreground(styles.Highlight())).
-		Border(table.Border{}).
+		Border(table.Border{
+			Bottom: "─", InnerDivider: "│", InnerJunction: "┼",
+			TopJunction: "┬", BottomJunction: "┴", LeftJunction: "├", RightJunction: "┤",
+		}).
+		WithBorderForeground(styles.Grid()).
 		WithOuterBorder(false).
 		Focused(true)
 }
@@ -96,19 +100,22 @@ func (l *resultList) resize(width, height int) {
 }
 
 // columns splits the width by share, with a floor so short columns stay
-// readable. Summary gets the largest share and absorbs the remainder.
+// readable. Summary gets the largest share and absorbs the remainder. The
+// grid dividers between columns take up space too, so they come off first.
 func (l resultList) columns() []table.Column {
-	share := func(pct, floor int) int { return max(floor, l.width*pct/100) }
+	const cols = 5
+	width := l.width - (cols - 1)
+	share := func(pct, floor int) int { return max(floor, width*pct/100) }
 	key, assignee := share(16, 12), share(15, 16)
 	status, typ := share(13, 14), share(10, 10)
-	summary := max(10, l.width-key-typ-status-assignee)
-	pad := lipgloss.NewStyle().PaddingRight(1)
+	summary := max(10, width-key-typ-status-assignee)
+	pad := lipgloss.NewStyle().Padding(0, 1)
 	return []table.Column{
 		table.NewColumn(colKey, "Key", key).WithStyle(pad),
 		table.NewColumn(colType, "Type", typ).WithStyle(pad),
 		table.NewColumn(colStatus, "Status", status).WithStyle(pad),
 		table.NewColumn(colAssignee, "Assignee", assignee).WithStyle(pad),
-		table.NewColumn(colSummary, "Summary", summary),
+		table.NewColumn(colSummary, "Summary", summary).WithStyle(pad),
 	}
 }
 

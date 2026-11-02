@@ -27,8 +27,8 @@ type set struct {
 	columnHeader, focusedColumnHeader       lipgloss.Style
 	card, selectedCard, popup, input        lipgloss.Style
 
-	highlight, muted color.Color
-	markdown         ansi.StyleConfig
+	highlight, muted, grid color.Color
+	markdown               ansi.StyleConfig
 }
 
 var current atomic.Pointer[set]
@@ -74,6 +74,7 @@ func build(t *tint.Tint) *set {
 		header:              lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		highlight:           highlight,
 		muted:               muted,
+		grid:                fade[20],
 		markdown:            glamourtint.StyleConfig(t),
 		columnHeader:        columnHeader,
 		focusedColumnHeader: columnHeader.Foreground(highlight),
@@ -139,6 +140,9 @@ func Highlight() color.Color { return get().highlight }
 
 // Muted is the color of secondary text.
 func Muted() color.Color { return get().muted }
+
+// Grid is the color of table grid lines, a faint step from the background.
+func Grid() color.Color { return get().grid }
 
 // Help returns a help footer drawn in the dim style.
 func Help() help.Model {
