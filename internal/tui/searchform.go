@@ -9,7 +9,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -37,11 +36,9 @@ var (
 	resultViewHelp = key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "view"))
 )
 
-const (
-	// roomyHeight is the form height the columns need with a blank line between
-	// fields. Shorter forms drop the blank lines.
-	roomyHeight = 14
-)
+// maxFormHeight is the form height the columns need, with a blank line between
+// fields and room for an error footer.
+const maxFormHeight = 14
 
 type searchValues struct {
 	project, issueType string
@@ -67,7 +64,6 @@ type searchForm struct {
 	issueTypes []string
 	width      int
 	height     int
-	dense      bool
 }
 
 func newSearchForm(project string) *searchForm {
@@ -231,26 +227,18 @@ func (f *searchForm) onLastField() bool {
 	return f.form.GetFocusedField() == f.fields[len(f.fields)-1]
 }
 
-func (f *searchForm) restyle() { f.form.WithTheme(f.theme()) }
-
-func (f *searchForm) theme() huh.Theme {
+func (f *searchForm) restyle() {
 	base := styles.FormTheme()
-	return huh.ThemeFunc(func(dark bool) *huh.Styles {
+	f.form.WithTheme(huh.ThemeFunc(func(dark bool) *huh.Styles {
 		s := base.Theme(dark)
-		if f.dense {
-			s.FieldSeparator = lipgloss.NewStyle().SetString("\n")
-		}
+		s.Group.Base = s.Group.Base.PaddingTop(1)
 		return s
-	})
+	}))
 }
 
 func (f *searchForm) resize(width, height int) {
 	// huh subtracts borders and prompts from these sizes; clip smaller windows in render.
 	f.width, f.height = max(16, width), max(4, height)
-	if dense := f.height < roomyHeight; dense != f.dense {
-		f.dense = dense
-		f.restyle()
-	}
 	f.form.WithWidth(f.width)
 	if !f.advanced {
 		f.form.WithHeight(f.height)

@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	timeout   = 15 * time.Second
-	pageSize  = 100
-	maxIssues = 1000
+	timeout           = 15 * time.Second
+	pageSize          = 100
+	boardIssuesLimit  = 1000
+	searchIssuesLimit = 100
 
 	jiraTimeLayout = "2006-01-02T15:04:05.000-0700"
 	displayLayout  = "2006-01-02 15:04"
@@ -230,7 +231,7 @@ func (f issueFields) toIssue() Issue {
 
 func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 	var out []Issue
-	for start := 0; start < maxIssues; start += pageSize {
+	for start := 0; start < boardIssuesLimit; start += pageSize {
 		path := fmt.Sprintf("/board/%d/issue?jql=%s&fields=summary,status,assignee,issuetype,priority&startAt=%d&maxResults=%d",
 			boardID, url.QueryEscape(jql), start, pageSize)
 		var page struct {
@@ -255,9 +256,9 @@ func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 func (c *Client) Search(jql string) ([]Issue, error) {
 	var out []Issue
 	token := ""
-	for len(out) < maxIssues {
+	for len(out) < searchIssuesLimit {
 		path := fmt.Sprintf("/search/jql?jql=%s&fields=summary,status,assignee,issuetype,priority&maxResults=%d",
-			url.QueryEscape(jql), pageSize)
+			url.QueryEscape(jql), min(pageSize, searchIssuesLimit-len(out)))
 		if token != "" {
 			path += "&nextPageToken=" + url.QueryEscape(token)
 		}
@@ -276,7 +277,7 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 		}
 		token = page.NextPageToken
 	}
-	return out[:min(len(out), maxIssues)], nil
+	return out, nil
 }
 
 // Issue fetches an issue with its description and all comments.

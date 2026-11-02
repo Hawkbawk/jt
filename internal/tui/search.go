@@ -94,7 +94,7 @@ func (m SearchModel) formHeight() int {
 	if !m.searched {
 		return m.mainHeight()
 	}
-	return min(roomyHeight, m.mainHeight()/2)
+	return min(maxFormHeight, m.mainHeight()/2)
 }
 
 // fit sizes the form and the table to the body.
