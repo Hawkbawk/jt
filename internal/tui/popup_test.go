@@ -22,7 +22,7 @@ func detailBackend() *fakeBackend {
 	}}
 }
 
-func loadedDetailModel(t *testing.T) Model {
+func loadedDetailModel(t *testing.T) BoardModel {
 	t.Helper()
 	fb := detailBackend()
 	m := newTestModel(t, "TEST", fb)
@@ -104,7 +104,7 @@ func TestStaleIssueLoadIsIgnored(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "v")
 	next, _ := m.Update(issueLoadedMsg{key: "OTHER-1", detail: &jira.IssueDetail{}})
-	if !next.(Model).popup.(*textPopup).loading() {
+	if !next.(BoardModel).popup.(*textPopup).loading() {
 		t.Fatal("popup accepted an issue it did not request")
 	}
 }

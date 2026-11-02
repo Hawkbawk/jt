@@ -32,7 +32,7 @@ var (
 	cfgErr   error
 	themeErr error
 
-	// fake runs the board on in-memory demo data. It's only allowed in
+	// fake runs the screens on in-memory demo data. It's only allowed in
 	// development builds.
 	fake bool
 )
@@ -49,9 +49,9 @@ Environment:
 }
 
 func init() {
-	rootCmd.Flags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
+	rootCmd.PersistentFlags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
 	if version != "" {
-		_ = rootCmd.Flags().MarkHidden("fake")
+		_ = rootCmd.PersistentFlags().MarkHidden("fake")
 	}
 }
 
@@ -90,7 +90,7 @@ func fakeRequested(args []string) bool {
 	if rootCmd.ParseFlags(args) != nil {
 		return false
 	}
-	on, _ := rootCmd.Flags().GetBool("fake")
+	on, _ := rootCmd.PersistentFlags().GetBool("fake")
 	return on
 }
 
@@ -100,30 +100,38 @@ type sessionSettings struct{}
 func (sessionSettings) SaveTheme(string) error { return nil }
 
 func runBoard(*cobra.Command, []string) error {
-	var (
-		backend  tui.Backend
-		settings tui.Settings
-	)
-	if fake {
-		if version != "" {
-			return errors.New("the --fake flag is only available in development builds")
-		}
-		backend, settings = fakejira.New(), sessionSettings{}
-	} else {
-		if cfgErr != nil {
-			return cfgErr
-		}
-		client, err := connect(cfg.Jira)
-		if err != nil {
-			return err
-		}
-		backend, settings = client, cfg
+	backend, settings, err := openBackend()
+	if err != nil {
+		return err
 	}
-
 	m := tui.New(backend, settings)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
+	return run(m)
+}
+
+// openBackend returns the Jira backend and settings the screens run on: demo
+// data with --fake, otherwise the connection from the settings file.
+func openBackend() (tui.Backend, tui.Settings, error) {
+	if fake {
+		if version != "" {
+			return nil, nil, errors.New("the --fake flag is only available in development builds")
+		}
+		return fakejira.New(), sessionSettings{}, nil
+	}
+	if cfgErr != nil {
+		return nil, nil, cfgErr
+	}
+	client, err := connect(cfg.Jira)
+	if err != nil {
+		return nil, nil, err
+	}
+	return client, cfg, nil
+}
+
+// run shows m until it quits, following changes to the terminal's theme.
+func run(m tea.Model) error {
 	p := tea.NewProgram(m)
 	// Send blocks until the program reads the message, and a tint can change
 	// from inside Update, so it runs on its own goroutine.

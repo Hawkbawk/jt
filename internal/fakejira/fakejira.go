@@ -62,6 +62,18 @@ func (b *Backend) Projects() ([]jira.Project, error) {
 	return out, nil
 }
 
+// IssueTypes lists the issue types in use, sorted.
+func (b *Backend) IssueTypes() ([]string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []string
+	for _, i := range b.issues {
+		out = append(out, i.Type)
+	}
+	slices.Sort(out)
+	return slices.Compact(out), nil
+}
+
 // Board loads the project's board, narrowed by filterJQL when set.
 func (b *Backend) Board(project, filterJQL string) (*jira.Board, error) {
 	b.mu.Lock()

@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -21,9 +23,10 @@ import (
 )
 
 const (
-	timeout   = 15 * time.Second
-	pageSize  = 100
-	maxIssues = 1000
+	timeout           = 15 * time.Second
+	pageSize          = 100
+	boardIssuesLimit  = 1000
+	searchIssuesLimit = 100
 
 	jiraTimeLayout = "2006-01-02T15:04:05.000-0700"
 	displayLayout  = "2006-01-02 15:04"
@@ -68,6 +71,22 @@ func (c *Client) Projects() ([]Project, error) {
 	}
 	slices.SortFunc(out, func(a, b Project) int { return strings.Compare(a.Key, b.Key) })
 	return out, nil
+}
+
+// IssueTypes lists the names of the issue types on the site, sorted.
+func (c *Client) IssueTypes() ([]string, error) {
+	var res []struct {
+		Name string `json:"name"`
+	}
+	if err := c.getJSON(c.jc.Get, "/issuetype", &res); err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, t := range res {
+		out = append(out, t.Name)
+	}
+	slices.Sort(out)
+	return slices.Compact(out), nil
 }
 
 // CheckLogin checks that Jira accepts the login and token.
@@ -212,7 +231,7 @@ func (f issueFields) toIssue() Issue {
 
 func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 	var out []Issue
-	for start := 0; start < maxIssues; start += pageSize {
+	for start := 0; start < boardIssuesLimit; start += pageSize {
 		path := fmt.Sprintf("/board/%d/issue?jql=%s&fields=summary,status,assignee,issuetype,priority&startAt=%d&maxResults=%d",
 			boardID, url.QueryEscape(jql), start, pageSize)
 		var page struct {
@@ -228,6 +247,35 @@ func (c *Client) boardIssues(boardID int, jql string) ([]Issue, error) {
 		if len(page.Issues) == 0 || start+len(page.Issues) >= page.Total {
 			break
 		}
+	}
+	return out, nil
+}
+
+// Search returns the issues matching jql, up to a limit, in the order the JQL
+// asks for.
+func (c *Client) Search(jql string) ([]Issue, error) {
+	var out []Issue
+	token := ""
+	for len(out) < searchIssuesLimit {
+		path := fmt.Sprintf("/search/jql?jql=%s&fields=summary,status,assignee,issuetype,priority&maxResults=%d",
+			url.QueryEscape(jql), min(pageSize, searchIssuesLimit-len(out)))
+		if token != "" {
+			path += "&nextPageToken=" + url.QueryEscape(token)
+		}
+		var page struct {
+			Issues        []issueFields `json:"issues"`
+			NextPageToken string        `json:"nextPageToken"`
+		}
+		if err := c.getJSON(c.jc.Get, path, &page); err != nil {
+			return nil, err
+		}
+		for _, f := range page.Issues {
+			out = append(out, f.toIssue())
+		}
+		if len(page.Issues) == 0 || page.NextPageToken == "" {
+			break
+		}
+		token = page.NextPageToken
 	}
 	return out, nil
 }
@@ -346,9 +394,23 @@ func (c *Client) getJSON(get getFunc, path string, out any) error {
 	if res.StatusCode != http.StatusOK {
 		var body jcli.Errors
 		_ = json.NewDecoder(res.Body).Decode(&body)
-		return &jcli.ErrUnexpectedResponse{Body: body, Status: res.Status, StatusCode: res.StatusCode}
+		return responseError(res, body)
 	}
 	return json.NewDecoder(res.Body).Decode(out)
+}
+
+// responseError turns a failed response into a one-line error. jira-cli's
+// ErrUnexpectedResponse renders as a multi-line "Error:" block, which reads
+// badly once the UI adds its own prefix.
+func responseError(res *http.Response, body jcli.Errors) error {
+	msgs := slices.Clone(body.ErrorMessages)
+	for _, k := range slices.Sorted(maps.Keys(body.Errors)) {
+		msgs = append(msgs, k+": "+body.Errors[k])
+	}
+	if len(msgs) == 0 {
+		return errors.New(res.Status)
+	}
+	return errors.New(strings.Join(msgs, "; "))
 }
 
 // toMarkdown converts an ADF document (cloud) or Jira wiki markup (server) to markdown.

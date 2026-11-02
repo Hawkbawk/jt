@@ -1,6 +1,6 @@
 # jt
 
-`jt` is a terminal kanban board for Jira. It shows the issues for a project as columns on a board, and lets you view, comment on, move, and reassign them without leaving the terminal.
+`jt` is a terminal UI for Jira. It shows a project's issues as a kanban board, and has a search screen for finding issues across projects. From either one you can view, comment on, move, assign and edit issues without leaving the terminal.
 
 `jt` works with Jira Cloud. Run `jt init` once to connect it, and it keeps the connection in its own settings file and your API token in your OS keyring.
 
@@ -81,6 +81,21 @@ jt
 ```
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
+
+### Search
+
+`jt search` (or `jt s`) opens a search screen. Fill in any of the filters and press `ctrl+s` to see matching issues below the form (up to 100). You can filter by issue key, project, issue type, sprint, and created or updated date. Dates can be a relative time like `-2d`, an absolute date like `2026-03-01`, or a range like `2026-01-01..2026-02-01`. Results can be sorted by a field in either direction.
+
+If the filters aren't enough, press `ctrl+t` to write JQL directly. Switching with an empty box starts you from the JQL the form would have built.
+
+| Key | Action |
+| --- | --- |
+| `tab` / `shift+tab` | Next / previous field |
+| `ctrl+s` | Run the search |
+| `ctrl+t` | Switch between basic filters and JQL |
+| `ctrl+o` | Move between the form and the results |
+
+In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `c` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser and `r` to run the search again. `esc` goes back to the form.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
 

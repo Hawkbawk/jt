@@ -9,7 +9,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
-func filterModel(t *testing.T) (Model, *fakeBackend) {
+func filterModel(t *testing.T) (BoardModel, *fakeBackend) {
 	t.Helper()
 	fb := &fakeBackend{board: testBoard()}
 	fb.board.QuickFilters = []jira.Filter{{Name: "Only Bugs", JQL: "type = Bug"}, {Name: "Recent", JQL: "updated >= -7d"}}

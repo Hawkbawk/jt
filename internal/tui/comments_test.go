@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func openComments(t *testing.T, fb *fakeBackend) Model {
+func openComments(t *testing.T, fb *fakeBackend) BoardModel {
 	t.Helper()
 	m := newTestModel(t, "TEST", fb)
 	m.actions.md = plainMarkdown

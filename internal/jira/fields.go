@@ -144,7 +144,7 @@ func (c *Client) Edit(key string, fields []EditField) error {
 	if res.StatusCode != http.StatusNoContent {
 		var errs jcli.Errors
 		_ = json.NewDecoder(res.Body).Decode(&errs)
-		return &jcli.ErrUnexpectedResponse{Body: errs, Status: res.Status, StatusCode: res.StatusCode}
+		return responseError(res, errs)
 	}
 	return nil
 }

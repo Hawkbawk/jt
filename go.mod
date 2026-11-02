@@ -13,6 +13,8 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/evertras/bubble-table v0.23.0
+	github.com/go-faker/faker/v4 v4.12.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/lrstanley/bubbletint/glamourtint/v2 v2.1.0-beta.0
 	github.com/lrstanley/bubbletint/sources/v2 v2.0.0-20261026014704-cd0ef701c1ac

@@ -300,9 +300,13 @@ func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
 
 // newForm puts fields in a themed form that leaves ctrl+c to the app.
 func newForm(fields ...huh.Field) *huh.Form {
+	return newGroupsForm(huh.NewGroup(fields...))
+}
+
+func newGroupsForm(groups ...*huh.Group) *huh.Form {
 	km := huh.NewDefaultKeyMap()
 	km.Quit = key.NewBinding(key.WithDisabled())
-	return huh.NewForm(huh.NewGroup(fields...)).
+	return huh.NewForm(groups...).
 		WithTheme(styles.FormTheme()).
 		WithKeyMap(km).
 		WithShowHelp(false)
