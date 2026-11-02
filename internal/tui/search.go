@@ -76,7 +76,7 @@ func (m *SearchModel) restyle() tea.Cmd {
 
 func (m SearchModel) resultsFocused() bool { return m.inResults && m.searched }
 
-// mainHeight is the height left for the form, or for the results table and its
+// mainHeight is the height left for the form and the results table with its
 // title, after the message under them.
 func (m SearchModel) mainHeight() int {
 	h := m.bodyHeight()
@@ -86,14 +86,19 @@ func (m SearchModel) mainHeight() int {
 	return max(0, h)
 }
 
+// formHeight is all of the body until there are results to share it with.
+func (m SearchModel) formHeight() int {
+	if !m.searched {
+		return m.mainHeight()
+	}
+	return min(roomyHeight, m.mainHeight()/2)
+}
+
 // fit sizes the form and the table to the body.
 func (m *SearchModel) fit() {
-	w, h := max(0, m.width-2), m.mainHeight()
-	if m.resultsFocused() {
-		m.results.resize(w, h-1)
-		return
-	}
-	m.form.resize(w, h)
+	w, formH := max(0, m.width-2), m.formHeight()
+	m.form.resize(w, formH)
+	m.results.resize(w, m.mainHeight()-formH-1)
 }
 
 // Update implements tea.Model.
@@ -220,7 +225,7 @@ func (m *SearchModel) applyResults(msg searchLoadedMsg) {
 	} else {
 		m.results.set(msg.issues)
 	}
-	m.inResults = true
+	m.focusResults()
 	m.fit()
 }
 
@@ -234,10 +239,14 @@ func (m SearchModel) resultsMessage() string {
 	return ""
 }
 
-// editSearch goes from the results back to the form.
-func (m *SearchModel) editSearch() {
+func (m *SearchModel) focusResults() {
+	m.inResults = true
+	m.form.form.GetFocusedField().Blur()
+}
+
+func (m *SearchModel) focusForm() tea.Cmd {
 	m.inResults = false
-	m.fit()
+	return m.form.form.GetFocusedField().Focus()
 }
 
 func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
@@ -279,6 +288,16 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, modeKey):
 		cmd := m.toggleMode()
 		return m, cmd
+	case m.searched && !m.inResults && key.Matches(msg, keys.nextTab) && m.form.onLastField():
+		m.focusResults()
+		return m, nil
+	case key.Matches(msg, focusKey) && m.searched:
+		if m.inResults {
+			cmd := m.focusForm()
+			return m, cmd
+		}
+		m.focusResults()
+		return m, nil
 	case key.Matches(msg, keys.send):
 		cmd := m.sendKey()
 		return m, cmd
@@ -306,9 +325,9 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	switch {
 	case key.Matches(msg, keys.quit):
 		return m, tea.Quit
-	case key.Matches(msg, keys.blur, keys.nextTab) || msg.String() == "/":
-		m.editSearch()
-		return m, nil
+	case key.Matches(msg, keys.back, keys.nextTab):
+		cmd := m.focusForm()
+		return m, cmd
 	case key.Matches(msg, keys.top, keys.bottom):
 		m.results.move(key.Matches(msg, keys.bottom))
 		return m, nil
@@ -345,14 +364,12 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 func (m SearchModel) View() tea.View { return m.withView(m.render()) }
 
 func (m SearchModel) bodyView() string {
-	var parts []string
-	h := m.mainHeight()
+	h := m.formHeight()
 	box := lipgloss.NewStyle().Height(h).MaxHeight(h)
-	if m.resultsFocused() {
+	parts := []string{box.Render(m.form.form.View())}
+	if m.searched {
 		title := styles.Title().Render(fmt.Sprintf("Results (%d)", len(m.results.issues)))
-		parts = append(parts, box.Render(lipgloss.JoinVertical(lipgloss.Left, title, m.results.view())))
-	} else {
-		parts = append(parts, box.Render(m.form.form.View()))
+		parts = append(parts, title, m.results.view())
 	}
 	if msg := m.resultsMessage(); msg != "" {
 		parts = append(parts, styles.Dim().Render(msg))
@@ -367,6 +384,9 @@ func (m SearchModel) helpView() helpKeys {
 	}
 	help := helpKeys(m.form.form.KeyBinds())
 	help = append(help, formSearchHelp, modeKey)
+	if m.searched {
+		help = append(help, focusKey)
+	}
 	if m.form.advanced {
 		help = append(help, jqlSearchHelp)
 	}

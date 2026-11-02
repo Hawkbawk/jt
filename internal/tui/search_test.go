@@ -376,6 +376,39 @@ func TestSearchResultsBackToForm(t *testing.T) {
 	}
 }
 
+func TestSearchShowsResultsBelowForm(t *testing.T) {
+	t.Parallel()
+	m, _ := searched(t)
+	view := ansi.Strip(m.render())
+	if form, results := strings.Index(view, "Project"), strings.Index(view, "Results (3)"); form < 0 || results < form {
+		t.Fatalf("form should sit above the results:\n%s", view)
+	}
+	m = searchPressDrain(t, m, "ctrl+o")
+	if m.resultsFocused() {
+		t.Fatal("ctrl+o should move to the form")
+	}
+	m = searchPressDrain(t, m, "ctrl+o")
+	if !m.resultsFocused() {
+		t.Fatal("ctrl+o should move back to the results")
+	}
+}
+
+func TestSearchTabOnLastFieldMovesToResults(t *testing.T) {
+	t.Parallel()
+	m, _ := searched(t)
+	m = searchPressDrain(t, m, "esc")
+	for i := 0; i < 20 && !m.form.onLastField(); i++ {
+		if m.resultsFocused() {
+			t.Fatal("tab left the form before its last field")
+		}
+		m = searchPressDrain(t, m, "tab")
+	}
+	m = searchPressDrain(t, m, "tab")
+	if !m.resultsFocused() {
+		t.Fatal("tab on the last field should move to the results")
+	}
+}
+
 func TestSearchResultsQuit(t *testing.T) {
 	t.Parallel()
 	m, _ := searched(t)

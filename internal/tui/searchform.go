@@ -31,6 +31,7 @@ const (
 
 var (
 	modeKey        = key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "basic/advanced"))
+	focusKey       = key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "results"))
 	formSearchHelp = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "search"))
 	jqlSearchHelp  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "search"))
 	resultViewHelp = key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "view"))
@@ -225,6 +226,10 @@ func (f *searchForm) setIssueTypes(types []string) {
 }
 
 func (f *searchForm) focused() string { return f.form.GetFocusedField().GetKey() }
+
+func (f *searchForm) onLastField() bool {
+	return f.form.GetFocusedField() == f.fields[len(f.fields)-1]
+}
 
 func (f *searchForm) restyle() { f.form.WithTheme(f.theme()) }
 
