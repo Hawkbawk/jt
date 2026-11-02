@@ -40,6 +40,9 @@ type SearchModel struct {
 	searching bool
 	searchErr error
 	lastJQL   string
+	// refocus is where to put the results cursor after the next search, set
+	// when an edit reruns it.
+	refocus *resultCursor
 }
 
 // NewSearch builds the search screen with the backend's default project selected.
@@ -224,7 +227,11 @@ func (m *SearchModel) applyResults(msg searchLoadedMsg) {
 		m.results.set(nil)
 	} else {
 		m.results.set(msg.issues)
+		if m.refocus != nil {
+			m.results.restore(m.refocus.key, m.refocus.index)
+		}
 	}
+	m.refocus = nil
 	m.focusResults()
 	m.fit()
 }
@@ -256,6 +263,7 @@ func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	}
 	m.popup = nil
 	m.status = e.status
+	m.refocus = &resultCursor{key: e.key, index: m.results.table.GetHighlightedRowIndex()}
 	cmd := m.search(m.lastJQL)
 	return m, cmd
 }

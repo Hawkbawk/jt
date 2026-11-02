@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -391,9 +393,23 @@ func (c *Client) getJSON(get getFunc, path string, out any) error {
 	if res.StatusCode != http.StatusOK {
 		var body jcli.Errors
 		_ = json.NewDecoder(res.Body).Decode(&body)
-		return &jcli.ErrUnexpectedResponse{Body: body, Status: res.Status, StatusCode: res.StatusCode}
+		return responseError(res, body)
 	}
 	return json.NewDecoder(res.Body).Decode(out)
+}
+
+// responseError turns a failed response into a one-line error. jira-cli's
+// ErrUnexpectedResponse renders as a multi-line "Error:" block, which reads
+// badly once the UI adds its own prefix.
+func responseError(res *http.Response, body jcli.Errors) error {
+	msgs := slices.Clone(body.ErrorMessages)
+	for _, k := range slices.Sorted(maps.Keys(body.Errors)) {
+		msgs = append(msgs, k+": "+body.Errors[k])
+	}
+	if len(msgs) == 0 {
+		return errors.New(res.Status)
+	}
+	return errors.New(strings.Join(msgs, "; "))
 }
 
 // toMarkdown converts an ADF document (cloud) or Jira wiki markup (server) to markdown.

@@ -41,6 +41,12 @@ var tableKeys = table.KeyMap{
 	PageLast:  key.NewBinding(key.WithKeys("end")),
 }
 
+// resultCursor is a results cursor position to come back to after a reload.
+type resultCursor struct {
+	key   string
+	index int
+}
+
 // resultList shows the search results as a table.
 type resultList struct {
 	issues        []jira.Issue
@@ -123,6 +129,18 @@ func (l resultList) columns() []table.Column {
 func (l *resultList) fit() {
 	cursor := l.table.GetHighlightedRowIndex()
 	l.table = l.table.WithColumns(l.columns()).WithTargetWidth(l.width).WithTargetHeight(max(2, l.height)).WithHighlightedRow(cursor)
+}
+
+// restore puts the cursor back after the results were reloaded: on the issue
+// with the given key, or at the old row index (clamped) if the issue is gone.
+func (l *resultList) restore(key string, index int) {
+	for i, iss := range l.issues {
+		if iss.Key == key {
+			index = i
+			break
+		}
+	}
+	l.table = l.table.WithHighlightedRow(max(0, min(index, len(l.issues)-1)))
 }
 
 // move puts the cursor on the first or last result.

@@ -73,3 +73,17 @@ func TestFormatTime(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestFailedResponseErrorIsOneLine(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"errorMessages": ["Unbounded JQL queries are not allowed here."]}`))
+	}))
+	defer ts.Close()
+
+	c := New(config.Jira{Server: ts.URL, Login: "me@example.com", Project: "A"}, "secret")
+	_, err := c.Search("ORDER BY updated DESC")
+	if err == nil || err.Error() != "Unbounded JQL queries are not allowed here." {
+		t.Errorf("err = %q", err)
+	}
+}
