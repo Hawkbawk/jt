@@ -2,7 +2,6 @@ package fakejira
 
 import (
 	"cmp"
-	"context"
 	"regexp"
 	"slices"
 	"strconv"
@@ -23,12 +22,9 @@ var (
 // Search finds issues with the JQL jt's search form writes, plus what the
 // board filters use. Sprint conditions are ignored since the demo issues have
 // none.
-func (b *Backend) Search(ctx context.Context, jql string) ([]jira.Issue, error) {
+func (b *Backend) Search(jql string) ([]jira.Issue, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	match := searchMatcher(jql)
 	var found []*issue
 	for _, iss := range b.issues {

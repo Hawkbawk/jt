@@ -1,13 +1,13 @@
 package tui
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
@@ -25,7 +25,8 @@ func loadIssueTypes(b Backend) tea.Cmd {
 	}
 }
 
-// SearchModel is the search screen, with one huh form and the board's issue popups.
+// SearchModel is the search screen: a huh form, the results table and the
+// board's issue popups. Only one search runs at a time.
 type SearchModel struct {
 	layout
 	backend Backend
@@ -33,23 +34,24 @@ type SearchModel struct {
 	actions issueActions
 	results resultList
 
+	// inResults is whether the table rather than the form has focus.
+	inResults bool
 	searched  bool
 	searching bool
 	searchErr error
-	// Cancellation saves work; the ID also rejects replies queued before cancellation.
-	searchID     int
-	lastJQL      string
-	cancelSearch context.CancelFunc
+	lastJQL   string
 }
 
 // NewSearch builds the search screen with the backend's default project selected.
 func NewSearch(backend Backend, settings Settings) SearchModel {
-	return SearchModel{
+	m := SearchModel{
 		layout:  newLayout(settings),
 		backend: backend,
 		form:    newSearchForm(backend.DefaultProject()),
 		actions: newIssueActions(backend),
 	}
+	m.results.set(nil)
+	return m
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
@@ -68,7 +70,30 @@ func (m SearchModel) busy() bool { return m.popupLoading() || m.searching }
 func (m *SearchModel) restyle() tea.Cmd {
 	m.layout.restyle()
 	m.form.restyle()
+	m.results.restyle()
 	return m.form.update(nil)
+}
+
+func (m SearchModel) resultsFocused() bool { return m.inResults && m.searched }
+
+// mainHeight is the height left for the form, or for the results table and its
+// title, after the message under them.
+func (m SearchModel) mainHeight() int {
+	h := m.bodyHeight()
+	if m.resultsMessage() != "" {
+		h--
+	}
+	return max(0, h)
+}
+
+// fit sizes the form and the table to the body.
+func (m *SearchModel) fit() {
+	w, h := max(0, m.width-2), m.mainHeight()
+	if m.resultsFocused() {
+		m.results.resize(w, h-1)
+		return
+	}
+	m.form.resize(w, h)
 }
 
 // Update implements tea.Model.
@@ -79,8 +104,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.resize(msg)
-		m.results.resize(m.width-2, m.bodyHeight())
-		m.form.resize(m.width-2, m.bodyHeight())
+		m.fit()
 		cmd := m.form.update(msg)
 		return m, cmd
 
@@ -123,8 +147,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case searchLoadedMsg:
-		cmd := m.applyResults(msg)
-		return m, cmd
+		m.applyResults(msg)
+		return m, nil
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -138,16 +162,13 @@ func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
 	if m.popup != nil {
 		return m.forwardToPopup(msg, m.searching)
 	}
-	return m.form.update(msg)
+	return m.updateForm(msg)
 }
 
 func (m SearchModel) currentJQL() (string, error) {
 	if m.form.advanced {
 		jql := strings.TrimSpace(m.form.jql)
-		if jql == "" {
-			return "", errors.New("write some JQL to search with")
-		}
-		return jql, nil
+		return jql, requireJQL(jql)
 	}
 	q, err := m.form.query(m.form.now())
 	if err != nil {
@@ -156,49 +177,51 @@ func (m SearchModel) currentJQL() (string, error) {
 	return q.String(), nil
 }
 
+// sendKey searches from anywhere in the form. Pressing enter first makes huh
+// validate the focused field, which then shows its own error and blocks the search.
+func (m *SearchModel) sendKey() tea.Cmd {
+	if m.searching {
+		return nil
+	}
+	if m.resultsFocused() {
+		return m.submit()
+	}
+	cmd := m.form.update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.form.form.GetFocusedField().Error() != nil {
+		return cmd
+	}
+	return tea.Batch(cmd, m.submit())
+}
+
+// submit searches unless a search is already running, or the entered values
+// don't make a query.
 func (m *SearchModel) submit() tea.Cmd {
+	if m.searching {
+		return nil
+	}
 	jql, err := m.currentJQL()
 	if err != nil {
 		m.status = styles.Error().Render(err.Error())
 		return nil
 	}
 	m.status = ""
-	return m.search(jql, "")
+	return m.search(jql)
 }
 
-func (m *SearchModel) search(jql, focusKey string) tea.Cmd {
-	m.stopSearch()
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancelSearch = cancel
-	m.searchID++
+func (m *SearchModel) search(jql string) tea.Cmd {
 	m.searching, m.searchErr, m.lastJQL = true, nil, jql
-	return m.runWithSpinner(runSearch(ctx, m.backend, m.searchID, jql, focusKey))
+	return m.runWithSpinner(runSearch(m.backend, jql))
 }
 
-func (m *SearchModel) stopSearch() {
-	if m.cancelSearch != nil {
-		m.cancelSearch()
-		m.cancelSearch = nil
-	}
-}
-
-func (m *SearchModel) applyResults(msg searchLoadedMsg) tea.Cmd {
-	if msg.id != m.searchID {
-		return nil
-	}
-	m.stopSearch()
+func (m *SearchModel) applyResults(msg searchLoadedMsg) {
 	m.searching, m.searched, m.searchErr = false, true, msg.err
 	if msg.err != nil {
-		m.status = styles.Error().Render("searching: " + msg.err.Error())
-		m.results.set(nil, "")
+		m.results.set(nil)
 	} else {
-		m.results.set(msg.issues, msg.focusKey)
+		m.results.set(msg.issues)
 	}
-	focus := m.firstField()
-	if len(m.results.issues) > 0 {
-		focus = fieldResults
-	}
-	return m.form.build(&m.results, m.resultsMessage(), focus)
+	m.inResults = true
+	m.fit()
 }
 
 func (m SearchModel) resultsMessage() string {
@@ -211,14 +234,11 @@ func (m SearchModel) resultsMessage() string {
 	return ""
 }
 
-func (m SearchModel) firstField() string {
-	if m.form.advanced {
-		return fieldJQL
-	}
-	return fieldProject
+// editSearch goes from the results back to the form.
+func (m *SearchModel) editSearch() {
+	m.inResults = false
+	m.fit()
 }
-
-func (m SearchModel) resultsFocused() bool { return m.form.focused() == fieldResults }
 
 func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	if e.err != nil {
@@ -227,7 +247,7 @@ func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	}
 	m.popup = nil
 	m.status = e.status
-	cmd := m.search(m.lastJQL, e.key)
+	cmd := m.search(m.lastJQL)
 	return m, cmd
 }
 
@@ -238,13 +258,15 @@ func (m *SearchModel) toggleMode() tea.Cmd {
 			m.form.jql = q.String()
 		}
 	}
-	return m.form.build(&m.results, m.resultsMessage(), m.firstField())
+	m.inResults = false
+	cmd := m.form.build()
+	m.fit()
+	return cmd
 }
 
 func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
-			m.stopSearch()
 			return m, tea.Quit
 		}
 		return m, nil
@@ -258,43 +280,51 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.toggleMode()
 		return m, cmd
 	case key.Matches(msg, keys.send):
-		cmd := m.submit()
+		cmd := m.sendKey()
 		return m, cmd
 	case m.resultsFocused():
 		return m.handleResultsKey(msg)
-	case key.Matches(msg, keys.accept) && (m.form.advanced || m.form.focused() == fieldUpdatedTo):
-		cmd := m.submit()
-		return m, cmd
-	case key.Matches(msg, keys.nextTab) && len(m.results.issues) == 0 &&
-		(m.form.advanced || m.form.focused() == fieldUpdatedTo):
-		cmd := m.form.focus(m.firstField())
-		return m, cmd
 	}
-	cmd := m.form.update(msg)
+	cmd := m.updateForm(msg)
 	return m, cmd
+}
+
+// updateForm lets huh handle msg. Once huh finishes the form, it searches and
+// starts over.
+func (m *SearchModel) updateForm(msg tea.Msg) tea.Cmd {
+	cmd := m.form.update(msg)
+	if m.form.form.State == huh.StateNormal {
+		return cmd
+	}
+	cmd = tea.Batch(cmd, m.form.build())
+	m.fit()
+	cmd = tea.Batch(cmd, m.submit())
+	return cmd
 }
 
 func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.quit):
-		m.stopSearch()
 		return m, tea.Quit
 	case key.Matches(msg, keys.blur, keys.nextTab) || msg.String() == "/":
-		cmd := m.form.focus(m.firstField())
-		return m, cmd
-	case key.Matches(msg, keys.refresh) && m.lastJQL != "" && !m.searching:
-		focusKey := ""
-		if sel := m.results.selected(); sel != nil {
-			focusKey = sel.Key
+		m.editSearch()
+		return m, nil
+	case key.Matches(msg, keys.top, keys.bottom):
+		m.results.move(key.Matches(msg, keys.bottom))
+		return m, nil
+	case key.Matches(msg, keys.refresh):
+		if m.lastJQL == "" || m.searching {
+			return m, nil
 		}
 		m.status = ""
-		cmd := m.search(m.lastJQL, focusKey)
+		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.theme):
 		cmd := m.openPopup(newThemePopup(), nil)
 		return m, cmd
 	}
-	if sel := m.results.selected(); sel != nil {
+	// Edits search again, which would race a search that's still running.
+	if sel := m.results.selected(); sel != nil && !m.searching {
 		if key.Matches(msg, keys.accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}
@@ -307,26 +337,47 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			return m, cmd
 		}
 	}
-	cmd := m.form.update(msg)
+	cmd := m.results.update(msg)
 	return m, cmd
 }
 
 // View implements tea.Model.
 func (m SearchModel) View() tea.View { return m.withView(m.render()) }
 
+func (m SearchModel) bodyView() string {
+	var parts []string
+	h := m.mainHeight()
+	box := lipgloss.NewStyle().Height(h).MaxHeight(h)
+	if m.resultsFocused() {
+		title := styles.Title().Render(fmt.Sprintf("Results (%d)", len(m.results.issues)))
+		parts = append(parts, box.Render(lipgloss.JoinVertical(lipgloss.Left, title, m.results.view())))
+	} else {
+		parts = append(parts, box.Render(m.form.form.View()))
+	}
+	if msg := m.resultsMessage(); msg != "" {
+		parts = append(parts, styles.Dim().Render(msg))
+	}
+	return lipgloss.NewStyle().Padding(0, 1).Width(m.width).MaxWidth(m.width).
+		Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+}
+
+func (m SearchModel) helpView() helpKeys {
+	if m.resultsFocused() {
+		return searchResultsHelp
+	}
+	help := helpKeys(m.form.form.KeyBinds())
+	help = append(help, formSearchHelp, modeKey)
+	if m.form.advanced {
+		help = append(help, jqlSearchHelp)
+	}
+	return help
+}
+
 func (m SearchModel) render() string {
 	if m.width == 0 {
 		return ""
 	}
-	help := helpKeys(append(m.form.form.KeyBinds(), formSearchHelp, modeKey))
-	if m.form.advanced {
-		help = append(help, jqlSearchHelp)
-	}
-	if m.resultsFocused() {
-		help = searchResultsHelp
-	}
-	body := lipgloss.NewStyle().Padding(0, 1).Width(m.width).MaxWidth(m.width).
-		Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).Render(m.form.form.View())
+	body := m.bodyView()
 	if m.popup != nil {
 		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
 	}
@@ -338,6 +389,6 @@ func (m SearchModel) render() string {
 	if m.searching {
 		parts = append(parts, m.spinner.View()+" Searching…")
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left, m.headerView(parts), body, m.footerView(help))
+	content := lipgloss.JoinVertical(lipgloss.Left, m.headerView(parts), body, m.footerView(m.helpView()))
 	return lipgloss.NewStyle().MaxWidth(m.width).MaxHeight(m.height).Render(content)
 }

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -35,7 +34,6 @@ type fakeBackend struct {
 	found          []jira.Issue
 	findErr        error
 	findCalls      []string
-	findContexts   []context.Context
 	users          []jira.Option
 	searches       []string
 	searchErr      error
@@ -47,9 +45,8 @@ func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, ni
 
 func (f *fakeBackend) IssueTypes() ([]string, error) { return f.issueTypes, nil }
 
-func (f *fakeBackend) Search(ctx context.Context, jql string) ([]jira.Issue, error) {
+func (f *fakeBackend) Search(jql string) ([]jira.Issue, error) {
 	f.findCalls = append(f.findCalls, jql)
-	f.findContexts = append(f.findContexts, ctx)
 	return f.found, f.findErr
 }
 

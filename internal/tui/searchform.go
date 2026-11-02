@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -27,7 +29,6 @@ const (
 	fieldUpdatedFrom = "updated-from"
 	fieldUpdatedTo   = "updated-to"
 	fieldJQL         = "jql"
-	fieldResults     = "results"
 )
 
 var (
@@ -35,6 +36,14 @@ var (
 	formSearchHelp = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "search"))
 	jqlSearchHelp  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "search"))
 	resultViewHelp = key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "view"))
+)
+
+const (
+	// selectHeight is how many lines a select shows, including its title.
+	selectHeight = 4
+	// roomyHeight is the form height the columns need with a blank line between
+	// fields. Shorter forms drop the blank lines.
+	roomyHeight = 20
 )
 
 type searchValues struct {
@@ -49,23 +58,22 @@ type searchValues struct {
 	updatedTo          string
 }
 
-// searchForm owns one huh form, including its dynamically created result select.
+// searchForm owns one huh form, laid out in two columns in basic mode.
 type searchForm struct {
 	values   searchValues
 	jql      string
 	advanced bool
 	now      func() time.Time
 
-	form        *huh.Form
-	project     *huh.Select[string]
-	issueType   *huh.Select[string]
-	preview     *huh.Note
-	previewText string
-	fields      []huh.Field
-	projects    []jira.Project
-	issueTypes  []string
-	width       int
-	height      int
+	form       *huh.Form
+	project    *huh.Select[string]
+	issueType  *huh.Select[string]
+	fields     []huh.Field
+	projects   []jira.Project
+	issueTypes []string
+	width      int
+	height     int
+	dense      bool
 }
 
 func newSearchForm(project string) *searchForm {
@@ -75,79 +83,100 @@ func newSearchForm(project string) *searchForm {
 		width:  80,
 		height: 24,
 	}
-	f.build(nil, "", "")
+	f.build()
 	return f
 }
 
-// build keeps the entered values but replaces the fields when mode or results change.
-func (f *searchForm) build(results *resultList, message, focus string) tea.Cmd {
+// build keeps the entered values but replaces the fields when the mode changes.
+func (f *searchForm) build() tea.Cmd {
 	if f.form != nil {
 		f.form.GetFocusedField().Blur()
 	}
 	f.fields = nil
-	f.preview = nil
 	if f.advanced {
-		f.fields = append(f.fields, huh.NewText().Key(fieldJQL).Title("JQL").
+		jql := huh.NewText().Key(fieldJQL).Title("JQL").
 			Placeholder("project = DEMO AND status != Done ORDER BY updated DESC").
-			CharLimit(0).ShowLineNumbers(false).Lines(5).Value(&f.jql))
+			CharLimit(0).ShowLineNumbers(false).Lines(5).Value(&f.jql).Validate(requireJQL)
+		f.fields = []huh.Field{jql}
+		f.form = newForm(f.fields...)
 	} else {
-		f.basicFields()
-		f.preview = huh.NewNote().Title("JQL")
-		f.updatePreview()
-		f.fields = append(f.fields, f.preview)
+		left, right := f.basicColumns()
+		f.fields = append(append([]huh.Field{}, left...), right...)
+		f.form = newGroupsForm(huh.NewGroup(left...), huh.NewGroup(right...)).
+			WithLayout(huh.LayoutColumns(2))
 	}
-	if results != nil && len(results.issues) > 0 {
-		results.resize(f.width, f.height)
-		f.fields = append(f.fields, results.selector)
-	}
-	if message != "" {
-		f.fields = append(f.fields, huh.NewNote().Title("Results").Description(message))
-	}
-	f.form = newForm(f.fields...)
+	f.restyle()
 	f.resize(f.width, f.height)
-	cmd := f.form.Init()
-	if focus != "" && focus != f.focused() {
-		cmd = tea.Batch(cmd, f.focus(focus))
-	}
-	return cmd
+	return f.form.Init()
 }
 
-func (f *searchForm) basicFields() {
+func requireJQL(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("write some JQL to search with")
+	}
+	return nil
+}
+
+func (f *searchForm) text(field, title string, value *string, validate func(string) error) *huh.Input {
+	return huh.NewInput().Key(field).Title(title).Value(value).Validate(validate)
+}
+
+func (f *searchForm) timeInput(field, title string, value *string) *huh.Input {
+	return f.text(field, title, value, func(s string) error {
+		_, err := parseSearchTime(s, f.now())
+		return err
+	}).Placeholder("YYYY-MM-DD or -2d")
+}
+
+// basicColumns splits the basic fields into two columns of similar height.
+func (f *searchForm) basicColumns() (left, right []huh.Field) {
 	v := &f.values
 	f.project = huh.NewSelect[string]().Key(fieldProject).Title("Project").
-		Inline(true).Options(f.projectOptions()...).Value(&v.project)
+		Options(f.projectOptions()...).Height(selectHeight).Value(&v.project)
 	f.issueType = huh.NewSelect[string]().Key(fieldType).Title("Issue type").
-		Inline(true).Options(f.typeOptions()...).Value(&v.issueType)
+		Options(f.typeOptions()...).Height(selectHeight).Value(&v.issueType)
 	sortOptions := make([]huh.Option[jira.SortField], len(jira.SortFields))
 	for i, s := range jira.SortFields {
 		sortOptions[i] = huh.NewOption(s.String(), s)
 	}
-	f.fields = append(f.fields,
+	keys := f.text(fieldKey, "Issue key", &v.keys, func(s string) error {
+		_, err := jira.ParseKeys(s)
+		return err
+	}).Placeholder("DEMO-1, DEMO-2")
+	left = []huh.Field{
 		f.project,
 		f.issueType,
-		huh.NewSelect[jira.SprintFilter]().Key(fieldSprint).Title("Sprint").Inline(true).
+		keys,
+		f.timeInput(fieldCreatedFrom, "Created from", &v.createdFrom),
+		f.timeInput(fieldCreatedTo, "Created to", &v.createdTo),
+	}
+	right = []huh.Field{
+		huh.NewSelect[jira.SprintFilter]().Key(fieldSprint).Title("Sprint").
 			Options(
 				huh.NewOption(anyOption, jira.SprintAny),
 				huh.NewOption("In an active sprint", jira.SprintActive),
 				huh.NewOption("Not in an active sprint", jira.SprintNotActive),
-			).Value(&v.sprint),
-		huh.NewSelect[jira.SortField]().Key(fieldSort).Title("Sort by").Inline(true).
-			Options(sortOptions...).Value(&v.sort),
-		huh.NewSelect[bool]().Key(fieldOrder).Title("Order").Inline(true).
-			Options(huh.NewOption("Ascending", false), huh.NewOption("Descending", true)).Value(&v.descending),
-		huh.NewInput().Key(fieldKey).Title("Issue key").Placeholder("DEMO-1, DEMO-2").Value(&v.keys),
-		huh.NewInput().Key(fieldCreatedFrom).Title("Created from").Placeholder("YYYY-MM-DD or -2d").Value(&v.createdFrom),
-		huh.NewInput().Key(fieldCreatedTo).Title("Created to").Placeholder("YYYY-MM-DD or -2d").Value(&v.createdTo),
-		huh.NewInput().Key(fieldUpdatedFrom).Title("Updated from").Placeholder("YYYY-MM-DD or -2d").Value(&v.updatedFrom),
-		huh.NewInput().Key(fieldUpdatedTo).Title("Updated to").Placeholder("YYYY-MM-DD or -2d").Value(&v.updatedTo),
-	)
+			).Height(selectHeight).Value(&v.sprint),
+		huh.NewSelect[jira.SortField]().Key(fieldSort).Title("Sort by").
+			Options(sortOptions...).Height(selectHeight).Value(&v.sort),
+		huh.NewSelect[bool]().Key(fieldOrder).Title("Order").
+			Options(huh.NewOption("Ascending", false), huh.NewOption("Descending", true)).
+			Height(3).Value(&v.descending),
+		f.timeInput(fieldUpdatedFrom, "Updated from", &v.updatedFrom),
+		f.timeInput(fieldUpdatedTo, "Updated to", &v.updatedTo),
+	}
+	return left, right
 }
 
 func (f *searchForm) projectOptions() []huh.Option[string] {
 	opts := []huh.Option[string]{huh.NewOption(anyOption, "")}
 	found := f.values.project == ""
 	for _, p := range f.projects {
-		opts = append(opts, huh.NewOption(p.Key, p.Key))
+		label := p.Key
+		if p.Name != "" {
+			label += " · " + p.Name
+		}
+		opts = append(opts, huh.NewOption(label, p.Key))
 		found = found || p.Key == f.values.project
 	}
 	if !found {
@@ -180,65 +209,35 @@ func (f *searchForm) setIssueTypes(types []string) {
 
 func (f *searchForm) focused() string { return f.form.GetFocusedField().GetKey() }
 
-// focus moves through huh's own navigation, keeping its group viewport in sync.
-func (f *searchForm) focus(target string) tea.Cmd {
-	current, dest := -1, -1
-	for i, field := range f.fields {
-		if field.GetKey() == f.focused() {
-			current = i
-		}
-		if field.GetKey() == target {
-			dest = i
-		}
-	}
-	var cmd tea.Cmd
-	for current >= 0 && dest >= 0 && current != dest {
-		if current < dest {
-			cmd = f.form.NextField()
-			current++
-		} else {
-			cmd = f.form.PrevField()
-			current--
-		}
-		// Notes are skipped by huh.
-		for current >= 0 && current < len(f.fields) && f.fields[current].Skip() {
-			if current < dest {
-				current++
-			} else {
-				current--
-			}
-		}
-	}
-	return cmd
-}
+func (f *searchForm) restyle() { f.form.WithTheme(f.theme()) }
 
-func (f *searchForm) restyle() { f.form.WithTheme(styles.FormTheme()) }
+func (f *searchForm) theme() huh.Theme {
+	base := styles.FormTheme()
+	return huh.ThemeFunc(func(dark bool) *huh.Styles {
+		s := base.Theme(dark)
+		if f.dense {
+			s.FieldSeparator = lipgloss.NewStyle().SetString("\n")
+		}
+		return s
+	})
+}
 
 func (f *searchForm) resize(width, height int) {
 	// huh subtracts borders and prompts from these sizes; clip smaller windows in render.
 	f.width, f.height = max(16, width), max(4, height)
-	f.form.WithWidth(f.width).WithHeight(f.height)
+	if dense := f.height < roomyHeight; dense != f.dense {
+		f.dense = dense
+		f.restyle()
+	}
+	f.form.WithWidth(f.width)
+	if !f.advanced {
+		f.form.WithHeight(f.height)
+	}
 }
 
 func (f *searchForm) update(msg tea.Msg) tea.Cmd {
 	_, cmd := f.form.Update(msg)
-	if f.preview != nil && f.updatePreview() {
-		_, refresh := f.form.Update(nil)
-		return tea.Batch(cmd, refresh)
-	}
 	return cmd
-}
-
-func (f *searchForm) updatePreview() bool {
-	q, err := f.query(f.now())
-	text := q.String()
-	if err != nil {
-		text = "Error: " + err.Error()
-	}
-	changed := text != f.previewText
-	f.previewText = text
-	f.preview.Description(text)
-	return changed
 }
 
 func (f *searchForm) query(now time.Time) (jira.SearchQuery, error) {
@@ -268,16 +267,21 @@ func (f *searchForm) query(now time.Time) (jira.SearchQuery, error) {
 	return q, nil
 }
 
-func searchTime(label, text string, now time.Time, end bool) (time.Time, error) {
+// parseSearchTime reads a bound of a time range; empty text means no bound.
+func parseSearchTime(text string, now time.Time) (time.Time, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return time.Time{}, nil
 	}
-	t, err := parseTimeText(text, now, false)
+	return parseTimeText(text, now, false)
+}
+
+func searchTime(label, text string, now time.Time, end bool) (time.Time, error) {
+	t, err := parseSearchTime(text, now)
 	if err != nil {
 		return t, fmt.Errorf("%s: %w", label, err)
 	}
-	if _, dateErr := time.Parse(time.DateOnly, text); end && dateErr == nil {
+	if _, dateErr := time.Parse(time.DateOnly, strings.TrimSpace(text)); end && dateErr == nil {
 		t = t.AddDate(0, 0, 1).Add(-time.Minute)
 	}
 	return t, nil

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -80,9 +79,20 @@ func TestSearchStartsOnDefaultProject(t *testing.T) {
 	if q.String() != want.String() {
 		t.Errorf("JQL = %q, want %q", q.String(), want.String())
 	}
-	if !strings.Contains(m.render(), `project = "DEMO" ORDER BY updated DESC`) {
-		t.Errorf("preview missing from view:\n%s", m.render())
+	if strings.Contains(m.render(), "ORDER BY") {
+		t.Error("the generated JQL shouldn't be shown")
 	}
+}
+
+func TestSearchFormHasTwoColumns(t *testing.T) {
+	t.Parallel()
+	m := newTestSearch(t, &fakeBackend{})
+	for _, line := range strings.Split(ansi.Strip(m.render()), "\n") {
+		if strings.Contains(line, "Project") && strings.Contains(line, "Sprint") {
+			return
+		}
+	}
+	t.Errorf("fields aren't side by side:\n%s", ansi.Strip(m.render()))
 }
 
 func TestSearchLoadsIssueTypes(t *testing.T) {
@@ -93,27 +103,27 @@ func TestSearchLoadsIssueTypes(t *testing.T) {
 	m, _ = searchSend(m, msg)
 
 	m = focusField(t, m, fieldType)
-	m = searchPressDrain(t, m, "right", "right")
+	m = searchPressDrain(t, m, "down", "down")
 	q, _ := m.form.query(searchNow)
 	if q.IssueType != "Task" {
 		t.Errorf("IssueType = %q, want Task", q.IssueType)
 	}
-	m = searchPressDrain(t, m, "right")
+	m = searchPressDrain(t, m, "up", "up")
 	if q, _ = m.form.query(searchNow); q.IssueType != "" {
-		t.Errorf("IssueType = %q after wrapping to Any", q.IssueType)
+		t.Errorf("IssueType = %q after going back to Any", q.IssueType)
 	}
 }
 
 func TestSearchFormFields(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &fakeBackend{})
-	m = focusField(t, m, fieldSprint)
-	m = searchPressDrain(t, m, "right")
-	m = focusField(t, m, fieldOrder)
-	m = searchPressDrain(t, m, "left")
 	m = typeInto(t, m, fieldKey, "demo-1, demo-2")
 	m = typeInto(t, m, fieldCreatedFrom, "2026-03-01")
 	m = typeInto(t, m, fieldCreatedTo, "2026-03-02")
+	m = focusField(t, m, fieldSprint)
+	m = searchPressDrain(t, m, "down")
+	m = focusField(t, m, fieldOrder)
+	m = searchPressDrain(t, m, "up")
 	m = typeInto(t, m, fieldUpdatedFrom, "-1d")
 
 	q, err := m.form.query(searchNow)
@@ -130,18 +140,27 @@ func TestSearchFormErrors(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &fakeBackend{})
 	m = typeInto(t, m, fieldKey, "nope")
-	if _, err := m.form.query(searchNow); err == nil || !strings.Contains(err.Error(), "Issue key") {
-		t.Errorf("err = %v, want an issue key error", err)
-	}
-	m = searchPressDrain(t, m, "ctrl+s")
-	if !strings.Contains(m.status, "Issue key") {
-		t.Error("error missing from view")
+	m = searchPressDrain(t, m, "tab")
+	if m.form.focused() != fieldKey || !strings.Contains(ansi.Strip(m.render()), "isn't an issue key") {
+		t.Errorf("leaving the field should show its error and stay:\n%s", ansi.Strip(m.render()))
 	}
 
-	m = newTestSearch(t, &fakeBackend{})
+	fb := &fakeBackend{}
+	m = newTestSearch(t, fb)
 	m = typeInto(t, m, fieldUpdatedTo, "soon")
-	if _, err := m.form.query(searchNow); err == nil || !strings.Contains(err.Error(), "Updated to") {
-		t.Errorf("err = %v, want an updated to error", err)
+	m = searchPressDrain(t, m, "ctrl+s")
+	if len(fb.findCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
+		t.Errorf("searches = %q, view:\n%s", fb.findCalls, ansi.Strip(m.render()))
+	}
+}
+
+func TestSearchCtrlSValidatesFocusedField(t *testing.T) {
+	t.Parallel()
+	fb := &fakeBackend{}
+	m := typeInto(t, newTestSearch(t, fb), fieldCreatedFrom, "soon")
+	m = searchPressDrain(t, m, "ctrl+s")
+	if len(fb.findCalls) != 0 || m.form.focused() != fieldCreatedFrom || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
+		t.Errorf("searches = %q, view:\n%s", fb.findCalls, ansi.Strip(m.render()))
 	}
 }
 
@@ -150,14 +169,21 @@ func TestSearchPicksProjectInForm(t *testing.T) {
 	fb := &fakeBackend{defaultProject: "DEMO", projects: []jira.Project{{Key: "DEMO"}, {Key: "OPS"}}}
 	m := newTestSearch(t, fb)
 
-	m = searchPressDrain(t, m, "right")
+	m = searchPressDrain(t, m, "down")
 	if q, _ := m.form.query(searchNow); q.Project != "OPS" {
 		t.Errorf("Project = %q, want OPS", q.Project)
 	}
 
-	m = searchPressDrain(t, m, "right")
+	m = searchPressDrain(t, m, "up", "up")
 	if q, _ := m.form.query(searchNow); q.Project != "" {
 		t.Errorf("Project = %q after clearing", q.Project)
+	}
+
+	// Typing after / filters the options.
+	m = searchPressDrain(t, m, "/", "o", "p", "s")
+	m = searchPressDrain(t, m, "enter")
+	if q, _ := m.form.query(searchNow); q.Project != "OPS" {
+		t.Errorf("Project = %q after filtering, want OPS", q.Project)
 	}
 }
 
@@ -309,12 +335,6 @@ func TestSearchResultsBackToForm(t *testing.T) {
 	if m.resultsFocused() {
 		t.Fatal("esc should return to the form")
 	}
-	// Tab from the last field goes back down to the results.
-	m = focusField(t, m, fieldUpdatedTo)
-	m = searchPressDrain(t, m, "tab")
-	if !m.resultsFocused() {
-		t.Error("tab from the last field should focus the results")
-	}
 }
 
 func TestSearchResultsQuit(t *testing.T) {
@@ -331,8 +351,8 @@ func TestSearchAdvancedSubmit(t *testing.T) {
 	m := newTestSearch(t, fb)
 	m = searchPressDrain(t, m, "ctrl+t", "ctrl+a", "ctrl+k")
 	m = searchPressDrain(t, m, "enter")
-	if len(fb.findCalls) != 0 || !strings.Contains(m.status, "write some JQL") {
-		t.Fatalf("searches = %q, status = %q", fb.findCalls, m.status)
+	if len(fb.findCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "write some JQL") {
+		t.Fatalf("searches = %q, view:\n%s", fb.findCalls, ansi.Strip(m.render()))
 	}
 
 	m = searchType(t, m, "assignee = currentUser()")
@@ -349,37 +369,23 @@ func TestSearchShowsErrorsAndEmptyResults(t *testing.T) {
 	t.Parallel()
 	fb := &fakeBackend{findErr: errors.New("bad JQL")}
 	m := searchPressDrain(t, newTestSearch(t, fb), "ctrl+s")
-	if !strings.Contains(m.status, "bad JQL") || m.resultsFocused() {
+	if !strings.Contains(ansi.Strip(m.render()), "Error: bad JQL") || !m.resultsFocused() {
 		t.Errorf("view:\n%s", ansi.Strip(m.render()))
 	}
 
 	fb.findErr = nil
 	m = searchPressDrain(t, m, "ctrl+s")
-	if !strings.Contains(ansi.Strip(m.render()), "No issues found.") || m.resultsFocused() {
+	if !strings.Contains(ansi.Strip(m.render()), "No issues found.") || !strings.Contains(ansi.Strip(m.render()), "Results (0)") {
 		t.Errorf("view:\n%s", ansi.Strip(m.render()))
 	}
 }
 
-func TestSearchIgnoresStaleResults(t *testing.T) {
-	t.Parallel()
-	m, _ := searched(t)
-	m.searchID = 5
-	m, _ = searchSend(m, searchLoadedMsg{id: 4, issues: nil})
-	if len(m.results.issues) != 3 {
-		t.Error("an older search replaced the newer results")
-	}
-}
-
-func TestSearchRefreshKeepsFocusedIssue(t *testing.T) {
+func TestSearchRefresh(t *testing.T) {
 	t.Parallel()
 	m, fb := searched(t)
-	m = searchPressDrain(t, m, "j")
-	m = searchPressDrain(t, m, "r")
+	searchPressDrain(t, m, "r")
 	if len(fb.findCalls) != 2 || fb.findCalls[0] != fb.findCalls[1] {
 		t.Errorf("searches = %q", fb.findCalls)
-	}
-	if got := m.results.selected().Key; got != "DEMO-2" {
-		t.Errorf("selected = %s, want DEMO-2", got)
 	}
 }
 
@@ -398,13 +404,13 @@ func TestSearchIssueActions(t *testing.T) {
 		t.Fatal("esc should close the popup")
 	}
 
-	// Moving an issue searches again and keeps the cursor on it.
+	// Moving an issue searches again.
 	m = searchPressDrain(t, m, "j")
 	m = searchPressDrain(t, m, "m", "enter")
 	if len(fb.moved) != 1 || fb.moved[0] != "DEMO-2:31" {
 		t.Fatalf("moved = %q", fb.moved)
 	}
-	if m.popup != nil || len(fb.findCalls) != 2 || m.results.selected().Key != "DEMO-2" {
+	if m.popup != nil || len(fb.findCalls) != 2 {
 		t.Errorf("popup = %v, searches = %q, selected = %v", m.popup, fb.findCalls, m.results.selected())
 	}
 	if !strings.Contains(m.status, "Moved DEMO-2 to Done") {
@@ -422,18 +428,6 @@ func TestSearchYankUsesSelectedIssue(t *testing.T) {
 	cmd()
 	if copied != "https://jira.example.com/browse/DEMO-2" {
 		t.Errorf("copied = %q", copied)
-	}
-}
-
-func TestSearchUsesOneHuhForm(t *testing.T) {
-	t.Parallel()
-	m, _ := searched(t)
-	if m.form.form.GetFocusedField() != m.results.selector {
-		t.Fatal("results should be a field of the search form")
-	}
-	m = searchPressDrain(t, m, "tab")
-	if m.form.focused() != fieldProject || m.form.form.State != huh.StateNormal {
-		t.Fatalf("tab should wrap without submitting: field = %s, state = %v", m.form.focused(), m.form.form.State)
 	}
 }
 
@@ -486,48 +480,13 @@ func TestSearchReplacesResultsWithEmptyAndError(t *testing.T) {
 	m, fb := searched(t)
 	fb.found = nil
 	m = searchPressDrain(t, m, "r")
-	if m.resultsFocused() || len(m.results.issues) != 0 || m.results.selected() != nil {
-		t.Fatal("empty results should remove the old select and return to the input")
-	}
-	m = focusField(t, m, fieldUpdatedTo)
-	m = searchPressDrain(t, m, "tab")
-	if m.form.focused() != fieldProject || m.form.form.State != huh.StateNormal {
-		t.Fatal("tab without results should wrap, not complete the form")
+	if !m.resultsFocused() || len(m.results.issues) != 0 || m.results.selected() != nil {
+		t.Fatal("empty results should replace the old rows and stay in the table")
 	}
 	fb.findErr = errors.New("unavailable")
 	m = searchPressDrain(t, m, "ctrl+s")
-	if m.resultsFocused() || !strings.Contains(m.status, "unavailable") {
-		t.Fatal("failed search should show its error and keep the input usable")
-	}
-}
-
-func TestSearchCancelsReplacedRequests(t *testing.T) {
-	t.Parallel()
-	fb := &fakeBackend{found: foundIssues()}
-	m := newTestSearch(t, fb)
-	first := m.submit()().(tea.BatchMsg)[0]()
-	original := fb.findContexts[0]
-	if original.Err() != nil {
-		t.Fatal("search should start with a live context")
-	}
-	second := m.submit()().(tea.BatchMsg)[0]()
-	if !errors.Is(original.Err(), context.Canceled) {
-		t.Fatal("replacing a search should cancel its context")
-	}
-	m, _ = searchSend(m, first)
-	if m.searched || !m.searching {
-		t.Fatal("a reply queued before cancellation should be ignored")
-	}
-	m, cmd := searchSend(m, second)
-	m = searchDrain(t, m, cmd)
-	if !m.resultsFocused() {
-		t.Fatal("the latest reply should populate the result select")
-	}
-	_ = m.submit()().(tea.BatchMsg)[0]()
-	active := fb.findContexts[len(fb.findContexts)-1]
-	_, cmd = m.Update(keyMsg("ctrl+d"))
-	if !isQuit(cmd) || !errors.Is(active.Err(), context.Canceled) {
-		t.Fatal("quitting should cancel the active search")
+	if !strings.Contains(ansi.Strip(m.render()), "unavailable") || len(m.results.issues) != 0 {
+		t.Fatal("failed search should show its error under an empty table")
 	}
 }
 
@@ -546,5 +505,22 @@ func TestSearchResizesWithinWindow(t *testing.T) {
 		if !m.resultsFocused() || m.results.selected().Key != "DEMO-1" {
 			t.Fatal("resizing should preserve the selected result")
 		}
+	}
+}
+
+func TestSearchIgnoresSubmitWhileSearching(t *testing.T) {
+	t.Parallel()
+	fb := &fakeBackend{found: foundIssues()}
+	m := newTestSearch(t, fb)
+	m, cmd := searchSend(m, keyMsg("ctrl+s"))
+	if !m.searching || cmd == nil {
+		t.Fatal("ctrl+s should start a search")
+	}
+	if _, again := searchSend(m, keyMsg("ctrl+s")); again != nil {
+		t.Error("a second search should wait for the first")
+	}
+	m = searchDrain(t, m, cmd)
+	if len(fb.findCalls) != 1 || m.searching {
+		t.Errorf("searches = %q, searching = %v", fb.findCalls, m.searching)
 	}
 }
