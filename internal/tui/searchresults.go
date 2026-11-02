@@ -71,13 +71,7 @@ func (l *resultList) set(issues []jira.Issue) {
 			colAssignee: assignee, colSummary: iss.Summary,
 		})
 	}
-	l.table = table.New([]table.Column{
-		table.NewColumn(colKey, "Key", 10),
-		table.NewColumn(colType, "Type", 10),
-		table.NewColumn(colStatus, "Status", 14),
-		table.NewColumn(colAssignee, "Assignee", 16),
-		table.NewFlexColumn(colSummary, "Summary", 1),
-	}).WithKeyMap(tableKeys).WithRows(rows)
+	l.table = table.New(l.columns()).WithKeyMap(tableKeys).WithRows(rows)
 	l.restyle()
 	l.fit()
 }
@@ -101,10 +95,27 @@ func (l *resultList) resize(width, height int) {
 	l.fit()
 }
 
+// columns splits the width by share, with a floor so short columns stay
+// readable. Summary gets the largest share and absorbs the remainder.
+func (l resultList) columns() []table.Column {
+	share := func(pct, floor int) int { return max(floor, l.width*pct/100) }
+	key, assignee := share(16, 12), share(15, 16)
+	status, typ := share(13, 14), share(10, 10)
+	summary := max(10, l.width-key-typ-status-assignee)
+	pad := lipgloss.NewStyle().PaddingRight(1)
+	return []table.Column{
+		table.NewColumn(colKey, "Key", key).WithStyle(pad),
+		table.NewColumn(colType, "Type", typ).WithStyle(pad),
+		table.NewColumn(colStatus, "Status", status).WithStyle(pad),
+		table.NewColumn(colAssignee, "Assignee", assignee).WithStyle(pad),
+		table.NewColumn(colSummary, "Summary", summary),
+	}
+}
+
 // fit sizes the table, keeping the cursor on the same issue.
 func (l *resultList) fit() {
 	cursor := l.table.GetHighlightedRowIndex()
-	l.table = l.table.WithTargetWidth(l.width).WithTargetHeight(max(2, l.height)).WithHighlightedRow(cursor)
+	l.table = l.table.WithColumns(l.columns()).WithTargetWidth(l.width).WithTargetHeight(max(2, l.height)).WithHighlightedRow(cursor)
 }
 
 // move puts the cursor on the first or last result.

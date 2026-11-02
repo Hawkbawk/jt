@@ -88,7 +88,7 @@ func TestSearchFormHasTwoColumns(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &fakeBackend{})
 	for _, line := range strings.Split(ansi.Strip(m.render()), "\n") {
-		if strings.Contains(line, "Project") && strings.Contains(line, "Sprint") {
+		if strings.Contains(line, "Issue key") && strings.Contains(line, "Sort by") {
 			return
 		}
 	}
@@ -102,15 +102,19 @@ func TestSearchLoadsIssueTypes(t *testing.T) {
 	msg := loadIssueTypes(fb)()
 	m, _ = searchSend(m, msg)
 
-	m = focusField(t, m, fieldType)
-	m = searchPressDrain(t, m, "down", "down")
-	q, _ := m.form.query(searchNow)
-	if q.IssueType != "Task" {
-		t.Errorf("IssueType = %q, want Task", q.IssueType)
+	m = typeInto(t, m, fieldType, "task")
+	q, err := m.form.query(searchNow)
+	if err != nil || q.IssueType != "Task" {
+		t.Errorf("IssueType = %q, err %v; want Task", q.IssueType, err)
 	}
-	m = searchPressDrain(t, m, "up", "up")
-	if q, _ = m.form.query(searchNow); q.IssueType != "" {
-		t.Errorf("IssueType = %q after going back to Any", q.IssueType)
+	m = searchPressDrain(t, m, "tab")
+	if m.form.focused() == fieldType {
+		t.Error("a known issue type should let focus move on")
+	}
+	m = searchPressDrain(t, m, "shift+tab")
+	m = searchPressDrain(t, searchType(t, m, "x"), "tab")
+	if m.form.focused() != fieldType || !strings.Contains(ansi.Strip(m.render()), "not an issue type") {
+		t.Errorf("an unknown type should show its error:\n%s", ansi.Strip(m.render()))
 	}
 }
 
@@ -118,13 +122,12 @@ func TestSearchFormFields(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &fakeBackend{})
 	m = typeInto(t, m, fieldKey, "demo-1, demo-2")
-	m = typeInto(t, m, fieldCreatedFrom, "2026-03-01")
-	m = typeInto(t, m, fieldCreatedTo, "2026-03-02")
 	m = focusField(t, m, fieldSprint)
-	m = searchPressDrain(t, m, "down")
+	m = searchPressDrain(t, m, "right")
 	m = focusField(t, m, fieldOrder)
-	m = searchPressDrain(t, m, "up")
-	m = typeInto(t, m, fieldUpdatedFrom, "-1d")
+	m = searchPressDrain(t, m, "left")
+	m = typeInto(t, m, fieldCreated, "2026-03-01..2026-03-02")
+	m = typeInto(t, m, fieldUpdated, "-1d")
 
 	q, err := m.form.query(searchNow)
 	if err != nil {
@@ -147,7 +150,7 @@ func TestSearchFormErrors(t *testing.T) {
 
 	fb := &fakeBackend{}
 	m = newTestSearch(t, fb)
-	m = typeInto(t, m, fieldUpdatedTo, "soon")
+	m = typeInto(t, m, fieldUpdated, "soon")
 	m = searchPressDrain(t, m, "ctrl+s")
 	if len(fb.findCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
 		t.Errorf("searches = %q, view:\n%s", fb.findCalls, ansi.Strip(m.render()))
@@ -157,33 +160,69 @@ func TestSearchFormErrors(t *testing.T) {
 func TestSearchCtrlSValidatesFocusedField(t *testing.T) {
 	t.Parallel()
 	fb := &fakeBackend{}
-	m := typeInto(t, newTestSearch(t, fb), fieldCreatedFrom, "soon")
+	m := typeInto(t, newTestSearch(t, fb), fieldCreated, "soon")
 	m = searchPressDrain(t, m, "ctrl+s")
-	if len(fb.findCalls) != 0 || m.form.focused() != fieldCreatedFrom || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
+	if len(fb.findCalls) != 0 || m.form.focused() != fieldCreated || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
 		t.Errorf("searches = %q, view:\n%s", fb.findCalls, ansi.Strip(m.render()))
 	}
 }
 
 func TestSearchPicksProjectInForm(t *testing.T) {
 	t.Parallel()
-	fb := &fakeBackend{defaultProject: "DEMO", projects: []jira.Project{{Key: "DEMO"}, {Key: "OPS"}}}
+	fb := &fakeBackend{defaultProject: "DEMO", projects: []jira.Project{{Key: "DEMO"}, {Key: "OPS", Name: "Operations"}}}
 	m := newTestSearch(t, fb)
 
-	m = searchPressDrain(t, m, "down")
+	m = typeInto(t, m, fieldProject, "")
+	m = searchPressDrain(t, m, "ctrl+a", "ctrl+k")
+	m = searchType(t, m, "operations")
 	if q, _ := m.form.query(searchNow); q.Project != "OPS" {
 		t.Errorf("Project = %q, want OPS", q.Project)
 	}
 
-	m = searchPressDrain(t, m, "up", "up")
+	m = searchPressDrain(t, m, "ctrl+a", "ctrl+k")
+	m = searchType(t, m, "nope")
+	m = searchPressDrain(t, m, "tab")
+	if m.form.focused() != fieldProject || !strings.Contains(ansi.Strip(m.render()), "not a project") {
+		t.Errorf("an unknown project should show its error:\n%s", ansi.Strip(m.render()))
+	}
+
+	m = searchPressDrain(t, m, "ctrl+a", "ctrl+k")
 	if q, _ := m.form.query(searchNow); q.Project != "" {
 		t.Errorf("Project = %q after clearing", q.Project)
 	}
+}
 
-	// Typing after / filters the options.
-	m = searchPressDrain(t, m, "/", "o", "p", "s")
-	m = searchPressDrain(t, m, "enter")
-	if q, _ := m.form.query(searchNow); q.Project != "OPS" {
-		t.Errorf("Project = %q after filtering, want OPS", q.Project)
+func TestParseTimeRange(t *testing.T) {
+	t.Parallel()
+	day := func(d int, h, m int) time.Time { return time.Date(2026, 3, d, h, m, 0, 0, time.UTC) }
+	tests := []struct {
+		text    string
+		want    jira.TimeRange
+		wantErr string
+	}{
+		{"", jira.TimeRange{}, ""},
+		{"2026-03-01", jira.TimeRange{From: day(1, 0, 0)}, ""},
+		{"-1d", jira.TimeRange{From: day(9, 12, 0)}, ""},
+		{"2026-03-20", jira.TimeRange{From: searchNow, To: day(20, 23, 59)}, ""},
+		{"2026-03-01..2026-03-02", jira.TimeRange{From: day(1, 0, 0), To: day(2, 23, 59)}, ""},
+		{"2026-03-01..", jira.TimeRange{From: day(1, 0, 0)}, ""},
+		{"..2026-03-01", jira.TimeRange{To: day(1, 23, 59)}, ""},
+		{"-2d.. -1d", jira.TimeRange{From: day(8, 12, 0), To: day(9, 12, 0)}, ""},
+		{"2026-03-05..2026-03-01", jira.TimeRange{}, "ends before"},
+		{"soon", jira.TimeRange{}, "must be a date"},
+		{"2026-03-01..soon", jira.TimeRange{}, "must be a date"},
+	}
+	for _, tt := range tests {
+		got, err := parseTimeRange(tt.text, searchNow)
+		if tt.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("%q: err = %v, want %q", tt.text, err, tt.wantErr)
+			}
+			continue
+		}
+		if err != nil || got != tt.want {
+			t.Errorf("%q = %+v, %v; want %+v", tt.text, got, err, tt.want)
+		}
 	}
 }
 
