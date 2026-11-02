@@ -2,17 +2,6 @@ name: Copilot Setup Steps
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-      - flake.nix
-      - flake.lock
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/copilot-setup-steps.yml
-      - flake.nix
-      - flake.lock
 
 jobs:
   copilot-setup-steps:
