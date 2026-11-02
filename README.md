@@ -82,6 +82,23 @@ jt
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
+### Search
+
+`jt search` (or `jt s`) opens a search screen. One scrollable huh form holds the filters, the generated JQL and the results selector. It filters by project, issue type, sprint, issue key, and created and updated dates, and sorts by a field in either direction. Dates can be absolute (`2026-03-01`, `2026-03-01T09:30`) or relative (`-2d`).
+
+| Key | Action |
+| --- | --- |
+| `tab` / `shift+tab` | Next / previous field |
+| `←` / `→` | Change the option of the focused selector |
+| `/` | Filter a selector's options (choose `Any` to clear a project or issue type) |
+| `enter` | Next field; run the search from the last date field or advanced JQL field; preview a selected result |
+| `ctrl+s` | Run the search from any field |
+| `ctrl+t` | Switch between the basic form and advanced mode |
+
+In advanced mode you write JQL directly. Switching to it with an empty box starts from the JQL the form builds.
+
+Results appear as a single select in the same form. A successful search focuses it; `tab` from the last filter also reaches it. `esc`, `/` or `tab` returns to the first filter, while `shift+tab` returns to the previous field. In the list, `j`/`k`/`g`/`G` navigate, `enter` or `v` opens an issue preview modal, `c` comments, `m` moves, `a` assigns, `e` edits, `y` copies the URL, `o` opens the URL, `r` re-runs the search, `t` changes the theme and `q` quits. Closing a modal returns to the selected result. `jt s --fake` runs on demo data.
+
 Run `jt --version` to see the installed version and `jt --help` for usage.
 
 ## Settings

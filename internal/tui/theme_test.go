@@ -19,7 +19,7 @@ func useTint(t *testing.T, tt *tint.Tint) {
 	tint.SetTint(tt)
 }
 
-func openThemePopup(t *testing.T, fs *fakeSettings) (Model, *themePopup) {
+func openThemePopup(t *testing.T, fs *fakeSettings) (BoardModel, *themePopup) {
 	t.Helper()
 	m := newTestModel(t, "TEST", &fakeBackend{})
 	m.settings = fs
@@ -117,7 +117,7 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 	m = drain(t, m, m.Init())
 
 	next, _ := m.Update(themeSelectedMsg{tint: tint.TintGruvboxLightHard})
-	m = next.(Model)
+	m = next.(BoardModel)
 	if m.spinner.Style.GetForeground() != tint.TintGruvboxLightHard.Blue {
 		t.Error("picking a tint should restyle the spinner")
 	}
@@ -125,7 +125,7 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 	// The terminal's theme changing arrives as a ThemeChangedMsg.
 	tint.SetTint(tint.TintCatppuccinMocha)
 	next, _ = m.Update(ThemeChangedMsg{})
-	m = next.(Model)
+	m = next.(BoardModel)
 	if m.spinner.Style.GetForeground() != tint.TintCatppuccinMocha.Blue {
 		t.Error("a tint change from outside jt should restyle the spinner")
 	}

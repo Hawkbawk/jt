@@ -10,7 +10,7 @@ import (
 )
 
 // issueModel returns a loaded board with T-2 selected.
-func issueModel(t *testing.T) (Model, *fakeBackend) {
+func issueModel(t *testing.T) (BoardModel, *fakeBackend) {
 	t.Helper()
 	fb := &fakeBackend{
 		board:       testBoard(),

@@ -2,13 +2,11 @@
 package tui
 
 import (
-	"fmt"
+	"context"
 
-	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -18,6 +16,8 @@ import (
 type Backend interface {
 	DefaultProject() string
 	Projects() ([]jira.Project, error)
+	IssueTypes() ([]string, error)
+	Search(ctx context.Context, jql string) ([]jira.Issue, error)
 	Board(project, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(iss jira.Issue) ([]jira.Transition, error)
@@ -30,33 +30,25 @@ type Backend interface {
 	IssueURL(key string) string
 }
 
-// Model is the root bubbletea model. It routes input and messages to the
+// BoardModel is the board's root bubbletea model. It routes input and messages to the
 // board, project picker and at most one popup, and controls high-level
 // or broadly used state.
-type Model struct {
-	settings      Settings
-	width, height int
-	spinner       spinner.Model
-	status        string
-	help          help.Model
+type BoardModel struct {
+	layout
 
 	board   boardPane
 	picker  picker
-	popup   popup
 	actions issueActions
-	quit    quitGuard
 }
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend, settings Settings) Model {
-	m := Model{
-		settings: settings,
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
-		help:     styles.Help(),
-		board:    newBoardPane(backend),
-		picker:   newPicker(backend),
-		actions:  newIssueActions(backend),
+func New(backend Backend, settings Settings) BoardModel {
+	m := BoardModel{
+		layout:  newLayout(settings),
+		board:   newBoardPane(backend),
+		picker:  newPicker(backend),
+		actions: newIssueActions(backend),
 	}
 	if m.board.project == "" {
 		m.picker.show(false)
@@ -65,45 +57,33 @@ func New(backend Backend, settings Settings) Model {
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
-func (m Model) WithWarning(text string) Model {
+func (m BoardModel) WithWarning(text string) BoardModel {
 	m.status = styles.Warn().Render(text)
 	return m
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd {
+func (m BoardModel) Init() tea.Cmd {
 	if m.board.project == "" {
-		return m.startBusy(m.picker.fetch())
+		return m.runWithSpinner(m.picker.fetch())
 	}
-	return m.startBusy(m.board.fetch(m.board.project, ""))
-}
-
-// startBusy runs cmd alongside the spinner.
-func (m Model) startBusy(cmd tea.Cmd) tea.Cmd {
-	return tea.Batch(cmd, m.spinner.Tick)
+	return m.runWithSpinner(m.board.fetch(m.board.project, ""))
 }
 
 // busy reports whether anything is waiting on the network.
-func (m Model) busy() bool {
-	if p, ok := m.popup.(interface{ loading() bool }); ok && p.loading() {
-		return true
-	}
-	return m.board.loading || m.picker.loading()
-}
-
-func (m Model) bodyHeight() int {
-	return max(0, m.height-2)
+func (m BoardModel) busy() bool {
+	return m.popupLoading() || m.board.loading || m.picker.loading()
 }
 
 // Update implements tea.Model.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
+		return m.finishEdit(msg, editResult(msg))
+
 	case tea.WindowSizeMsg:
-		m.width, m.height = msg.Width, msg.Height
+		m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
-		if m.popup != nil {
-			m.popup.setSize(popupSize(m.width, m.bodyHeight()))
-		}
 		return m, nil
 
 	case ThemeChangedMsg:
@@ -111,30 +91,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case themeSelectedMsg:
-		tint.SetTint(msg.tint)
-		m.restyle()
-		return m, saveTheme(m.settings, msg.id)
+		cmd := m.selectTheme(msg)
+		m.picker.restyle()
+		return m, cmd
 
 	case themeSavedMsg:
-		if msg.err != nil {
-			m.status = styles.Error().Render("saving theme: " + msg.err.Error())
-		}
+		m.onThemeSaved(msg)
 		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if !m.busy() {
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		return m, m.tick(msg, m.busy())
 
 	case projectSelectedMsg:
 		m.status = ""
-		return m, m.startBusy(m.board.open(msg.key))
+		return m, m.runWithSpinner(m.board.open(msg.key))
 
 	case boardLoadedMsg:
 		m.board.update(msg)
@@ -145,20 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filterSelectedMsg:
 		m.status = ""
-		return m, m.startBusy(m.board.setFilter(msg.filter))
-
-	case transitionDoneMsg:
-		return m.finishEdit(msg, msg.err, msg.key, "Moved "+msg.key+" to "+msg.to)
-
-	case assignDoneMsg:
-		status := "Assigned " + msg.issueKey + " to " + msg.to
-		if msg.cleared {
-			status = "Unassigned " + msg.issueKey
-		}
-		return m.finishEdit(msg, msg.err, msg.issueKey, status)
-
-	case fieldsSavedMsg:
-		return m.finishEdit(msg, msg.err, msg.key, fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key))
+		return m, m.runWithSpinner(m.board.setFilter(msg.filter))
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -167,18 +127,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The picker's list filters asynchronously and a popup's form runs on its
 	// own messages, so both get what's left.
 	pm, popupCmd := m.forwardToPopup(msg)
-	m = pm.(Model)
+	m = pm.(BoardModel)
 	return m, tea.Batch(popupCmd, m.picker.update(msg))
 }
 
 // restyle rebuilds what the model copied from the styles when it was built.
-func (m *Model) restyle() {
-	m.spinner.Style = styles.Title()
-	m.help = styles.Help()
+func (m *BoardModel) restyle() {
+	m.layout.restyle()
 	m.picker.restyle()
 }
 
-func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.quit.handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
@@ -192,7 +151,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.popup != nil {
 			return m, nil
 		}
-		return m, m.startBusy(m.picker.show(m.board.nav != nil))
+		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
 	case m.popup != nil:
@@ -201,7 +160,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleBoardKey(msg)
 }
 
-func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.quit) {
 		return m, tea.Quit
 	}
@@ -215,7 +174,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			focusKey = sel.Key
 		}
 		m.status = ""
-		return m, m.startBusy(m.board.reload(focusKey))
+		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.theme) {
 		return m, m.openPopup(newThemePopup(), nil)
@@ -226,17 +185,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	b := m.actions.backend
-	switch {
-	case key.Matches(msg, keys.move):
-		return m, m.openPopup(newMovePopup(b, *sel), loadTransitions(b, *sel))
-	case key.Matches(msg, keys.assign):
-		p := newAssignPane(b, *sel)
-		return m, m.openPopup(newAssignPopup(p), p.init())
-	case key.Matches(msg, keys.edit):
-		return m, m.openPopup(newEditPopup(b, *sel), loadFields(b, *sel))
-	}
-	p, cmd := m.actions.handle(msg, sel.Key)
+	p, cmd := m.actions.handle(msg, *sel)
 	if p != nil {
 		return m, m.openPopup(p, cmd)
 	}
@@ -245,33 +194,15 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // finishEdit closes the popup and reloads the board after a successful change.
 // A failure goes back to the popup to show.
-func (m Model) finishEdit(msg tea.Msg, err error, issueKey, status string) (tea.Model, tea.Cmd) {
-	if err != nil {
+func (m BoardModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
+	if e.err != nil {
 		return m.forwardToPopup(msg)
 	}
 	m.popup = nil
-	m.status = status
-	return m, m.startBusy(m.board.reload(issueKey))
+	m.status = e.status
+	return m, m.runWithSpinner(m.board.reload(e.key))
 }
 
-func (m Model) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.popup == nil {
-		return m, nil
-	}
-	wasBusy := m.busy()
-	var cmd tea.Cmd
-	m.popup, cmd = m.popup.update(msg)
-	// Popups start their own loads (sending or reloading a comment), so the
-	// spinner has to be started here once they become busy.
-	if !wasBusy && m.busy() {
-		cmd = m.startBusy(cmd)
-	}
-	return m, cmd
-}
-
-// openPopup shows p and runs load, the command that fills it.
-func (m *Model) openPopup(p popup, load tea.Cmd) tea.Cmd {
-	p.setSize(popupSize(m.width, m.bodyHeight()))
-	m.popup = p
-	return m.startBusy(load)
+func (m BoardModel) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
+	return m, m.layout.forwardToPopup(msg, m.board.loading || m.picker.loading())
 }

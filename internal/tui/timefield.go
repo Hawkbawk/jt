@@ -30,6 +30,12 @@ func (v *fieldValue) isTime() bool {
 // parseTime reads s as an absolute date or time, or else as a time relative to
 // now such as 2d or -1w3d.
 func (v *fieldValue) parseTime(s string, now time.Time) (time.Time, error) {
+	return parseTimeText(s, now, v.Kind == jira.FieldDate)
+}
+
+// parseTimeText reads s as an absolute date or time, or else as a time
+// relative to now. dateOnly only changes the wording of the error.
+func parseTimeText(s string, now time.Time, dateOnly bool) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	for _, layout := range absoluteLayouts {
 		if t, err := time.ParseInLocation(layout, s, now.Location()); err == nil {
@@ -38,7 +44,7 @@ func (v *fieldValue) parseTime(s string, now time.Time) (time.Time, error) {
 	}
 	t, err := reltime.Parse(s, now)
 	if err != nil {
-		if v.Kind == jira.FieldDate {
+		if dateOnly {
 			return t, errors.New("must be a date like 2006-01-02, or relative like -2d")
 		}
 		return t, errors.New("must be a date and time like 2006-01-02T15:04, or relative like -2d")

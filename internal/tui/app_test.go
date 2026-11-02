@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -30,6 +31,11 @@ type fakeBackend struct {
 	editFields     []jira.EditField
 	editErr        error
 	edited         [][]jira.EditField
+	issueTypes     []string
+	found          []jira.Issue
+	findErr        error
+	findCalls      []string
+	findContexts   []context.Context
 	users          []jira.Option
 	searches       []string
 	searchErr      error
@@ -38,6 +44,14 @@ type fakeBackend struct {
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
 
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
+
+func (f *fakeBackend) IssueTypes() ([]string, error) { return f.issueTypes, nil }
+
+func (f *fakeBackend) Search(ctx context.Context, jql string) ([]jira.Issue, error) {
+	f.findCalls = append(f.findCalls, jql)
+	f.findContexts = append(f.findContexts, ctx)
+	return f.found, f.findErr
+}
 
 func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)
@@ -96,15 +110,10 @@ func (f *fakeBackend) SearchUsers(_, query string) ([]jira.Option, error) {
 func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
 
 func keyMsg(s string) tea.KeyPressMsg {
+	if strings.HasPrefix(s, "ctrl+") && len(s) == len("ctrl+x") {
+		return tea.KeyPressMsg{Code: rune(s[len(s)-1]), Mod: tea.ModCtrl}
+	}
 	switch s {
-	case "ctrl+c":
-		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
-	case "ctrl+d":
-		return tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
-	case "ctrl+p":
-		return tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
-	case "ctrl+s":
-		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEsc}
 	case "tab":
@@ -119,6 +128,10 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
 	case "backspace":
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	default:
@@ -126,7 +139,7 @@ func keyMsg(s string) tea.KeyPressMsg {
 	}
 }
 
-func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) Model {
+func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) BoardModel {
 	t.Helper()
 	fb.defaultProject = defaultProject
 	if fb.board == nil {
@@ -134,27 +147,27 @@ func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) Model {
 	}
 	m := New(fb, &fakeSettings{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	return next.(Model)
+	return next.(BoardModel)
 }
 
 // press sends keys in order and returns the final model and last command.
-func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
+func press(t *testing.T, m BoardModel, keys ...string) (BoardModel, tea.Cmd) {
 	t.Helper()
 	var cmd tea.Cmd
 	for _, k := range keys {
 		var next tea.Model
 		next, cmd = m.Update(keyMsg(k))
-		m = next.(Model)
+		m = next.(BoardModel)
 	}
 	return m, cmd
 }
 
 // pressDrain sends keys in order, running each resulting command to completion.
-func pressDrain(t *testing.T, m Model, keys ...string) Model {
+func pressDrain(t *testing.T, m BoardModel, keys ...string) BoardModel {
 	t.Helper()
 	for _, k := range keys {
 		next, cmd := m.Update(keyMsg(k))
-		m = drain(t, next.(Model), cmd)
+		m = drain(t, next.(BoardModel), cmd)
 	}
 	return m
 }
@@ -180,7 +193,7 @@ func runCmd(c tea.Cmd) (tea.Msg, bool) {
 
 // drain runs cmd and feeds resulting messages back into the model until
 // no more immediate work is produced.
-func drain(t *testing.T, m Model, cmd tea.Cmd) Model {
+func drain(t *testing.T, m BoardModel, cmd tea.Cmd) BoardModel {
 	t.Helper()
 	queue := []tea.Cmd{cmd}
 	for steps := 0; len(queue) > 0; steps++ {
@@ -204,7 +217,7 @@ func drain(t *testing.T, m Model, cmd tea.Cmd) Model {
 			continue
 		}
 		next, nc := m.Update(msg)
-		m = next.(Model)
+		m = next.(BoardModel)
 		queue = append(queue, nc)
 	}
 	return m
@@ -218,7 +231,7 @@ func isQuit(cmd tea.Cmd) bool {
 	return ok
 }
 
-func loadedModel(t *testing.T) (Model, *fakeBackend) {
+func loadedModel(t *testing.T) (BoardModel, *fakeBackend) {
 	t.Helper()
 	fb := &fakeBackend{}
 	m := newTestModel(t, "TEST", fb)
@@ -353,7 +366,7 @@ func TestBoardErrorIsShown(t *testing.T) {
 func TestStaleBoardIsIgnored(t *testing.T) {
 	m, _ := loadedModel(t)
 	next, _ := m.Update(boardLoadedMsg{project: "OTHER", board: &jira.Board{Name: "stale"}})
-	if next.(Model).board.nav.board.Name == "stale" {
+	if next.(BoardModel).board.nav.board.Name == "stale" {
 		t.Fatal("board for a different project replaced the current one")
 	}
 }
@@ -372,7 +385,7 @@ func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
 	fb := &fakeBackend{}
 	m := newTestModel(t, "TEST", fb)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
-	m = drain(t, next.(Model), m.Init())
+	m = drain(t, next.(BoardModel), m.Init())
 
 	v := m.View().Content
 	if strings.Contains(v, "Closed") || !strings.Contains(v, "▶") || strings.Contains(v, "◀") {

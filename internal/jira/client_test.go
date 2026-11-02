@@ -1,16 +1,57 @@
 package jira
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ankitpokhrel/jira-cli/pkg/adf"
 
 	"github.com/hawkbawk/jt/internal/config"
 )
+
+func TestSearchCancellationReachesRequest(t *testing.T) {
+	started := make(chan struct{})
+	stopped := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-r.Context().Done()
+		close(stopped)
+	}))
+	defer ts.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	c := New(config.Jira{Server: ts.URL}, "")
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.Search(ctx, "project = DEMO")
+		done <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("request did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Search returned %v, want cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Search did not stop after cancellation")
+	}
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("HTTP request was not canceled")
+	}
+}
 
 func TestNewUsesSettingsAndToken(t *testing.T) {
 	var gotPath, gotUser, gotPass string

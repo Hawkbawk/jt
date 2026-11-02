@@ -28,3 +28,31 @@ func TestBoardLoadsAndMovesPersist(t *testing.T) {
 		t.Fatalf("after move: %+v, %v", d, err)
 	}
 }
+
+func TestSearch(t *testing.T) {
+	f := fakejira.New()
+	all, err := f.Search(t.Context(), "project = \"DEMO\" ORDER BY key ASC")
+	if err != nil || len(all) < 2 {
+		t.Fatalf("all = %v, %v", all, err)
+	}
+	for i := 1; i < len(all); i++ {
+		if all[i-1].Key == all[i].Key {
+			t.Fatalf("duplicate %s", all[i].Key)
+		}
+	}
+
+	one, err := f.Search(t.Context(), "key = "+all[1].Key)
+	if err != nil || len(one) != 1 || one[0].Key != all[1].Key {
+		t.Fatalf("by key = %v, %v", one, err)
+	}
+
+	desc, _ := f.Search(t.Context(), "project = \"DEMO\" ORDER BY key DESC")
+	if desc[0].Key != all[len(all)-1].Key {
+		t.Errorf("descending starts with %s, want %s", desc[0].Key, all[len(all)-1].Key)
+	}
+
+	none, _ := f.Search(t.Context(), `created >= "2999-01-01 00:00"`)
+	if len(none) != 0 {
+		t.Errorf("future search found %d issues", len(none))
+	}
+}
