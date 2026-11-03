@@ -57,7 +57,7 @@ func typeInto(t *testing.T, m SearchModel, field, text string) SearchModel {
 
 func searchType(t *testing.T, m SearchModel, text string) SearchModel {
 	t.Helper()
-	if m.popupOpen() {
+	if m.popup.IsOpen() {
 		for _, r := range text {
 			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 			m = searchDrain(t, next.(SearchModel), cmd)

@@ -71,7 +71,7 @@ func (m BoardModel) Init() tea.Cmd {
 
 // busy reports whether anything is waiting on the network.
 func (m BoardModel) busy() bool {
-	return m.popupLoading() || m.board.loading || m.picker.loading()
+	return m.board.loading || m.picker.loading()
 }
 
 // Update implements tea.Model.
@@ -116,9 +116,6 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
-		return m.forwardToPopup(msg)
-
 	case filterSelectedMsg:
 		m.status = ""
 		return m, m.runWithSpinner(m.board.setFilter(msg.filter))
@@ -127,11 +124,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.display()
 		return m, nil
 	}
-	// The picker's list filters asynchronously and a popup's form runs on its
-	// own messages, so both get what's left.
-	pm, popupCmd := m.forwardToPopup(msg)
-	m = pm.(BoardModel)
-	return m, tea.Batch(popupCmd, m.picker.update(msg))
+	// The picker's list filters asynchronously and a popup's responses and form
+	// run on their own messages, so both get what's left.
+	return m, tea.Batch(m.updatePopup(msg), m.picker.update(msg))
 }
 
 // restyle rebuilds what the model copied from the styles when it was built.
@@ -151,14 +146,14 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.projects) && !m.picker.open:
 		// A popup may hold unsaved work, so it has to be closed first.
-		if m.popupOpen() {
+		if m.popup.IsOpen() {
 			return m, nil
 		}
 		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
-	case m.popupOpen():
-		return m.forwardToPopup(msg)
+	case m.popup.Captures(msg):
+		return m, m.updatePopup(msg)
 	}
 	return m.handleBoardKey(msg)
 }
@@ -189,8 +184,4 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, m.actions.handle(msg, *sel)
-}
-
-func (m BoardModel) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m, m.layout.forwardToPopup(msg, m.board.loading || m.picker.loading())
 }

@@ -3,6 +3,8 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // View implements tea.Model.
@@ -17,9 +19,7 @@ func (m BoardModel) render() string {
 	body := m.board.view(m.width, m.bodyHeight(), m.spinner.View())
 	switch {
 	case m.picker.open:
-		body = overlay(body, m.picker.view(m.spinner.View()), m.width)
-	case m.legacy != nil:
-		body = overlay(body, m.legacy.view(m.spinner.View()), m.width)
+		body = popup.Overlay(body, m.picker.view(m.spinner.View()), m.width)
 	default:
 		body = m.popup.Overlay(body)
 	}

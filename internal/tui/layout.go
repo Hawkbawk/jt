@@ -14,10 +14,7 @@ import (
 )
 
 // layout is the state and behavior the jt screens share: the window size,
-// spinner, status line, help footer, quit confirmation and the open popup.
-//
-// Popups are moving from legacy, which layout sizes and draws itself, to the
-// popup host, which owns its content.
+// spinner, status line, help footer, quit confirmation and the popup host.
 type layout struct {
 	settings      Settings
 	width, height int
@@ -25,9 +22,8 @@ type layout struct {
 	status        string
 	help          help.Model
 
-	legacy legacyPopup
-	popup  popup.Model
-	quit   quitGuard
+	popup popup.Model
+	quit  quitGuard
 }
 
 func newLayout(settings Settings) layout {
@@ -52,9 +48,6 @@ func (c layout) bodyHeight() int {
 // resize applies a new window size and refits the popup.
 func (c *layout) resize(msg tea.WindowSizeMsg) tea.Cmd {
 	c.width, c.height = msg.Width, msg.Height
-	if c.legacy != nil {
-		c.legacy.setSize(popupSize(c.width, c.bodyHeight()))
-	}
 	return c.updatePopup(tea.WindowSizeMsg{Width: c.width, Height: c.bodyHeight()})
 }
 
@@ -85,39 +78,10 @@ func (c *layout) updatePopup(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-// popupOpen reports whether either kind of popup is showing.
-func (c layout) popupOpen() bool {
-	return c.legacy != nil || c.popup.IsOpen()
-}
-
-// popupLoading reports whether the open popup is waiting on the network.
-func (c layout) popupLoading() bool {
-	p, ok := c.legacy.(interface{ loading() bool })
-	return ok && p.loading()
-}
-
 // tick advances the spinner while busy. The tick chain ends once nothing is
 // busy.
 func (c *layout) tick(msg spinner.TickMsg, busy bool) tea.Cmd {
 	return tickSpinner(&c.spinner, msg, busy)
-}
-
-// forwardToPopup passes msg to the open popup. otherBusy is whether anything
-// besides the popup is already running the spinner.
-func (c *layout) forwardToPopup(msg tea.Msg, otherBusy bool) tea.Cmd {
-	hostCmd := c.updatePopup(msg)
-	if c.legacy == nil {
-		return hostCmd
-	}
-	wasBusy := otherBusy || c.popupLoading()
-	var cmd tea.Cmd
-	c.legacy, cmd = c.legacy.update(msg)
-	// Popups start their own loads (sending or reloading a comment), so the
-	// spinner has to be started here once they become busy.
-	if !wasBusy && (otherBusy || c.popupLoading()) {
-		cmd = c.runWithSpinner(cmd)
-	}
-	return tea.Batch(hostCmd, cmd)
 }
 
 // withView wraps the rendered screen in a full-window view themed to match.

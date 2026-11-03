@@ -69,7 +69,7 @@ func (m SearchModel) Init() tea.Cmd {
 	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend), m.form.form.Init())
 }
 
-func (m SearchModel) busy() bool { return m.popupLoading() || m.searching }
+func (m SearchModel) busy() bool { return m.searching }
 
 func (m *SearchModel) restyle() tea.Cmd {
 	m.layout.restyle()
@@ -171,8 +171,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.popupOpen() {
-		return m.forwardToPopup(msg, m.searching)
+	if m.popup.IsOpen() {
+		return m.updatePopup(msg)
 	}
 	return m.updateForm(msg)
 }
@@ -280,9 +280,8 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.popupOpen() {
-		cmd := m.forwardToPopup(msg, m.searching)
-		return m, cmd
+	if m.popup.Captures(msg) {
+		return m, m.updatePopup(msg)
 	}
 	switch {
 	case key.Matches(msg, modeKey):
@@ -392,12 +391,7 @@ func (m SearchModel) render() string {
 		return ""
 	}
 	body := m.bodyView()
-	switch {
-	case m.legacy != nil:
-		body = overlay(body, m.legacy.view(m.spinner.View()), m.width)
-	default:
-		body = m.popup.Overlay(body)
-	}
+	body = m.popup.Overlay(body)
 	mode := "basic"
 	if m.form.advanced {
 		mode = "advanced"
