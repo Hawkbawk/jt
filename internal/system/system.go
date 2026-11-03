@@ -1,4 +1,6 @@
-package tui
+// Package system holds helpers that act on the user's machine: the clipboard
+// and the default browser.
+package system
 
 import (
 	"fmt"
@@ -22,9 +24,9 @@ type copier struct {
 	term io.Writer
 }
 
-// copyToClipboard uses pbcopy on macOS and wl-copy, xclip or xsel on Linux,
+// CopyToClipboard uses pbcopy on macOS and wl-copy, xclip or xsel on Linux,
 // falling back to OSC 52.
-func copyToClipboard(s string) error {
+func CopyToClipboard(s string) error {
 	return copier{
 		getenv: os.Getenv,
 		native: clipboard.WriteAll,
@@ -71,8 +73,8 @@ func tmuxOptions() (string, string, error) {
 	return clip, pass, nil
 }
 
-// openInBrowser opens url with the platform's default handler.
-func openInBrowser(url string) error {
+// OpenInBrowser opens url with the platform's default handler.
+func OpenInBrowser(url string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
