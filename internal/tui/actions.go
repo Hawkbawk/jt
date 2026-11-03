@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/system"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
@@ -38,8 +39,8 @@ func newIssueActions(b Backend) issueActions {
 	return issueActions{
 		backend:  b,
 		md:       styles.Markdown,
-		copyText: copyToClipboard,
-		openURL:  openInBrowser,
+		copyText: system.CopyToClipboard,
+		openURL:  system.OpenInBrowser,
 	}
 }
 
