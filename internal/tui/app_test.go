@@ -14,6 +14,7 @@ import (
 
 type fakeBackend struct {
 	defaultProject string
+	defaultBoard   int
 	projects       []jira.Project
 	board          *jira.Board
 	boardErr       error
@@ -42,6 +43,10 @@ type fakeBackend struct {
 }
 
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
+
+func (f *fakeBackend) SetDefaultProject(project string) { f.defaultProject = project }
+
+func (f *fakeBackend) SetDefaultBoard(id int) { f.defaultBoard = id }
 
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
 
@@ -441,9 +446,15 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 }
 
 type fakeSettings struct {
-	saved  []string
-	boards []int
-	err    error
+	saved    []string
+	boards   []int
+	projects []string
+	err      error
+}
+
+func (f *fakeSettings) SaveProject(key string) error {
+	f.projects = append(f.projects, key)
+	return f.err
 }
 
 func (f *fakeSettings) SaveBoard(id int) error {

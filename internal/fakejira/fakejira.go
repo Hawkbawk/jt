@@ -27,6 +27,7 @@ const (
 // Backend implements the methods jt's TUI calls on the Jira client.
 type Backend struct {
 	mu       sync.Mutex
+	project  string
 	now      func() time.Time
 	users    []user
 	projects []jira.Project
@@ -38,6 +39,7 @@ type Backend struct {
 // New returns a backend seeded with demo data.
 func New() *Backend {
 	b := &Backend{
+		project:  DefaultProject,
 		now:      time.Now,
 		users:    seedUsers(),
 		projects: seedProjects(),
@@ -50,8 +52,21 @@ func New() *Backend {
 
 // DefaultProject returns the project to open on start.
 func (b *Backend) DefaultProject() string {
-	return DefaultProject
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.project
 }
+
+// SetDefaultProject changes the project to open.
+func (b *Backend) SetDefaultProject(project string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.project = project
+}
+
+// SetDefaultBoard does nothing, since the fake always opens a project's first
+// board.
+func (b *Backend) SetDefaultBoard(int) {}
 
 // Projects lists the projects, sorted by key.
 func (b *Backend) Projects() ([]jira.Project, error) {

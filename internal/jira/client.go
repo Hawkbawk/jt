@@ -56,7 +56,27 @@ func New(cfg config.Jira, token string) *Client {
 
 // DefaultProject returns the project key set in jt's settings, if any.
 func (c *Client) DefaultProject() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.cfg.Project
+}
+
+// SetDefaultProject changes the default project. The default board belongs to
+// the old project, so it's dropped when the project changes.
+func (c *Client) SetDefaultProject(project string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cfg.Project != project {
+		c.cfg.BoardID = 0
+	}
+	c.cfg.Project = project
+}
+
+// SetDefaultBoard changes the board opened for the default project.
+func (c *Client) SetDefaultBoard(id int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cfg.BoardID = id
 }
 
 // Projects lists the projects visible to the user, sorted by key.
@@ -123,9 +143,11 @@ func (c *Client) boards(project string) ([]boardInfo, error) {
 // and failing that one is chosen from the project's boards. filterJQL, when
 // set, narrows the issues loaded.
 func (c *Client) Board(project string, boardID int, filterJQL string) (*Board, error) {
+	c.mu.Lock()
 	if boardID == 0 && c.cfg.Project == project {
 		boardID = c.cfg.BoardID
 	}
+	c.mu.Unlock()
 
 	var info boardInfo
 	if boardID != 0 {

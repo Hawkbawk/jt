@@ -117,3 +117,27 @@ func TestLateBoardForAnotherBoardIsIgnored(t *testing.T) {
 		t.Fatal("a result for the previous board replaced the current one")
 	}
 }
+
+func TestFavoritingAProjectSavesItAndKeepsThePickerOpen(t *testing.T) {
+	fb, fs := boardsBackend(), &fakeSettings{}
+	m := newSettingsModel(t, "ALPHA", fb, fs)
+
+	m = pressDrain(t, m, "ctrl+p", "j", "f")
+	if !slices.Equal(fs.projects, []string{"BETA"}) {
+		t.Fatalf("saved projects = %v, want [BETA]", fs.projects)
+	}
+	if fb.defaultProject != "BETA" {
+		t.Fatalf("default project = %q, want BETA", fb.defaultProject)
+	}
+	projects(t, m)
+}
+
+func TestFavoriteProjectSaveErrorLeavesDefaultAlone(t *testing.T) {
+	fb := boardsBackend()
+	m := newSettingsModel(t, "ALPHA", fb, &fakeSettings{err: errors.New("read-only")})
+
+	m = pressDrain(t, m, "ctrl+p", "j", "f")
+	if fb.defaultProject != "ALPHA" || m.status == "" {
+		t.Fatalf("default = %q, status = %q", fb.defaultProject, m.status)
+	}
+}

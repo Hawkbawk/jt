@@ -17,6 +17,8 @@ import (
 // Backend is the Jira functionality the TUI depends on.
 type Backend interface {
 	DefaultProject() string
+	SetDefaultProject(project string)
+	SetDefaultBoard(id int)
 	Projects() ([]jira.Project, error)
 	IssueTypes() ([]string, error)
 	Search(jql string) ([]jira.Issue, error)
@@ -122,7 +124,23 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = styles.Error().Render("saving board: " + msg.err.Error())
 		} else {
+			m.board.backend.SetDefaultBoard(msg.id)
 			m.status = styles.Dim().Render("Saved as the default board")
+		}
+		return m, nil
+
+	case projectpicker.FavoriteMsg:
+		return m, saveProject(m.settings, msg.Key)
+
+	case projectSavedMsg:
+		if msg.err != nil {
+			m.status = styles.Error().Render("saving project: " + msg.err.Error())
+			return m, nil
+		}
+		m.board.backend.SetDefaultProject(msg.key)
+		m.status = styles.Dim().Render("Saved " + msg.key + " as the default project")
+		if p, ok := m.popup.Content().(*projectpicker.Picker); ok {
+			return m, p.Refresh()
 		}
 		return m, nil
 

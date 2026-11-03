@@ -44,6 +44,17 @@ func TestIgnoresOtherPickersResponses(t *testing.T) {
 	}
 }
 
+func TestFavoriteReportsHighlightedProject(t *testing.T) {
+	p := loaded(t, fakeSource{})
+	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	if cmd == nil {
+		t.Fatal("f did nothing")
+	}
+	if got, ok := cmd().(FavoriteMsg); !ok || got.Key != "ALPHA" {
+		t.Fatalf("got %#v, want FavoriteMsg for ALPHA", got)
+	}
+}
+
 func TestEnterReportsSelection(t *testing.T) {
 	p := loaded(t, fakeSource{})
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
