@@ -179,7 +179,7 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.theme) {
-		return m, m.openPopup(newThemePopup(), nil)
+		return m, popup.Open(newThemePopup())
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
 		return m, m.openPopup(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter), nil)

@@ -349,8 +349,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.theme):
-		cmd := m.openPopup(newThemePopup(), nil)
-		return m, cmd
+		return m, popup.Open(newThemePopup())
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {

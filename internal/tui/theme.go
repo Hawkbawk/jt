@@ -10,6 +10,7 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // Settings persists the user's choices.
@@ -27,6 +28,9 @@ type themeSelectedMsg struct {
 	tint *tint.Tint
 	id   string
 }
+
+// themeResetMsg carries the terminal's own theme, once it has answered.
+type themeResetMsg struct{ tint *tint.Tint }
 
 // themeSavedMsg reports whether the picked tint was written to the settings.
 type themeSavedMsg struct {
@@ -67,8 +71,8 @@ var (
 
 // themePopup lists every registered tint and applies the chosen one.
 type themePopup struct {
-	list          list.Model
-	width, height int
+	list  list.Model
+	width int
 }
 
 func newThemePopup() *themePopup {
@@ -95,27 +99,32 @@ func newThemePopup() *themePopup {
 	return &themePopup{list: l}
 }
 
-func (p *themePopup) setSize(width, height int) {
-	p.width, p.height = width, height
-	innerW, innerH := popupInner(width, height)
-	p.list.SetSize(innerW, innerH)
-}
+// Init implements tea.Model.
+func (p *themePopup) Init() tea.Cmd { return nil }
 
-func (p *themePopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
+// Update implements tea.Model.
+func (p *themePopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		p.width = size.Width
+		p.list.SetSize(size.Width, size.Height)
+		return p, nil
+	}
+	if reset, ok := msg.(themeResetMsg); ok {
+		return p, popup.CloseWith(themeSelectedMsg{tint: reset.tint})
+	}
 	if km, ok := msg.(tea.KeyPressMsg); ok && p.list.FilterState() != list.Filtering {
 		switch {
 		case key.Matches(km, pickerCloseKey) && !p.list.IsFiltered():
-			return nil, nil
+			return p, popup.Close()
 		case key.Matches(km, themeApplyKey):
 			it, ok := p.list.SelectedItem().(tintItem)
 			if !ok {
 				return p, nil
 			}
-			return nil, func() tea.Msg { return themeSelectedMsg{tint: it.Tint, id: it.ID} }
+			return p, popup.CloseWith(themeSelectedMsg{tint: it.Tint, id: it.ID})
 		case key.Matches(km, themeResetKey):
-			return nil, func() tea.Msg {
-				return themeSelectedMsg{tint: styles.Default(context.Background())}
-			}
+			// Reading the terminal's theme waits on it, so it happens in a command.
+			return p, func() tea.Msg { return themeResetMsg{tint: styles.Default(context.Background())} }
 		}
 	}
 	var cmd tea.Cmd
@@ -123,9 +132,7 @@ func (p *themePopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	return p, cmd
 }
 
-func (p *themePopup) view(string) string {
-	innerW, innerH := popupInner(p.width, p.height)
-	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).
-		Height(innerH).
-		Render(lipgloss.NewStyle().MaxWidth(innerW).Render(p.list.View()))
+// View implements tea.Model.
+func (p *themePopup) View() tea.View {
+	return tea.NewView(lipgloss.NewStyle().MaxWidth(p.width).Render(p.list.View()))
 }
