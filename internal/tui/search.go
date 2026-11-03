@@ -66,7 +66,7 @@ func (m SearchModel) WithWarning(text string) SearchModel {
 
 // Init implements tea.Model.
 func (m SearchModel) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend), m.form.form.Init())
+	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend, 0), m.form.form.Init())
 }
 
 func (m SearchModel) busy() bool { return m.searching }

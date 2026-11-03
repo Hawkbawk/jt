@@ -13,21 +13,28 @@ func pickerBackend() *fakeBackend {
 	}}
 }
 
+func projects(t *testing.T, m BoardModel) *projectPopup {
+	t.Helper()
+	p, ok := m.popup.Content().(*projectPopup)
+	if !ok {
+		t.Fatalf("project popup not open, got %T", m.popup.Content())
+	}
+	return p
+}
+
 func TestStartupWithoutDefaultOpensPicker(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "", fb)
 	m = drain(t, m, m.Init())
-	if !m.picker.open || m.picker.cancellable || len(m.picker.list.Items()) != 2 {
-		t.Fatalf("picker not shown: open=%v items=%d", m.picker.open, len(m.picker.list.Items()))
+	if p := projects(t, m); p.cancellable || len(p.list.Items()) != 2 {
+		t.Fatalf("picker not shown: cancellable=%v items=%d", p.cancellable, len(p.list.Items()))
 	}
 	if len(fb.boardCalls) != 0 {
 		t.Fatal("board loaded without a project")
 	}
 
-	m, _ = press(t, m, "esc")
-	if !m.picker.open {
-		t.Fatal("startup picker should not be dismissable without a board")
-	}
+	m = pressDrain(t, m, "esc")
+	projects(t, m)
 }
 
 func TestEnterOpensProjectForSessionOnly(t *testing.T) {
@@ -37,20 +44,20 @@ func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 
 	m, cmd := press(t, m, "j", "enter")
 	m = drain(t, m, cmd)
-	if m.picker.open || m.board.project != "BETA" || m.board.nav == nil {
-		t.Fatalf("project not opened: open=%v project=%s", m.picker.open, m.board.project)
+	if m.popup.IsOpen() || m.board.project != "BETA" || m.board.nav == nil {
+		t.Fatalf("project not opened: open=%v project=%s", m.popup.IsOpen(), m.board.project)
 	}
 }
 
 func TestPickerMarksBackendDefault(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "BETA", fb)
-	m, cmd := press(t, m, "ctrl+p")
-	m = drain(t, m, cmd)
-	if item := m.picker.list.Items()[1].(projectItem); !item.isDefault {
+	m = pressDrain(t, m, "ctrl+p")
+	items := projects(t, m).list.Items()
+	if item := items[1].(projectItem); !item.isDefault {
 		t.Fatal("default marker not shown")
 	}
-	if item := m.picker.list.Items()[0].(projectItem); item.isDefault {
+	if item := items[0].(projectItem); item.isDefault {
 		t.Fatal("non-default project marked as default")
 	}
 }
@@ -61,18 +68,17 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	m := newTestModel(t, "TEST", fb)
 	m = drain(t, m, m.Init())
 
-	m, cmd := press(t, m, "ctrl+p")
-	m = drain(t, m, cmd)
-	if !m.picker.open || !m.picker.cancellable {
+	m = pressDrain(t, m, "ctrl+p")
+	if !projects(t, m).cancellable {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
-	m, _ = press(t, m, "esc")
-	if m.picker.open || m.board.nav == nil || m.board.project != "TEST" {
+	m = pressDrain(t, m, "esc")
+	if m.popup.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
-	m, _ = press(t, m, "ctrl+p")
-	if !m.picker.loaded {
+	m, _ = pressOpen(t, m, "ctrl+p")
+	if !projects(t, m).loaded {
 		t.Fatal("projects should be cached after the first load")
 	}
 }
@@ -90,15 +96,16 @@ func TestFilterThenOpen(t *testing.T) {
 	m = drain(t, m, m.Init())
 
 	m = pressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
-	if m.picker.open || m.board.project != "BETA" {
+	if m.popup.IsOpen() || m.board.project != "BETA" {
 		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.board.project)
 	}
 }
 
 func TestKeysIgnoredWhileProjectsLoad(t *testing.T) {
 	m := newTestModel(t, "", pickerBackend())
+	m, _ = pressOpen(t, m, "ctrl+p")
 	m, _ = press(t, m, "/", "x")
-	if m.picker.filtering() {
+	if projects(t, m).filtering() {
 		t.Fatal("filter started before projects loaded")
 	}
 }

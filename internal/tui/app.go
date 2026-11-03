@@ -30,14 +30,15 @@ type Backend interface {
 }
 
 // BoardModel is the board's root bubbletea model. It routes input and messages to the
-// board, project picker and at most one popup, and controls high-level
-// or broadly used state.
+// board and at most one popup, and controls high-level or broadly used state.
 type BoardModel struct {
 	layout
 
 	board   boardPane
-	picker  picker
 	actions issueActions
+
+	// projects is the list the project popup loaded, kept for the session.
+	projects []jira.Project
 }
 
 // New builds the root model. The backend's default project, if any, is
@@ -46,11 +47,7 @@ func New(backend Backend, settings Settings) BoardModel {
 	m := BoardModel{
 		layout:  newLayout(settings),
 		board:   newBoardPane(backend),
-		picker:  newPicker(backend),
 		actions: newIssueActions(backend),
-	}
-	if m.board.project == "" {
-		m.picker.show(false)
 	}
 	return m
 }
@@ -64,14 +61,14 @@ func (m BoardModel) WithWarning(text string) BoardModel {
 // Init implements tea.Model.
 func (m BoardModel) Init() tea.Cmd {
 	if m.board.project == "" {
-		return m.runWithSpinner(m.picker.fetch())
+		return popup.Open(m.newProjectPopup(false))
 	}
 	return m.runWithSpinner(m.board.fetch(m.board.project, ""))
 }
 
 // busy reports whether anything is waiting on the network.
 func (m BoardModel) busy() bool {
-	return m.board.loading || m.picker.loading()
+	return m.board.loading
 }
 
 // Update implements tea.Model.
@@ -82,18 +79,14 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.runWithSpinner(m.board.reload(msg.key))
 
 	case tea.WindowSizeMsg:
-		cmd := m.resize(msg)
-		m.picker.setSize(m.width, m.bodyHeight())
-		return m, cmd
+		return m, m.resize(msg)
 
 	case ThemeChangedMsg:
 		m.restyle()
-		return m, nil
+		return m, m.updatePopup(msg)
 
 	case themeSelectedMsg:
-		cmd := m.selectTheme(msg)
-		m.picker.restyle()
-		return m, cmd
+		return m, m.selectTheme(msg)
 
 	case themeSavedMsg:
 		m.onThemeSaved(msg)
@@ -112,6 +105,12 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, m.runWithSpinner(m.board.open(msg.key))
 
+	case projectsLoadedMsg:
+		if msg.err == nil {
+			m.projects = msg.projects
+		}
+		return m, m.updatePopup(msg)
+
 	case boardLoadedMsg:
 		m.board.update(msg)
 		return m, nil
@@ -124,15 +123,13 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.display()
 		return m, nil
 	}
-	// The picker's list filters asynchronously and a popup's responses and form
-	// run on their own messages, so both get what's left.
-	return m, tea.Batch(m.updatePopup(msg), m.picker.update(msg))
+	// A popup's responses and form run on their own messages, so it gets
+	// what's left.
+	return m, m.updatePopup(msg)
 }
 
-// restyle rebuilds what the model copied from the styles when it was built.
-func (m *BoardModel) restyle() {
-	m.layout.restyle()
-	m.picker.restyle()
+func (m BoardModel) newProjectPopup(cancellable bool) *projectPopup {
+	return newProjectPopup(m.board.backend, m.projects, cancellable)
 }
 
 func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -144,14 +141,12 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(msg, keys.projects) && !m.picker.open:
+	case key.Matches(msg, keys.projects):
 		// A popup may hold unsaved work, so it has to be closed first.
 		if m.popup.IsOpen() {
 			return m, nil
 		}
-		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
-	case m.picker.open:
-		return m, m.picker.update(msg)
+		return m, popup.Open(m.newProjectPopup(m.board.nav != nil))
 	case m.popup.Captures(msg):
 		return m, m.updatePopup(msg)
 	}

@@ -3,6 +3,7 @@ package tui
 import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -12,6 +13,7 @@ import (
 )
 
 type projectsLoadedMsg struct {
+	id       int64
 	projects []jira.Project
 	err      error
 }
@@ -41,24 +43,31 @@ type projectSelectedMsg struct {
 	key string
 }
 
-// picker is the project selection popup. It caches the project list for the
-// session.
-type picker struct {
-	backend Backend
-
-	open        bool
+// projectPopup lists the projects and reports the one picked. The board keeps
+// the projects it loaded, so later popups start with them.
+type projectPopup struct {
+	id          int64
+	backend     Backend
+	spin        spinner.Model
 	cancellable bool
 	list        list.Model
 	projects    []jira.Project
 	loaded      bool
 	err         error
-
-	// width and height are the size of the whole popup, frame included.
-	width, height int
+	width       int
 }
 
-func newPicker(b Backend) picker {
-	return picker{backend: b}
+// newProjectPopup builds the popup. It loads the projects unless it's given
+// them. A popup that isn't cancellable can only be closed by picking a project.
+func newProjectPopup(b Backend, projects []jira.Project, cancellable bool) *projectPopup {
+	return &projectPopup{
+		id:          newPopupID(),
+		backend:     b,
+		spin:        newSpinner(),
+		cancellable: cancellable,
+		list:        newProjectList(cancellable),
+		projects:    projects,
+	}
 }
 
 // themedDelegate returns a list delegate that marks the selected item in the
@@ -88,38 +97,22 @@ func newProjectList(cancellable bool) list.Model {
 	return l
 }
 
-// restyle redraws the list in the current theme.
-func (p *picker) restyle() {
-	p.list.Styles.Title = styles.Title()
-	p.list.SetDelegate(themedDelegate())
+func loadProjects(backend Backend, id int64) tea.Cmd {
+	return func() tea.Msg {
+		ps, err := backend.Projects()
+		return projectsLoadedMsg{id: id, projects: ps, err: err}
+	}
 }
 
-// show opens a fresh picker. It returns the command that fills the list, from
-// the cache when the projects were already fetched.
-func (p *picker) show(cancellable bool) tea.Cmd {
-	p.open = true
-	p.cancellable = cancellable
-	p.list = newProjectList(cancellable)
-	p.loaded, p.err = false, nil
-	p.applySize()
+// Init implements tea.Model.
+func (p *projectPopup) Init() tea.Cmd {
 	if p.projects != nil {
 		return p.setProjects(p.projects)
 	}
-	return p.fetch()
+	return tea.Batch(loadProjects(p.backend, p.id), p.spin.Tick)
 }
 
-func (p picker) fetch() tea.Cmd {
-	return loadProjects(p.backend)
-}
-
-func loadProjects(backend Backend) tea.Cmd {
-	return func() tea.Msg {
-		ps, err := backend.Projects()
-		return projectsLoadedMsg{projects: ps, err: err}
-	}
-}
-
-func (p *picker) setProjects(projects []jira.Project) tea.Cmd {
+func (p *projectPopup) setProjects(projects []jira.Project) tea.Cmd {
 	defaultKey := p.backend.DefaultProject()
 	items := make([]list.Item, len(projects))
 	for i, pr := range projects {
@@ -129,61 +122,51 @@ func (p *picker) setProjects(projects []jira.Project) tea.Cmd {
 	return p.list.SetItems(items)
 }
 
-// loading reports whether the picker is open and waiting on the project list.
-func (p picker) loading() bool {
-	return p.open && !p.loaded && p.err == nil
+func (p *projectPopup) loading() bool {
+	return !p.loaded && p.err == nil
 }
 
-func (p picker) selected() (jira.Project, bool) {
-	it, ok := p.list.SelectedItem().(projectItem)
-	return it.Project, ok
-}
-
-func (p picker) filtering() bool {
+func (p *projectPopup) filtering() bool {
 	return p.list.FilterState() == list.Filtering
 }
 
-// setSize fits the picker to a window with the given body height.
-func (p *picker) setSize(windowWidth, bodyHeight int) {
-	w, h := popup.DefaultSize(windowWidth, bodyHeight)
-	p.width, p.height = min(w, 80), h
-	p.applySize()
-}
-
-func (p *picker) applySize() {
-	if !p.open {
-		return
-	}
-	p.list.SetSize(p.width-styles.Popup().GetHorizontalFrameSize(), p.height-styles.Popup().GetVerticalFrameSize())
-}
-
-func (p *picker) update(msg tea.Msg) tea.Cmd {
+// Update implements tea.Model.
+func (p *projectPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width = msg.Width
+		p.list.SetSize(msg.Width, msg.Height)
+		return p, nil
+	case spinner.TickMsg:
+		return p, tickSpinner(&p.spin, msg, p.loading())
+	case ThemeChangedMsg:
+		p.list.Styles.Title = styles.Title()
+		p.list.SetDelegate(themedDelegate())
+		return p, nil
 	case projectsLoadedMsg:
+		if msg.id != p.id {
+			return p, nil
+		}
 		if msg.err != nil {
 			p.err = msg.err
-			return nil
+			return p, nil
 		}
-		p.projects = msg.projects
-		return p.setProjects(msg.projects)
+		return p, p.setProjects(msg.projects)
 	case tea.KeyPressMsg:
-		return p.handleKey(msg)
-	}
-	if !p.open {
-		return nil
+		return p, p.handleKey(msg)
 	}
 	return p.forward(msg)
 }
 
-func (p *picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+func (p *projectPopup) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
 		if key.Matches(msg, pickerCloseKey) && p.cancellable {
-			p.open = false
+			return popup.Close()
 		}
 		return nil
 	}
 	if p.filtering() {
-		return p.forward(msg)
+		return p.forwardCmd(msg)
 	}
 	switch {
 	case key.Matches(msg, pickerCloseKey):
@@ -191,40 +174,39 @@ func (p *picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			break
 		}
 		if p.cancellable {
-			p.open = false
+			return popup.Close()
 		}
 		return nil
 	case key.Matches(msg, pickerOpenKey):
-		sel, ok := p.selected()
+		sel, ok := p.list.SelectedItem().(projectItem)
 		if !ok {
 			return nil
 		}
-		p.open = false
-		return func() tea.Msg { return projectSelectedMsg{key: sel.Key} }
+		return popup.CloseWith(projectSelectedMsg{key: sel.Key})
 	}
-	return p.forward(msg)
+	return p.forwardCmd(msg)
 }
 
-func (p *picker) forward(msg tea.Msg) tea.Cmd {
+func (p *projectPopup) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
+	return p, p.forwardCmd(msg)
+}
+
+func (p *projectPopup) forwardCmd(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	p.list, cmd = p.list.Update(msg)
 	return cmd
 }
 
-func (p picker) view(spin string) string {
-	innerW := p.width - styles.Popup().GetHorizontalFrameSize()
-	innerH := p.height - styles.Popup().GetVerticalFrameSize()
-
+// View implements tea.Model.
+func (p *projectPopup) View() tea.View {
 	var body string
 	switch {
 	case p.err != nil:
 		body = styles.Error().Render("Error loading projects: " + p.err.Error())
 	case !p.loaded:
-		body = spin + " Loading projects…"
+		body = p.spin.View() + " Loading projects…"
 	default:
 		body = p.list.View()
 	}
-	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).
-		Height(innerH).
-		Render(lipgloss.NewStyle().MaxWidth(innerW).Render(body))
+	return tea.NewView(lipgloss.NewStyle().MaxWidth(p.width).Render(body))
 }
