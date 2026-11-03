@@ -182,7 +182,7 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, popup.Open(newThemePopup())
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
-		return m, m.openPopup(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter), nil)
+		return m, popup.Open(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter))
 	}
 	if sel == nil {
 		return m, nil

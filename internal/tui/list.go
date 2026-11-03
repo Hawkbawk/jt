@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // choiceList tracks the cursor of a vertical list of choices.
@@ -62,13 +63,8 @@ func popupInner(width, height int) (int, int) {
 	return width - styles.Popup().GetHorizontalFrameSize(), height - styles.Popup().GetVerticalFrameSize()
 }
 
-// renderPopup draws a popup of the given outer size. The body is padded or
-// clipped to fill the space between header and footer, so the popup never
-// changes size.
+// renderPopup draws a popup of the given outer size.
 func renderPopup(width, height int, header, body []string, footer string) string {
 	innerW, innerH := popupInner(width, height)
-	bodyH := max(1, innerH-len(header)-1)
-	content := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(strings.Join(body, "\n"))
-	lines := append(append([]string{}, header...), content, footer)
-	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).Render(strings.Join(lines, "\n"))
+	return styles.Popup().Width(innerW + styles.Popup().GetHorizontalFrameSize()).Render(popup.Stack(innerH, header, body, footer))
 }
