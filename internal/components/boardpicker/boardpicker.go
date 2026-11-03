@@ -36,9 +36,15 @@ type SelectedMsg struct {
 	Board   jira.BoardSummary
 }
 
+// FavoriteMsg asks the host to make a board the default. The picker stays open.
+type FavoriteMsg struct {
+	ID int
+}
+
 var (
 	openKey  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
 	closeKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
+	favKey   = key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite"))
 )
 
 var lastID atomic.Int64
@@ -90,7 +96,7 @@ func New(src Source, project string, current int) *Picker {
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{openKey, closeKey}
+		return []key.Binding{openKey, favKey, closeKey}
 	}
 	return &Picker{
 		id:      lastID.Add(1),
@@ -183,6 +189,12 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if !p.list.IsFiltered() {
 			return popup.Close()
 		}
+	case key.Matches(msg, favKey):
+		sel, ok := p.list.SelectedItem().(item)
+		if !ok {
+			return nil
+		}
+		return func() tea.Msg { return FavoriteMsg{ID: sel.ID} }
 	case key.Matches(msg, openKey):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {

@@ -31,7 +31,7 @@ func TestPickingABoardOpensItWithoutSaving(t *testing.T) {
 	fb, fs := boardsBackend(), &fakeSettings{}
 	m := newSettingsModel(t, "TEST", fb, fs)
 
-	m = pressDrain(t, m, "b")
+	m = pressDrain(t, m, "ctrl+b")
 	if _, ok := m.popup.Content().(*boardpicker.Picker); !ok {
 		t.Fatalf("board popup not open, got %T", m.popup.Content())
 	}
@@ -54,7 +54,7 @@ func TestFavoritingTheBoardSavesIt(t *testing.T) {
 	fb.board.ID = 7
 	m := newSettingsModel(t, "TEST", fb, fs)
 
-	pressDrain(t, m, "b", "j", "enter", "f")
+	pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
 	if !slices.Equal(fs.boards, []int{7}) {
 		t.Fatalf("saved boards = %v, want [7]", fs.boards)
 	}
@@ -68,7 +68,7 @@ func TestFavoritingABoardIgnoresOtherProjects(t *testing.T) {
 		t.Fatalf("project = %s", m.board.project)
 	}
 
-	m = pressDrain(t, m, "b", "j", "enter", "f")
+	m = pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
 	if len(fs.boards) != 0 {
 		t.Fatalf("saved boards = %v, want none", fs.boards)
 	}
@@ -85,7 +85,7 @@ func TestSwitchingBoardClearsFilterAndProjectKeepsItsBoard(t *testing.T) {
 	m := newSettingsModel(t, "ALPHA", fb, &fakeSettings{})
 	m.board.filter = &jira.Filter{Name: "Bugs", JQL: "issuetype = Bug"}
 
-	m = pressDrain(t, m, "b", "j", "enter")
+	m = pressDrain(t, m, "ctrl+b", "j", "enter")
 	if m.board.filter != nil {
 		t.Fatal("a filter from the old board should be dropped")
 	}
@@ -102,7 +102,7 @@ func TestSwitchingBoardClearsFilterAndProjectKeepsItsBoard(t *testing.T) {
 
 func TestBoardSaveErrorShowsInStatus(t *testing.T) {
 	m := newSettingsModel(t, "TEST", boardsBackend(), &fakeSettings{err: errors.New("read-only")})
-	m = pressDrain(t, m, "b", "j", "enter", "f")
+	m = pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
 	if m.status == "" {
 		t.Fatal("expected the save error in the status line")
 	}

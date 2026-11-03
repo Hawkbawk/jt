@@ -120,6 +120,13 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case boardpicker.SelectedMsg:
 		return m.selectBoard(msg)
 
+	case boardpicker.FavoriteMsg:
+		if m.board.project != m.board.backend.DefaultProject() {
+			m.status = styles.Warn().Render("Only the default project's board can be the default")
+			return m, nil
+		}
+		return m, saveBoard(m.settings, msg.ID)
+
 	case boardSavedMsg:
 		if msg.err != nil {
 			m.status = styles.Error().Render("saving board: " + msg.err.Error())
@@ -216,13 +223,6 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if key.Matches(msg, keys.boards) && m.board.nav != nil {
 		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
-	}
-	if key.Matches(msg, keys.favorite) && m.board.nav != nil {
-		if m.board.project != m.board.backend.DefaultProject() {
-			m.status = styles.Warn().Render("Only the default project's board can be the default")
-			return m, nil
-		}
-		return m, saveBoard(m.settings, m.board.nav.board.ID)
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
 		return m, popup.Open(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter))
