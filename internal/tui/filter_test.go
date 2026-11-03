@@ -20,8 +20,8 @@ func filterModel(t *testing.T) (BoardModel, *fakeBackend) {
 
 func TestFilterPopupSwitchesBetweenTabs(t *testing.T) {
 	m, _ := filterModel(t)
-	m, _ = press(t, m, "f")
-	if _, ok := m.popup.(*filterPopup); !ok {
+	m = pressDrain(t, m, "f")
+	if _, ok := m.popup.Content().(*filterPopup); !ok {
 		t.Fatal("f should open the filter popup")
 	}
 	v := ansi.Strip(m.View().Content)
@@ -59,7 +59,7 @@ func TestFilterSelectionReloadsBoardAndClears(t *testing.T) {
 	if got := fb.filterCalls[len(fb.filterCalls)-1]; got != `assignee = "a"` {
 		t.Fatalf("filterJQL = %q", got)
 	}
-	if m.popup != nil || m.board.filter == nil || m.board.filter.Name != "Alice" {
+	if m.popup.IsOpen() || m.board.filter == nil || m.board.filter.Name != "Alice" {
 		t.Fatal("selected filter should be active and the popup closed")
 	}
 	if !strings.Contains(m.View().Content, "filter: Alice") {
@@ -67,8 +67,8 @@ func TestFilterSelectionReloadsBoardAndClears(t *testing.T) {
 	}
 
 	// The popup reopens on the tab and row of the active filter.
-	m, _ = press(t, m, "f")
-	if p := m.popup.(*filterPopup); p.tab != 1 || p.cursor != 1 {
+	m = pressDrain(t, m, "f")
+	if p := m.popup.Content().(*filterPopup); p.tab != 1 || p.cursor != 1 {
 		t.Fatalf("tab, cursor = %d, %d", p.tab, p.cursor)
 	}
 	m = pressDrain(t, m, "k", "enter")

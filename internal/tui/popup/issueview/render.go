@@ -1,4 +1,4 @@
-package tui
+package issueview
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ func field(label, value string) string {
 	return styles.Dim().Render(label+": ") + orDash(value)
 }
 
-func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
+func renderDetail(d *jira.IssueDetail, width int, md Markdown) string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Bold(true).Width(width).Render(d.Summary))
 	b.WriteString("\n\n")
@@ -42,7 +42,7 @@ func renderDetail(d *jira.IssueDetail, width int, md markdownRenderer) string {
 	return b.String()
 }
 
-func renderComments(d *jira.IssueDetail, width int, md markdownRenderer) string {
+func renderComments(d *jira.IssueDetail, width int, md Markdown) string {
 	if len(d.Comments) == 0 {
 		return styles.Dim().Render("No comments.")
 	}

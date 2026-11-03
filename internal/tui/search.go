@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type issueTypesLoadedMsg struct {
@@ -68,7 +69,7 @@ func (m SearchModel) Init() tea.Cmd {
 	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend), m.form.form.Init())
 }
 
-func (m SearchModel) busy() bool { return m.popupLoading() || m.searching }
+func (m SearchModel) busy() bool { return m.searching }
 
 func (m *SearchModel) restyle() tea.Cmd {
 	m.layout.restyle()
@@ -107,14 +108,15 @@ func (m *SearchModel) fit() {
 // Update implements tea.Model.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
-		return m.finishEdit(msg, editResult(msg))
+	case issueEditedMsg:
+		m.status = msg.status
+		m.refocus = &resultCursor{key: msg.key, index: m.results.table.GetHighlightedRowIndex()}
+		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:
-		m.resize(msg)
+		popupCmd := m.resize(msg)
 		m.fit()
-		cmd := m.form.update(msg)
-		return m, cmd
+		return m, tea.Batch(popupCmd, m.form.update(msg))
 
 	case ThemeChangedMsg:
 		cmd := m.restyle()
@@ -130,8 +132,10 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		cmd := m.tick(msg, m.busy())
-		return m, cmd
+		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case popup.OpenMsg, popup.CloseMsg:
+		return m, m.updatePopup(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -167,8 +171,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.popup != nil {
-		return m.forwardToPopup(msg, m.searching)
+	if m.popup.IsOpen() {
+		return m.updatePopup(msg)
 	}
 	return m.updateForm(msg)
 }
@@ -256,18 +260,6 @@ func (m *SearchModel) focusForm() tea.Cmd {
 	return m.form.form.GetFocusedField().Focus()
 }
 
-func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
-	if e.err != nil {
-		cmd := m.forwardToPopup(msg, m.searching)
-		return m, cmd
-	}
-	m.popup = nil
-	m.status = e.status
-	m.refocus = &resultCursor{key: e.key, index: m.results.table.GetHighlightedRowIndex()}
-	cmd := m.search(m.lastJQL)
-	return m, cmd
-}
-
 func (m *SearchModel) toggleMode() tea.Cmd {
 	m.form.advanced = !m.form.advanced
 	if m.form.advanced && strings.TrimSpace(m.form.jql) == "" {
@@ -288,9 +280,8 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.popup != nil {
-		cmd := m.forwardToPopup(msg, m.searching)
-		return m, cmd
+	if m.popup.Captures(msg) {
+		return m, m.updatePopup(msg)
 	}
 	switch {
 	case key.Matches(msg, modeKey):
@@ -347,20 +338,14 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.theme):
-		cmd := m.openPopup(newThemePopup(), nil)
-		return m, cmd
+		return m, popup.Open(newThemePopup())
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {
 		if key.Matches(msg, keys.accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}
-		p, cmd := m.actions.handle(msg, *sel)
-		if p != nil {
-			cmd = m.openPopup(p, cmd)
-			return m, cmd
-		}
-		if cmd != nil {
+		if cmd := m.actions.handle(msg, *sel); cmd != nil {
 			return m, cmd
 		}
 	}
@@ -406,9 +391,7 @@ func (m SearchModel) render() string {
 		return ""
 	}
 	body := m.bodyView()
-	if m.popup != nil {
-		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
-	}
+	body = m.popup.Overlay(body)
 	mode := "basic"
 	if m.form.advanced {
 		mode = "advanced"

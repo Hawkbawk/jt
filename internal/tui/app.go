@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // Backend is the Jira functionality the TUI depends on.
@@ -70,19 +71,20 @@ func (m BoardModel) Init() tea.Cmd {
 
 // busy reports whether anything is waiting on the network.
 func (m BoardModel) busy() bool {
-	return m.popupLoading() || m.board.loading || m.picker.loading()
+	return m.board.loading || m.picker.loading()
 }
 
 // Update implements tea.Model.
 func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
-		return m.finishEdit(msg, editResult(msg))
+	case issueEditedMsg:
+		m.status = msg.status
+		return m, m.runWithSpinner(m.board.reload(msg.key))
 
 	case tea.WindowSizeMsg:
-		m.resize(msg)
+		cmd := m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
-		return m, nil
+		return m, cmd
 
 	case ThemeChangedMsg:
 		m.restyle()
@@ -101,7 +103,10 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		return m, m.tick(msg, m.busy())
+		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case popup.OpenMsg, popup.CloseMsg:
+		return m, m.updatePopup(msg)
 
 	case projectSelectedMsg:
 		m.status = ""
@@ -111,9 +116,6 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
-		return m.forwardToPopup(msg)
-
 	case filterSelectedMsg:
 		m.status = ""
 		return m, m.runWithSpinner(m.board.setFilter(msg.filter))
@@ -122,11 +124,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.display()
 		return m, nil
 	}
-	// The picker's list filters asynchronously and a popup's form runs on its
-	// own messages, so both get what's left.
-	pm, popupCmd := m.forwardToPopup(msg)
-	m = pm.(BoardModel)
-	return m, tea.Batch(popupCmd, m.picker.update(msg))
+	// The picker's list filters asynchronously and a popup's responses and form
+	// run on their own messages, so both get what's left.
+	return m, tea.Batch(m.updatePopup(msg), m.picker.update(msg))
 }
 
 // restyle rebuilds what the model copied from the styles when it was built.
@@ -146,14 +146,14 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.projects) && !m.picker.open:
 		// A popup may hold unsaved work, so it has to be closed first.
-		if m.popup != nil {
+		if m.popup.IsOpen() {
 			return m, nil
 		}
 		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
-	case m.popup != nil:
-		return m.forwardToPopup(msg)
+	case m.popup.Captures(msg):
+		return m, m.updatePopup(msg)
 	}
 	return m.handleBoardKey(msg)
 }
@@ -175,32 +175,13 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.theme) {
-		return m, m.openPopup(newThemePopup(), nil)
+		return m, popup.Open(newThemePopup())
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
-		return m, m.openPopup(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter), nil)
+		return m, popup.Open(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter))
 	}
 	if sel == nil {
 		return m, nil
 	}
-	p, cmd := m.actions.handle(msg, *sel)
-	if p != nil {
-		return m, m.openPopup(p, cmd)
-	}
-	return m, cmd
-}
-
-// finishEdit closes the popup and reloads the board after a successful change.
-// A failure goes back to the popup to show.
-func (m BoardModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
-	if e.err != nil {
-		return m.forwardToPopup(msg)
-	}
-	m.popup = nil
-	m.status = e.status
-	return m, m.runWithSpinner(m.board.reload(e.key))
-}
-
-func (m BoardModel) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return m, m.layout.forwardToPopup(msg, m.board.loading || m.picker.loading())
+	return m, m.actions.handle(msg, *sel)
 }

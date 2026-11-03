@@ -6,6 +6,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // filterSelectedMsg reports the chosen filter. A nil filter clears it.
@@ -69,16 +70,20 @@ func (p *filterPopup) activeRow() int {
 	return p.activeIn(p.tabs[p.tab])
 }
 
-func (p *filterPopup) setSize(width, height int) {
-	p.width, p.height = width, height
-}
-
 func (p *filterPopup) switchTab(delta int) {
 	p.tab = (p.tab + delta + len(p.tabs)) % len(p.tabs)
 	p.cursor = p.activeRow()
 }
 
-func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
+// Init implements tea.Model.
+func (p *filterPopup) Init() tea.Cmd { return nil }
+
+// Update implements tea.Model.
+func (p *filterPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		p.width, p.height = size.Width, size.Height
+		return p, nil
+	}
 	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil
@@ -86,7 +91,7 @@ func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	filters := p.tabs[p.tab].filters
 	switch {
 	case key.Matches(km, keys.close):
-		return nil, nil
+		return p, popup.Close()
 	case key.Matches(km, keys.nextTab, keys.right):
 		p.switchTab(1)
 	case key.Matches(km, keys.prevTab, keys.left):
@@ -97,13 +102,13 @@ func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 		if p.cursor > 0 {
 			sel = &filters[p.cursor-1]
 		}
-		return nil, func() tea.Msg { return filterSelectedMsg{filter: sel} }
+		return p, popup.CloseWith(filterSelectedMsg{filter: sel})
 	}
 	return p, nil
 }
 
-func (p *filterPopup) view(string) string {
-	innerW, _ := popupInner(p.width, p.height)
+// View implements tea.Model.
+func (p *filterPopup) View() tea.View {
 	t := p.tabs[p.tab]
 	names := make([]string, len(p.tabs))
 	for i, t := range p.tabs {
@@ -114,9 +119,9 @@ func (p *filterPopup) view(string) string {
 	if len(t.filters) == 0 {
 		body = []string{styles.Dim().Render(t.empty)}
 	} else {
-		body = p.render(append([]string{"All issues"}, filterNames(t.filters)...), innerW)
+		body = p.render(append([]string{"All issues"}, filterNames(t.filters)...), p.width)
 	}
-	return renderPopup(p.width, p.height, header, body, styles.Dim().Render("tab switch · j/k select · enter apply · esc cancel"))
+	return tea.NewView(popup.Stack(p.height, header, body, styles.Dim().Render("tab switch · j/k select · enter apply · esc cancel")))
 }
 
 func filterNames(fs []jira.Filter) []string {

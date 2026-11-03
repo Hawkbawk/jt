@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // actionDoneMsg reports the result of a yank or open.
@@ -42,52 +43,27 @@ func newIssueActions(b Backend) issueActions {
 	}
 }
 
-// handle returns the command for msg on the given issue. Keys that open a
-// popup also return it, with the command that loads its content.
-func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) (popup, tea.Cmd) {
+// handle returns the command for msg on the given issue, which for some keys
+// opens a popup. It returns nil for keys that aren't actions.
+func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.view):
-		return newTextPopup("Details", iss.Key, renderDetail, a.md), loadIssue(b, iss.Key)
+		return popup.Open(newDetailPopup(b, iss.Key, a.md))
 	case key.Matches(msg, keys.comments):
-		return newCommentsPopup(b, iss.Key, a.md), loadIssue(b, iss.Key)
+		return popup.Open(newCommentsPopup(b, iss.Key, a.md))
 	case key.Matches(msg, keys.move):
-		return newMovePopup(b, iss), loadTransitions(b, iss)
+		return popup.Open(newMovePopup(b, iss))
 	case key.Matches(msg, keys.assign):
-		p := newAssignPane(b, iss)
-		return newAssignPopup(p), p.init()
+		return popup.Open(newAssignPopup(b, iss))
 	case key.Matches(msg, keys.edit):
-		return newEditPopup(b, iss), loadFields(b, iss)
+		return popup.Open(newEditPopup(b, iss))
 	case key.Matches(msg, keys.yank):
-		return nil, runAction(a.copyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
+		return runAction(a.copyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
 	case key.Matches(msg, keys.open):
-		return nil, runAction(a.openURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
+		return runAction(a.openURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
 	}
-	return nil, nil
-}
-
-// issueEdit is the outcome of a change made to an issue from a popup.
-type issueEdit struct {
-	key    string
-	status string
-	err    error
-}
-
-// editResult describes a transitionDoneMsg, assignDoneMsg or fieldsSavedMsg.
-func editResult(msg tea.Msg) issueEdit {
-	switch msg := msg.(type) {
-	case transitionDoneMsg:
-		return issueEdit{key: msg.key, status: "Moved " + msg.key + " to " + msg.to, err: msg.err}
-	case assignDoneMsg:
-		status := "Assigned " + msg.issueKey + " to " + msg.to
-		if msg.cleared {
-			status = "Unassigned " + msg.issueKey
-		}
-		return issueEdit{key: msg.issueKey, status: status, err: msg.err}
-	case fieldsSavedMsg:
-		return issueEdit{key: msg.key, status: fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key), err: msg.err}
-	}
-	panic(fmt.Sprintf("unexpected edit result %T", msg))
+	return nil
 }
 
 // runAction calls fn with url off the update loop and reports the outcome.

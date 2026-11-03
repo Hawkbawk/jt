@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type projectsLoadedMsg struct {
@@ -144,7 +145,7 @@ func (p picker) filtering() bool {
 
 // setSize fits the picker to a window with the given body height.
 func (p *picker) setSize(windowWidth, bodyHeight int) {
-	w, h := popupSize(windowWidth, bodyHeight)
+	w, h := popup.DefaultSize(windowWidth, bodyHeight)
 	p.width, p.height = min(w, 80), h
 	p.applySize()
 }

@@ -2,37 +2,43 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type fieldsLoadedMsg struct {
+	id     int64
 	key    string
 	fields []jira.EditField
 	err    error
 }
 
 type fieldsSavedMsg struct {
+	id    int64
 	key   string
 	count int
 	err   error
 }
 
-func loadFields(b Backend, iss jira.Issue) tea.Cmd {
+func loadFields(b Backend, id int64, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
 		fs, err := b.EditFields(iss)
-		return fieldsLoadedMsg{key: iss.Key, fields: fs, err: err}
+		return fieldsLoadedMsg{id: id, key: iss.Key, fields: fs, err: err}
 	}
 }
 
@@ -226,11 +232,19 @@ func listHeight(n int) int {
 	return min(n, 6) + 1
 }
 
-// fieldsPane lists an issue's editable fields and edits one at a time in a
+// editPopup lists an issue's editable fields and edits one at a time in a
 // form. Changes are kept until they're all saved together.
-type fieldsPane struct {
+type editPopup struct {
+	id      int64
 	key     string
+	issue   jira.Issue
 	backend Backend
+	spin    spinner.Model
+	help    help.Model
+
+	width, height int
+	// confirmClose is set while asking whether to drop unsaved changes.
+	confirmClose bool
 
 	vals    []*fieldValue
 	list    list.Model
@@ -243,25 +257,30 @@ type fieldsPane struct {
 	formH int
 }
 
-func newFieldsPane(b Backend, issueKey string) fieldsPane {
-	return fieldsPane{key: issueKey, backend: b}
+func newEditPopup(b Backend, iss jira.Issue) *editPopup {
+	return &editPopup{id: newPopupID(), key: iss.Key, issue: iss, backend: b, spin: newSpinner(), help: styles.Help()}
 }
 
-func (p *fieldsPane) loading() bool {
+// Init implements tea.Model.
+func (p *editPopup) Init() tea.Cmd {
+	return tea.Batch(loadFields(p.backend, p.id, p.issue), p.spin.Tick)
+}
+
+func (p *editPopup) loading() bool {
 	return (!p.loaded && p.err == nil) || p.saving
 }
 
 // capturing is true while typed text goes to a form field or the list filter.
-func (p *fieldsPane) capturing() bool {
+func (p *editPopup) capturing() bool {
 	return p.editing != nil || p.list.SettingFilter()
 }
 
 // consumesEsc is true when esc steps back within the pane instead of closing it.
-func (p *fieldsPane) consumesEsc() bool {
+func (p *editPopup) consumesEsc() bool {
 	return p.editing != nil || p.list.FilterState() != list.Unfiltered
 }
 
-func (p *fieldsPane) unsaved() int { return len(p.changed()) }
+func (p *editPopup) unsaved() int { return len(p.changed()) }
 
 // fieldDelegate is the themed delegate with no gap between rows.
 func fieldDelegate() list.DefaultDelegate {
@@ -285,7 +304,7 @@ func newFieldList(vals []*fieldValue) list.Model {
 }
 
 // edit opens a form for v alone.
-func (p *fieldsPane) edit(v *fieldValue) tea.Cmd {
+func (p *editPopup) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
 	v.begin()
 	if v.isUser() {
@@ -313,14 +332,65 @@ func newGroupsForm(groups ...*huh.Group) *huh.Form {
 }
 
 // closeForm goes back to the list of fields.
-func (p *fieldsPane) closeForm() {
+func (p *editPopup) closeForm() {
 	p.editing, p.form = nil, nil
 }
 
-func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
+// Update implements tea.Model.
+func (p *editPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	was := p.loading()
+	var cmd tea.Cmd
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width, p.height = msg.Width, msg.Height
+	case spinner.TickMsg:
+		cmd = tickSpinner(&p.spin, msg, p.loading())
+	case tea.KeyPressMsg:
+		cmd = p.updateKey(msg)
+	default:
+		cmd = p.update(msg)
+	}
+	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+}
+
+func (p *editPopup) updateKey(km tea.KeyPressMsg) tea.Cmd {
+	if p.confirmClose {
+		return p.updateConfirm(km)
+	}
+	if p.consumesEsc() && key.Matches(km, keys.blur) {
+		return p.update(km)
+	}
+	closes := keys.close
+	if p.capturing() {
+		closes = keys.blur
+	}
+	if key.Matches(km, closes) {
+		if p.unsaved() > 0 {
+			p.confirmClose = true
+			return nil
+		}
+		return popup.Close()
+	}
+	return p.update(km)
+}
+
+func (p *editPopup) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(km, keys.confirm):
+		return popup.Close()
+	case key.Matches(km, keys.deny):
+		p.confirmClose = false
+	case key.Matches(km, keys.send):
+		p.confirmClose = false
+		return p.update(km)
+	}
+	return nil
+}
+
+func (p *editPopup) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case fieldsLoadedMsg:
-		if msg.key != p.key {
+		if msg.id != p.id {
 			break
 		}
 		p.loaded, p.err = true, msg.err
@@ -330,8 +400,13 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 		p.list = newFieldList(p.vals)
 		return nil
 	case fieldsSavedMsg:
-		if msg.key == p.key {
-			p.saving, p.err = false, msg.err
+		if msg.id != p.id {
+			return nil
+		}
+		p.saving, p.err = false, msg.err
+		if msg.err == nil {
+			status := fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key)
+			return closeEdited(msg.key, status)
 		}
 		return nil
 	}
@@ -373,21 +448,21 @@ func (p *fieldsPane) update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (p *fieldsPane) save() tea.Cmd {
+func (p *editPopup) save() tea.Cmd {
 	changed := p.changed()
 	if p.saving || len(changed) == 0 {
 		return nil
 	}
 	p.saving, p.err = true, nil
-	b, issueKey := p.backend, p.key
+	b, id, issueKey := p.backend, p.id, p.key
 	return func() tea.Msg {
-		return fieldsSavedMsg{key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
+		return fieldsSavedMsg{id: id, key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
 	}
 }
 
 // changed returns the fields that differ from how they loaded. What is still
 // being entered in an open form doesn't count until enter keeps it.
-func (p *fieldsPane) changed() []jira.EditField {
+func (p *editPopup) changed() []jira.EditField {
 	var out []jira.EditField
 	for _, v := range p.vals {
 		f := v.current()
@@ -402,11 +477,27 @@ func (p *fieldsPane) changed() []jira.EditField {
 }
 
 // holding is true while a field's form is open, which blocks saving.
-func (p *fieldsPane) holding() bool { return p.form != nil }
+func (p *editPopup) holding() bool { return p.form != nil }
 
-func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
+// View implements tea.Model.
+func (p *editPopup) View() tea.View {
+	p.help.SetWidth(p.width)
+	title := styles.Title().Render("Edit · " + p.key)
+	footer := p.help.View(paneHelpKeys)
+	if n := p.unsaved(); n > 0 {
+		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
+		warn := "● " + changes
+		if !p.holding() {
+			warn += " · ctrl+s to save"
+		}
+		title += "  " + styles.Warn().Render(warn)
+		if p.confirmClose {
+			footer = styles.Warn().Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
+		}
+	}
+	spin := p.spin.View()
 	var lines []string
-	formH := max(1, height-2)
+	formH := max(1, p.height-issueChromeLines-2)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
@@ -415,30 +506,31 @@ func (p *fieldsPane) view(spin string, innerW, height int, _ string) []string {
 	case p.form != nil:
 		resized := p.formH != formH
 		p.formH = formH
-		p.form.WithWidth(innerW).WithHeight(formH)
+		p.form.WithWidth(p.width).WithHeight(formH)
 		if resized {
 			p.growText()
 		}
 		lines = strings.Split(p.form.View(), "\n")
 	case p.loaded:
-		p.list.SetSize(innerW, formH)
+		p.list.SetSize(p.width, formH)
 		lines = strings.Split(p.list.View(), "\n")
 	}
-	return append(lines, "", statusLine(spin, innerW, p.err, p.saving, "Saving…", p.hint()))
+	lines = append(lines, "", statusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
+	return tea.NewView(popup.Stack(p.height, []string{title, ""}, lines, footer))
 }
 
 // refreshMsg makes the form redraw its content, which it only does on updates.
 type refreshMsg struct{}
 
 // growText gives a text area being edited most of the form's height.
-func (p *fieldsPane) growText() {
+func (p *editPopup) growText() {
 	if t, ok := p.editing.input.(*huh.Text); ok {
 		t.Lines(max(minTextLines, p.formH-3))
 		p.form.Update(refreshMsg{})
 	}
 }
 
-func (p *fieldsPane) hint() string {
+func (p *editPopup) hint() string {
 	switch {
 	case p.form != nil && p.editing.isUser():
 		return styles.Dim().Render("enter next · shift+tab back to search · space toggles · esc back")

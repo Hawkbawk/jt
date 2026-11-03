@@ -159,6 +159,19 @@ func press(t *testing.T, m BoardModel, keys ...string) (BoardModel, tea.Cmd) {
 	return m, cmd
 }
 
+// pressOpen presses k, which opens a popup, and applies the message that opens
+// it. It returns the model with the popup showing and the popup's own commands,
+// which haven't run yet.
+func pressOpen(t *testing.T, m BoardModel, k string) (BoardModel, tea.Cmd) {
+	t.Helper()
+	m, cmd := press(t, m, k)
+	if cmd == nil {
+		t.Fatalf("%s should open a popup", k)
+	}
+	next, cmd := m.Update(cmd())
+	return next.(BoardModel), cmd
+}
+
 // pressDrain sends keys in order, running each resulting command to completion.
 func pressDrain(t *testing.T, m BoardModel, keys ...string) BoardModel {
 	t.Helper()
@@ -251,13 +264,16 @@ func TestQQuitsFromBoard(t *testing.T) {
 
 func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 	m, _ := loadedModel(t)
-	m, _ = press(t, m, "v")
-	if m.popup == nil {
+	m = pressDrain(t, m, "v")
+	if !m.popup.IsOpen() {
 		t.Fatal("v should open a popup")
 	}
 	m, cmd := press(t, m, "q")
-	if isQuit(cmd) || m.popup != nil {
-		t.Fatal("q in a popup should close it, not quit")
+	if isQuit(cmd) {
+		t.Fatal("q in a popup should not quit")
+	}
+	if m = drain(t, m, cmd); m.popup.IsOpen() {
+		t.Fatal("q in a popup should close it")
 	}
 }
 

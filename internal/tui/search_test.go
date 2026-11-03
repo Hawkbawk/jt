@@ -57,7 +57,7 @@ func typeInto(t *testing.T, m SearchModel, field, text string) SearchModel {
 
 func searchType(t *testing.T, m SearchModel, text string) SearchModel {
 	t.Helper()
-	if m.popup != nil {
+	if m.popup.IsOpen() {
 		for _, r := range text {
 			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 			m = searchDrain(t, next.(SearchModel), cmd)
@@ -468,11 +468,11 @@ func TestSearchIssueActions(t *testing.T) {
 	fb.transitions = []jira.Transition{{ID: "31", Name: "Done", To: "Done"}}
 
 	m = searchPressDrain(t, m, "v")
-	if m.popup == nil || !strings.Contains(ansi.Strip(m.render()), "Details here") {
+	if !m.popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Details here") {
 		t.Fatalf("details popup didn't open:\n%s", ansi.Strip(m.render()))
 	}
 	m = searchPressDrain(t, m, "esc")
-	if m.popup != nil {
+	if m.popup.IsOpen() {
 		t.Fatal("esc should close the popup")
 	}
 
@@ -482,8 +482,8 @@ func TestSearchIssueActions(t *testing.T) {
 	if len(fb.moved) != 1 || fb.moved[0] != "DEMO-2:31" {
 		t.Fatalf("moved = %q", fb.moved)
 	}
-	if m.popup != nil || len(fb.findCalls) != 2 {
-		t.Errorf("popup = %v, searches = %q, selected = %v", m.popup, fb.findCalls, m.results.selected())
+	if m.popup.IsOpen() || len(fb.findCalls) != 2 {
+		t.Errorf("popup = %v, searches = %q, selected = %v", m.popup.Content(), fb.findCalls, m.results.selected())
 	}
 	if !strings.Contains(m.status, "Moved DEMO-2 to Done") {
 		t.Errorf("status = %q", m.status)
@@ -508,7 +508,7 @@ func TestSearchSelectPreviewsAndRestoresFocus(t *testing.T) {
 	m, fb := searched(t)
 	fb.detail = &jira.IssueDetail{Issue: foundIssues()[1], Description: "Selected issue preview"}
 	m = searchPressDrain(t, m, "j", "enter")
-	if m.popup == nil || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
+	if !m.popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
 		t.Fatal("selecting a result should open its preview")
 	}
 	m = searchPressDrain(t, m, "esc")
@@ -528,8 +528,8 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 		t.Fatalf("comments = %q", fb.comments)
 	}
 	m = searchPressDrain(t, m, "esc", "e")
-	if p, ok := m.popup.(*panePopup); !ok || p.title != "Edit" || p.issueKey != "DEMO-2" {
-		t.Fatalf("edit shortcut should use the hovered result: %T", m.popup)
+	if p, ok := m.popup.Content().(*editPopup); !ok || p.key != "DEMO-2" {
+		t.Fatalf("edit shortcut should use the hovered result: %T", m.popup.Content())
 	}
 }
 

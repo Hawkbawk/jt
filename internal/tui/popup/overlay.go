@@ -1,4 +1,4 @@
-package tui
+package popup
 
 import (
 	"strings"
@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// overlay draws fg centered on top of bg, which is width columns wide.
-func overlay(bg, fg string, width int) string {
+// Overlay draws fg centered on top of bg, which is width columns wide.
+func Overlay(bg, fg string, width int) string {
 	bgLines := strings.Split(bg, "\n")
 	fgLines := strings.Split(fg, "\n")
 	fgWidth := lipgloss.Width(fg)
@@ -30,9 +30,4 @@ func overlay(bg, fg string, width int) string {
 		bgLines[row] = left + ansi.ResetStyle + line + ansi.ResetStyle + right
 	}
 	return strings.Join(bgLines, "\n")
-}
-
-// popupSize returns the outer popup dimensions for a body area.
-func popupSize(width, height int) (int, int) {
-	return max(20, width*4/5), max(6, height*4/5)
 }
