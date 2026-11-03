@@ -33,7 +33,7 @@ type layout struct {
 func newLayout(settings Settings) layout {
 	return layout{
 		settings: settings,
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
+		spinner:  newSpinner(),
 		help:     styles.Help(),
 		popup:    popup.New(popup.WithStyle(styles.Popup)),
 	}
@@ -99,12 +99,7 @@ func (c layout) popupLoading() bool {
 // tick advances the spinner while busy. The tick chain ends once nothing is
 // busy.
 func (c *layout) tick(msg spinner.TickMsg, busy bool) tea.Cmd {
-	if !busy {
-		return nil
-	}
-	var cmd tea.Cmd
-	c.spinner, cmd = c.spinner.Update(msg)
-	return cmd
+	return tickSpinner(&c.spinner, msg, busy)
 }
 
 // forwardToPopup passes msg to the open popup. otherBusy is whether anything

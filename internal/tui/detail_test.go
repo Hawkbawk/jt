@@ -32,113 +32,95 @@ func loadedDetailModel(t *testing.T) BoardModel {
 
 func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, cmd := press(t, m, "v")
-	p, ok := m.legacy.(*textPopup)
-	if !ok || !p.loading() {
+	m, cmd := pressOpen(t, m, "v")
+	p, ok := m.popup.Content().(*detailPopup)
+	if !ok || !p.issue.Loading() {
 		t.Fatal("v should open a loading detail popup")
 	}
 	m = drain(t, m, cmd)
-	p = m.legacy.(*textPopup)
-	if p.detail == nil || !strings.Contains(m.View().Content, "T-1") {
+	p = m.popup.Content().(*detailPopup)
+	if p.issue.Loading() || !strings.Contains(m.View().Content, "T-1") {
 		t.Fatal("detail not loaded into popup")
 	}
 
 	m, _ = press(t, m, "down", "down")
-	if p := m.legacy.(*textPopup); p.vp.YOffset() != 2 {
-		t.Fatalf("down arrow should scroll, YOffset=%d", p.vp.YOffset())
+	if p := m.popup.Content().(*detailPopup); p.issue.ScrollPercent() == 0 {
+		t.Fatalf("down arrow should scroll, scrolled to %v", p.issue.ScrollPercent())
 	}
 
 	m, _ = press(t, m, "j")
 	if m.board.nav.row != 0 {
 		t.Fatal("board moved while popup was open")
 	}
-	m, _ = press(t, m, "esc")
-	if m.legacy != nil {
+	m = pressDrain(t, m, "esc")
+	if m.popup.IsOpen() {
 		t.Fatal("esc should close the popup")
 	}
 }
 
 func TestViewPopupTopAndBottom(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, cmd := press(t, m, "v")
-	m = drain(t, m, cmd)
+	m = pressDrain(t, m, "v")
 
 	m, _ = press(t, m, "G")
-	p := m.legacy.(*textPopup)
-	if !p.vp.AtBottom() || p.vp.YOffset() == 0 {
-		t.Fatalf("G should jump to the bottom, YOffset=%d", p.vp.YOffset())
+	p := m.popup.Content().(*detailPopup)
+	if p.issue.ScrollPercent() != 1 {
+		t.Fatalf("G should jump to the bottom, scrolled to %v", p.issue.ScrollPercent())
 	}
 	if m.board.nav.row != 0 {
 		t.Fatal("G moved the board while the popup was open")
 	}
 
 	m, _ = press(t, m, "g")
-	if p := m.legacy.(*textPopup); !p.vp.AtTop() {
-		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
+	if p := m.popup.Content().(*detailPopup); p.issue.ScrollPercent() != 0 {
+		t.Fatalf("g should jump to the top, scrolled to %v", p.issue.ScrollPercent())
 	}
-	if v := ansi.Strip(m.legacy.view("")); !strings.Contains(v, "g/G top/bottom") {
+	if v := ansi.Strip(m.popup.View()); !strings.Contains(v, "g/G top/bottom") {
 		t.Fatalf("footer is missing g/G:\n%s", v)
 	}
 }
 
 func TestViewPopupHorizontalScroll(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, cmd := press(t, m, "v")
-	m = drain(t, m, cmd)
-	before := m.legacy.(*textPopup).vp.View()
+	m = pressDrain(t, m, "v")
+	before := m.popup.Content().(*detailPopup).View().Content
 	m, _ = press(t, m, "right")
-	if m.legacy.(*textPopup).vp.View() == before {
+	if m.popup.Content().(*detailPopup).View().Content == before {
 		t.Fatal("right arrow should scroll wide content horizontally")
 	}
 }
 
 func TestViewIgnoredOnEmptyColumn(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, _ = press(t, m, "l", "v")
-	if m.legacy != nil {
+	m = pressDrain(t, m, "l", "v")
+	if m.popup.IsOpen() {
 		t.Fatal("popup opened without a selected issue")
-	}
-}
-
-func TestStaleIssueLoadIsIgnored(t *testing.T) {
-	m := loadedDetailModel(t)
-	m, _ = press(t, m, "v")
-	next, _ := m.Update(issueLoadedMsg{key: "OTHER-1", detail: &jira.IssueDetail{}})
-	if !next.(BoardModel).legacy.(*textPopup).loading() {
-		t.Fatal("popup accepted an issue it did not request")
 	}
 }
 
 func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, _ = press(t, m, "v", "ctrl+p")
-	if m.legacy == nil || m.picker.open {
+	m = pressDrain(t, m, "v", "ctrl+p")
+	if !m.popup.IsOpen() || m.picker.open {
 		t.Fatal("ctrl+p should do nothing while a popup is open")
 	}
 }
 
 func TestCommentsPopupShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
-	m, cmd := press(t, m, "c")
-	m = drain(t, m, cmd)
-	p, ok := m.legacy.(*commentsPopup)
+	m = pressDrain(t, m, "c")
+	_, ok := m.popup.Content().(*commentsPopup)
 	if !ok {
 		t.Fatal("c should open the comments popup")
 	}
-	content := renderComments(p.detail, 40, plainMarkdown)
+	content := ansi.Strip(m.popup.View())
 	for _, want := range []string{"Ada", "first comment", "Grace", "second comment"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("comments missing %q", want)
 		}
 	}
-	m, _ = press(t, m, "q")
-	if m.legacy != nil {
+	m = pressDrain(t, m, "q")
+	if m.popup.IsOpen() {
 		t.Fatal("q should close the popup")
-	}
-}
-
-func TestRenderCommentsEmpty(t *testing.T) {
-	if got := renderComments(&jira.IssueDetail{}, 40, plainMarkdown); !strings.Contains(got, "No comments") {
-		t.Fatalf("got %q", got)
 	}
 }

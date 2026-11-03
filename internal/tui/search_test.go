@@ -57,7 +57,7 @@ func typeInto(t *testing.T, m SearchModel, field, text string) SearchModel {
 
 func searchType(t *testing.T, m SearchModel, text string) SearchModel {
 	t.Helper()
-	if m.legacy != nil {
+	if m.popupOpen() {
 		for _, r := range text {
 			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 			m = searchDrain(t, next.(SearchModel), cmd)
@@ -468,11 +468,11 @@ func TestSearchIssueActions(t *testing.T) {
 	fb.transitions = []jira.Transition{{ID: "31", Name: "Done", To: "Done"}}
 
 	m = searchPressDrain(t, m, "v")
-	if m.legacy == nil || !strings.Contains(ansi.Strip(m.render()), "Details here") {
+	if !m.popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Details here") {
 		t.Fatalf("details popup didn't open:\n%s", ansi.Strip(m.render()))
 	}
 	m = searchPressDrain(t, m, "esc")
-	if m.legacy != nil {
+	if m.popup.IsOpen() {
 		t.Fatal("esc should close the popup")
 	}
 
@@ -508,7 +508,7 @@ func TestSearchSelectPreviewsAndRestoresFocus(t *testing.T) {
 	m, fb := searched(t)
 	fb.detail = &jira.IssueDetail{Issue: foundIssues()[1], Description: "Selected issue preview"}
 	m = searchPressDrain(t, m, "j", "enter")
-	if m.legacy == nil || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
+	if !m.popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
 		t.Fatal("selecting a result should open its preview")
 	}
 	m = searchPressDrain(t, m, "esc")

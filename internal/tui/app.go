@@ -115,7 +115,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case issueLoadedMsg, transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
+	case transitionsLoadedMsg, fieldsLoadedMsg, commentSentMsg:
 		return m.forwardToPopup(msg)
 
 	case filterSelectedMsg:

@@ -20,18 +20,18 @@ func TestCommentsComposeAndSend(t *testing.T) {
 	m := openComments(t, fb)
 
 	m, _ = press(t, m, "x")
-	if p := m.legacy.(*commentsPopup); p.input.Focused() || p.input.Value() != "" {
+	if p := m.popup.Content().(*commentsPopup); p.input.Focused() || p.input.Value() != "" {
 		t.Fatal("typing should not reach the textarea before enter")
 	}
 
 	m, _ = press(t, m, "enter", "h", "i", "enter", "y", "o")
-	p := m.legacy.(*commentsPopup)
+	p := m.popup.Content().(*commentsPopup)
 	if !p.input.Focused() || p.input.Value() != "hi\nyo" {
 		t.Fatalf("enter should focus, then insert newlines; value=%q", p.input.Value())
 	}
 
 	m, _ = press(t, m, "esc")
-	if m.legacy == nil || m.legacy.(*commentsPopup).input.Focused() {
+	if !m.popup.IsOpen() || m.popup.Content().(*commentsPopup).input.Focused() {
 		t.Fatal("esc should leave the textarea but keep the popup open")
 	}
 	m, _ = press(t, m, "enter")
@@ -40,7 +40,7 @@ func TestCommentsComposeAndSend(t *testing.T) {
 	if len(fb.comments) != 1 || fb.comments[0] != "T-1:hi\nyo" {
 		t.Fatalf("comments = %q", fb.comments)
 	}
-	p = m.legacy.(*commentsPopup)
+	p = m.popup.Content().(*commentsPopup)
 	if p.input.Value() != "" || p.input.Focused() || p.sending {
 		t.Fatal("textarea should reset and blur after sending")
 	}
@@ -62,7 +62,7 @@ func TestCommentsSendErrorKeepsDraft(t *testing.T) {
 	m := openComments(t, fb)
 	m, _ = press(t, m, "enter", "a")
 	m = pressDrain(t, m, "ctrl+s")
-	p := m.legacy.(*commentsPopup)
+	p := m.popup.Content().(*commentsPopup)
 	if p.input.Value() != "a" || !p.input.Focused() {
 		t.Fatal("draft should survive a failed send")
 	}
@@ -79,17 +79,17 @@ func TestCommentsTopAndBottom(t *testing.T) {
 	m := openComments(t, fb)
 
 	m, _ = press(t, m, "G")
-	if p := m.legacy.(*commentsPopup); !p.vp.AtBottom() || p.vp.YOffset() == 0 {
-		t.Fatalf("G should jump to the bottom, YOffset=%d", p.vp.YOffset())
+	if p := m.popup.Content().(*commentsPopup); p.issue.ScrollPercent() != 1 {
+		t.Fatalf("G should jump to the bottom, scrolled to %v", p.issue.ScrollPercent())
 	}
 	m, _ = press(t, m, "g")
-	if p := m.legacy.(*commentsPopup); !p.vp.AtTop() {
-		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
+	if p := m.popup.Content().(*commentsPopup); p.issue.ScrollPercent() != 0 {
+		t.Fatalf("g should jump to the top, scrolled to %v", p.issue.ScrollPercent())
 	}
 
 	m, _ = press(t, m, "enter", "g", "G")
-	p := m.legacy.(*commentsPopup)
-	if p.input.Value() != "gG" || !p.vp.AtTop() {
-		t.Fatalf("g/G should type into the focused input; value=%q YOffset=%d", p.input.Value(), p.vp.YOffset())
+	p := m.popup.Content().(*commentsPopup)
+	if p.input.Value() != "gG" || p.issue.ScrollPercent() != 0 {
+		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", p.input.Value(), p.issue.ScrollPercent())
 	}
 }

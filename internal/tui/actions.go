@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // actionDoneMsg reports the result of a yank or open.
@@ -48,9 +49,9 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) (legacyPopup, 
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.view):
-		return newTextPopup("Details", iss.Key, renderDetail, a.md), loadIssue(b, iss.Key)
+		return nil, popup.Open(newDetailPopup(b, iss.Key, a.md))
 	case key.Matches(msg, keys.comments):
-		return newCommentsPopup(b, iss.Key, a.md), loadIssue(b, iss.Key)
+		return nil, popup.Open(newCommentsPopup(b, iss.Key, a.md))
 	case key.Matches(msg, keys.move):
 		return newMovePopup(b, iss), loadTransitions(b, iss)
 	case key.Matches(msg, keys.assign):
