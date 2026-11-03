@@ -108,8 +108,10 @@ func (m *SearchModel) fit() {
 // Update implements tea.Model.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
-		return m.finishEdit(msg, editResult(msg))
+	case issueEditedMsg:
+		m.status = msg.status
+		m.refocus = &resultCursor{key: msg.key, index: m.results.table.GetHighlightedRowIndex()}
+		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:
 		popupCmd := m.resize(msg)
@@ -258,18 +260,6 @@ func (m *SearchModel) focusForm() tea.Cmd {
 	return m.form.form.GetFocusedField().Focus()
 }
 
-func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
-	if e.err != nil {
-		cmd := m.forwardToPopup(msg, m.searching)
-		return m, cmd
-	}
-	m.legacy = nil
-	m.status = e.status
-	m.refocus = &resultCursor{key: e.key, index: m.results.table.GetHighlightedRowIndex()}
-	cmd := m.search(m.lastJQL)
-	return m, cmd
-}
-
 func (m *SearchModel) toggleMode() tea.Cmd {
 	m.form.advanced = !m.form.advanced
 	if m.form.advanced && strings.TrimSpace(m.form.jql) == "" {
@@ -356,12 +346,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if key.Matches(msg, keys.accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}
-		p, cmd := m.actions.handle(msg, *sel)
-		if p != nil {
-			cmd = m.openPopup(p, cmd)
-			return m, cmd
-		}
-		if cmd != nil {
+		if cmd := m.actions.handle(msg, *sel); cmd != nil {
 			return m, cmd
 		}
 	}

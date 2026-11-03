@@ -3,15 +3,19 @@ package tui
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/components/userselect"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type assignDoneMsg struct {
+	id       int64
 	issueKey string
 	to       string
 	// cleared is set when the issue was unassigned.
@@ -19,43 +23,68 @@ type assignDoneMsg struct {
 	err     error
 }
 
-// assignPane searches for the person to assign an issue to.
-type assignPane struct {
+// assignPopup searches for the person to assign an issue to.
+type assignPopup struct {
+	id       int64
 	issueKey string
 	backend  Backend
 	assignee jira.Option
 	picker   *userselect.Picker
 	form     *huh.Form
+	spin     spinner.Model
 
-	applying bool
-	err      error
+	width, height int
+	applying      bool
+	err           error
 }
 
-// newAssignPane starts on the issue's current assignee.
-func newAssignPane(b Backend, iss jira.Issue) *assignPane {
-	p := &assignPane{issueKey: iss.Key, backend: b, assignee: iss.Assignee}
+// newAssignPopup starts on the issue's current assignee.
+func newAssignPopup(b Backend, iss jira.Issue) *assignPopup {
+	p := &assignPopup{id: newPopupID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: newSpinner()}
 	p.picker = userselect.New("Assignee", searchUsers(b, iss.Key)).Value(&p.assignee)
 	p.form = newForm(p.picker.Field())
 	return p
 }
 
-// init starts the form. The popup is opened with it as its load.
-func (p *assignPane) init() tea.Cmd { return p.form.Init() }
+// Init implements tea.Model.
+func (p *assignPopup) Init() tea.Cmd { return tea.Batch(p.form.Init(), p.spin.Tick) }
 
-func (p *assignPane) loading() bool { return p.applying }
+func (p *assignPopup) loading() bool { return p.applying }
 
-// capturing is true since typed text always goes to the form.
-func (p *assignPane) capturing() bool { return true }
+// Update implements tea.Model.
+func (p *assignPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	was := p.loading()
+	cmd := p.update(msg)
+	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+}
 
-func (p *assignPane) update(msg tea.Msg) tea.Cmd {
-	if msg, ok := msg.(assignDoneMsg); ok {
-		if msg.issueKey == p.issueKey {
-			p.applying, p.err = false, msg.err
-			// The form finished to send the assignment, so a retry needs a new one.
-			p.form = newForm(p.picker.Field())
-			return p.form.Init()
-		}
+func (p *assignPopup) update(msg tea.Msg) tea.Cmd {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width, p.height = msg.Width, msg.Height
 		return nil
+	case spinner.TickMsg:
+		return tickSpinner(&p.spin, msg, p.loading())
+	case assignDoneMsg:
+		if msg.id != p.id {
+			return nil
+		}
+		p.applying, p.err = false, msg.err
+		if msg.err == nil {
+			status := "Assigned " + msg.issueKey + " to " + msg.to
+			if msg.cleared {
+				status = "Unassigned " + msg.issueKey
+			}
+			return closeEdited(msg.issueKey, status)
+		}
+		// The form finished to send the assignment, so a retry needs a new one.
+		p.form = newForm(p.picker.Field())
+		return p.form.Init()
+	case tea.KeyPressMsg:
+		// Typed text always goes to the form, so only esc closes.
+		if key.Matches(msg, keys.blur) {
+			return popup.Close()
+		}
 	}
 	if p.applying {
 		return nil
@@ -66,15 +95,17 @@ func (p *assignPane) update(msg tea.Msg) tea.Cmd {
 	}
 	p.applying, p.err = true, nil
 	who := p.assignee
-	b, issueKey := p.backend, p.issueKey
+	b, id, issueKey := p.backend, p.id, p.issueKey
 	return func() tea.Msg {
-		return assignDoneMsg{issueKey: issueKey, to: who.Name, cleared: who.ID == "", err: b.Assign(issueKey, who.ID)}
+		return assignDoneMsg{id: id, issueKey: issueKey, to: who.Name, cleared: who.ID == "", err: b.Assign(issueKey, who.ID)}
 	}
 }
 
-func (p *assignPane) view(spin string, innerW, height int, _ string) []string {
-	p.form.WithWidth(innerW).WithHeight(max(1, height-2))
+// View implements tea.Model.
+func (p *assignPopup) View() tea.View {
+	p.form.WithWidth(p.width).WithHeight(max(1, p.height-issueChromeLines-2))
 	lines := strings.Split(p.form.View(), "\n")
 	hint := styles.Dim().Render("enter next · shift+tab back to search · esc close")
-	return append(lines, "", statusLine(spin, innerW, p.err, p.applying, "Assigning…", hint))
+	lines = append(lines, "", statusLine(p.spin.View(), p.width, p.err, p.applying, "Assigning…", hint))
+	return tea.NewView(popup.Stack(p.height, issueHeader("Assign", p.issueKey), lines, helpView(paneHelpKeys, p.width)))
 }

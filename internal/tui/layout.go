@@ -120,13 +120,6 @@ func (c *layout) forwardToPopup(msg tea.Msg, otherBusy bool) tea.Cmd {
 	return tea.Batch(hostCmd, cmd)
 }
 
-// openPopup shows p and runs load, the command that fills it.
-func (c *layout) openPopup(p legacyPopup, load tea.Cmd) tea.Cmd {
-	p.setSize(popupSize(c.width, c.bodyHeight()))
-	c.legacy = p
-	return c.runWithSpinner(load)
-}
-
 // withView wraps the rendered screen in a full-window view themed to match.
 func (c layout) withView(content string) tea.View {
 	v := tea.NewView(content)

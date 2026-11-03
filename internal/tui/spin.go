@@ -30,3 +30,12 @@ var lastPopupID atomic.Int64
 // response that arrives after the popup closed, perhaps with another popup
 // open for the same issue by then, carries the old ID and gets ignored.
 func newPopupID() int64 { return lastPopupID.Add(1) }
+
+// restartSpinner adds the spinner's tick to cmd when a change made a popup busy
+// that wasn't, since the tick chain ends whenever nothing is busy.
+func restartSpinner(s spinner.Model, wasBusy, busy bool, cmd tea.Cmd) tea.Cmd {
+	if !wasBusy && busy {
+		return tea.Batch(cmd, s.Tick)
+	}
+	return cmd
+}

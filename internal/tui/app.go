@@ -77,8 +77,9 @@ func (m BoardModel) busy() bool {
 // Update implements tea.Model.
 func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case transitionDoneMsg, assignDoneMsg, fieldsSavedMsg:
-		return m.finishEdit(msg, editResult(msg))
+	case issueEditedMsg:
+		m.status = msg.status
+		return m, m.runWithSpinner(m.board.reload(msg.key))
 
 	case tea.WindowSizeMsg:
 		cmd := m.resize(msg)
@@ -187,22 +188,7 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	p, cmd := m.actions.handle(msg, *sel)
-	if p != nil {
-		return m, m.openPopup(p, cmd)
-	}
-	return m, cmd
-}
-
-// finishEdit closes the popup and reloads the board after a successful change.
-// A failure goes back to the popup to show.
-func (m BoardModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
-	if e.err != nil {
-		return m.forwardToPopup(msg)
-	}
-	m.legacy = nil
-	m.status = e.status
-	return m, m.runWithSpinner(m.board.reload(e.key))
+	return m, m.actions.handle(msg, *sel)
 }
 
 func (m BoardModel) forwardToPopup(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -107,7 +107,7 @@ func TestFieldsSaveChangesTogether(t *testing.T) {
 	if got := chosen(t, fb, "components"); !slices.Equal(got, []string{"c1"}) {
 		t.Errorf("components = %v", got)
 	}
-	if m.legacy != nil || len(fb.boardCalls) != 2 || !strings.Contains(m.status, "Updated 4 fields on T-2") {
+	if m.popup.IsOpen() || len(fb.boardCalls) != 2 || !strings.Contains(m.status, "Updated 4 fields on T-2") {
 		t.Fatalf("popup should close and the board reload, status = %q", m.status)
 	}
 }
@@ -116,7 +116,7 @@ func TestFieldsFormKeepsKeysThatWouldClose(t *testing.T) {
 	m, fb := fieldsModel(t)
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "qhl/")
-	if m.legacy == nil {
+	if !m.popup.IsOpen() {
 		t.Fatal("typing should stay in the form")
 	}
 	pressDrain(t, m, "enter", "ctrl+s")
@@ -148,7 +148,7 @@ func TestFieldsCtrlSDoesNothingInsideForm(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	m = pressDrain(t, m, "ctrl+s")
-	if len(fb.edited) != 0 || m.legacy == nil {
+	if len(fb.edited) != 0 || !m.popup.IsOpen() {
 		t.Fatalf("ctrl+s should only save from the list, got %v", fb.edited)
 	}
 }
@@ -160,10 +160,10 @@ func TestFieldsEscGoesBackToListThenCloses(t *testing.T) {
 		t.Fatal("only the selected field should show")
 	}
 	m = pressDrain(t, m, "esc")
-	if v := m.View().Content; m.legacy == nil || !strings.Contains(v, "Description") || !strings.Contains(v, "Components") {
+	if v := m.View().Content; !m.popup.IsOpen() || !strings.Contains(v, "Description") || !strings.Contains(v, "Components") {
 		t.Fatal("esc should go back to the list of fields")
 	}
-	if m = pressDrain(t, m, "esc"); m.legacy != nil {
+	if m = pressDrain(t, m, "esc"); m.popup.IsOpen() {
 		t.Fatal("esc on the list should close the popup")
 	}
 }
@@ -213,7 +213,7 @@ func TestFieldsEscClearsFilterBeforeClosing(t *testing.T) {
 	m = pressDrain(t, m, "/")
 	m = typeText(t, m, "q")
 	m = pressDrain(t, m, "esc")
-	if m.legacy == nil || !strings.Contains(m.View().Content, "Summary") {
+	if !m.popup.IsOpen() || !strings.Contains(m.View().Content, "Summary") {
 		t.Fatal("esc should clear the filter and keep the popup open")
 	}
 }
@@ -244,12 +244,12 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	m = pressDrain(t, m, "enter")
 	m = typeText(t, m, "!")
 	m = pressDrain(t, m, "enter", "ctrl+s")
-	if m.legacy == nil || !strings.Contains(m.View().Content, "summary: too long") || len(fb.boardCalls) != 1 {
+	if !m.popup.IsOpen() || !strings.Contains(m.View().Content, "summary: too long") || len(fb.boardCalls) != 1 {
 		t.Fatal("failed save should leave the popup open with the error")
 	}
 	fb.editErr = nil
 	m = pressDrain(t, m, "ctrl+s")
-	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.legacy != nil {
+	if got := savedField(t, fb, "summary").Text; got != "Fix it!" || m.popup.IsOpen() {
 		t.Errorf("retry should save the kept change, got %q", got)
 	}
 }
@@ -272,7 +272,7 @@ func TestFieldsListScrolls(t *testing.T) {
 
 func TestFieldsCloseWithoutChangesNeedsNoConfirm(t *testing.T) {
 	m, _ := fieldsModel(t)
-	if m, _ = press(t, m, "esc"); m.legacy != nil {
+	if m = pressDrain(t, m, "esc"); m.popup.IsOpen() {
 		t.Fatal("esc should close a popup with nothing to save")
 	}
 }
@@ -289,15 +289,15 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 		t.Fatal("kept changes should be called out")
 	}
 	m, _ = press(t, m, "esc")
-	if m.legacy == nil || !strings.Contains(m.View().Content, "Discard 1 unsaved change?") {
+	if !m.popup.IsOpen() || !strings.Contains(m.View().Content, "Discard 1 unsaved change?") {
 		t.Fatal("esc should ask before dropping changes")
 	}
 	m, _ = press(t, m, "n")
-	if m.legacy == nil || m.legacy.(*panePopup).unsaved() != 1 {
+	if !m.popup.IsOpen() || m.popup.Content().(*editPopup).unsaved() != 1 {
 		t.Fatal("n should keep editing with the changes intact")
 	}
-	m, _ = press(t, m, "esc", "y")
-	if m.legacy != nil || len(fb.edited) != 0 {
+	m = pressDrain(t, m, "esc", "y")
+	if m.popup.IsOpen() || len(fb.edited) != 0 {
 		t.Fatal("y should close without saving")
 	}
 }
@@ -353,7 +353,7 @@ func TestUserFieldEscKeepsCurrentPerson(t *testing.T) {
 	m, fb := userModel(t, 5)
 	m = typeText(t, m, "bo")
 	m = pressDrain(t, m, "enter", "esc", "ctrl+s")
-	if len(fb.edited) != 0 || m.legacy == nil {
+	if len(fb.edited) != 0 || !m.popup.IsOpen() {
 		t.Fatalf("esc should leave the field unchanged, got %v", fb.edited)
 	}
 }

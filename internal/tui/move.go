@@ -2,62 +2,92 @@ package tui
 
 import (
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type transitionsLoadedMsg struct {
+	id          int64
 	key         string
 	transitions []jira.Transition
 	err         error
 }
 
 type transitionDoneMsg struct {
+	id  int64
 	key string
 	to  string
 	err error
 }
 
-func loadTransitions(b Backend, iss jira.Issue) tea.Cmd {
+func loadTransitions(b Backend, id int64, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
 		ts, err := b.Transitions(iss)
-		return transitionsLoadedMsg{key: iss.Key, transitions: ts, err: err}
+		return transitionsLoadedMsg{id: id, key: iss.Key, transitions: ts, err: err}
 	}
 }
 
-// movePane lists the transitions available for an issue. It fills a pane popup.
-type movePane struct {
+// movePopup lists the transitions available for an issue.
+type movePopup struct {
 	choiceList
-	key     string
+	id      int64
+	issue   jira.Issue
 	backend Backend
+	spin    spinner.Model
 
-	transitions []jira.Transition
-	loaded      bool
-	applying    bool
-	err         error
+	width, height int
+	transitions   []jira.Transition
+	loaded        bool
+	applying      bool
+	err           error
 }
 
-func newMovePane(b Backend, issueKey string) movePane {
-	return movePane{key: issueKey, backend: b}
+func newMovePopup(b Backend, iss jira.Issue) *movePopup {
+	return &movePopup{id: newPopupID(), issue: iss, backend: b, spin: newSpinner()}
 }
 
-func (p *movePane) loading() bool {
+// Init implements tea.Model.
+func (p *movePopup) Init() tea.Cmd {
+	return tea.Batch(loadTransitions(p.backend, p.id, p.issue), p.spin.Tick)
+}
+
+func (p *movePopup) loading() bool {
 	return (!p.loaded && p.err == nil) || p.applying
 }
 
-func (p *movePane) update(msg tea.Msg) tea.Cmd {
+// Update implements tea.Model.
+func (p *movePopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	was := p.loading()
+	cmd := p.update(msg)
+	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+}
+
+func (p *movePopup) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width, p.height = msg.Width, msg.Height
+	case spinner.TickMsg:
+		return tickSpinner(&p.spin, msg, p.loading())
 	case transitionsLoadedMsg:
-		if msg.key == p.key {
+		if msg.id == p.id {
 			p.transitions, p.err, p.loaded = msg.transitions, msg.err, true
 		}
 	case transitionDoneMsg:
-		if msg.key == p.key {
-			p.applying, p.err = false, msg.err
+		if msg.id != p.id {
+			break
+		}
+		p.applying, p.err = false, msg.err
+		if msg.err == nil {
+			return closeEdited(msg.key, "Moved "+msg.key+" to "+msg.to)
 		}
 	case tea.KeyPressMsg:
+		if key.Matches(msg, keys.close) {
+			return popup.Close()
+		}
 		if p.handle(msg, len(p.transitions)) {
 			break
 		}
@@ -66,19 +96,20 @@ func (p *movePane) update(msg tea.Msg) tea.Cmd {
 		}
 		p.applying, p.err = true, nil
 		t := p.transitions[p.cursor]
-		b, issueKey := p.backend, p.key
+		b, id, issueKey := p.backend, p.id, p.issue.Key
 		return func() tea.Msg {
-			return transitionDoneMsg{key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
+			return transitionDoneMsg{id: id, key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
 		}
 	}
 	return nil
 }
 
-func (p *movePane) view(spin string, innerW, _ int, hint string) []string {
+// View implements tea.Model.
+func (p *movePopup) View() tea.View {
 	var lines []string
 	switch {
 	case !p.loaded && p.err == nil:
-		lines = append(lines, spin+" Loading transitions…")
+		lines = append(lines, p.spin.View()+" Loading transitions…")
 	case p.loaded && len(p.transitions) == 0 && p.err == nil:
 		lines = append(lines, styles.Dim().Render("No transitions available."))
 	default:
@@ -86,9 +117,10 @@ func (p *movePane) view(spin string, innerW, _ int, hint string) []string {
 		for i, t := range p.transitions {
 			labels[i] = t.Label()
 		}
-		lines = append(lines, p.render(labels, innerW)...)
+		lines = append(lines, p.render(labels, p.width)...)
 	}
-	return append(lines, "", statusLine(spin, innerW, p.err, p.applying, "Moving…", hint))
+	lines = append(lines, "", statusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
+	return tea.NewView(popup.Stack(p.height, issueHeader("Move", p.issue.Key), lines, helpView(paneHelpKeys, p.width)))
 }
 
 // statusLine shows the error, the in-progress text or the hint, in that order.

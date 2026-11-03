@@ -482,8 +482,8 @@ func TestSearchIssueActions(t *testing.T) {
 	if len(fb.moved) != 1 || fb.moved[0] != "DEMO-2:31" {
 		t.Fatalf("moved = %q", fb.moved)
 	}
-	if m.legacy != nil || len(fb.findCalls) != 2 {
-		t.Errorf("popup = %v, searches = %q, selected = %v", m.legacy, fb.findCalls, m.results.selected())
+	if m.popup.IsOpen() || len(fb.findCalls) != 2 {
+		t.Errorf("popup = %v, searches = %q, selected = %v", m.popup.Content(), fb.findCalls, m.results.selected())
 	}
 	if !strings.Contains(m.status, "Moved DEMO-2 to Done") {
 		t.Errorf("status = %q", m.status)
@@ -528,8 +528,8 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 		t.Fatalf("comments = %q", fb.comments)
 	}
 	m = searchPressDrain(t, m, "esc", "e")
-	if p, ok := m.legacy.(*panePopup); !ok || p.title != "Edit" || p.issueKey != "DEMO-2" {
-		t.Fatalf("edit shortcut should use the hovered result: %T", m.legacy)
+	if p, ok := m.popup.Content().(*editPopup); !ok || p.key != "DEMO-2" {
+		t.Fatalf("edit shortcut should use the hovered result: %T", m.popup.Content())
 	}
 }
 
