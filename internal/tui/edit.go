@@ -97,7 +97,7 @@ func (p *panePopup) loading() bool {
 	return p.pane.loading()
 }
 
-func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
+func (p *panePopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, p.pane.update(msg)
@@ -122,7 +122,7 @@ func (p *panePopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	return p, p.pane.update(km)
 }
 
-func (p *panePopup) updateConfirm(km tea.KeyPressMsg) (popup, tea.Cmd) {
+func (p *panePopup) updateConfirm(km tea.KeyPressMsg) (legacyPopup, tea.Cmd) {
 	switch {
 	case key.Matches(km, keys.confirm):
 		return nil, nil

@@ -13,9 +13,9 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
-// popup is a modal shown over the board. update returns nil to close it.
-type popup interface {
-	update(tea.Msg) (popup, tea.Cmd)
+// legacyPopup is a modal shown over the board. update returns nil to close it.
+type legacyPopup interface {
+	update(tea.Msg) (legacyPopup, tea.Cmd)
 	view(spin string) string
 	setSize(width, height int)
 }
@@ -77,7 +77,7 @@ func (p *textPopup) refresh() {
 	}
 }
 
-func (p *textPopup) update(msg tea.Msg) (popup, tea.Cmd) {
+func (p *textPopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	switch msg := msg.(type) {
 	case issueLoadedMsg:
 		if msg.key != p.key {

@@ -101,7 +101,7 @@ func (p *themePopup) setSize(width, height int) {
 	p.list.SetSize(innerW, innerH)
 }
 
-func (p *themePopup) update(msg tea.Msg) (popup, tea.Cmd) {
+func (p *themePopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	if km, ok := msg.(tea.KeyPressMsg); ok && p.list.FilterState() != list.Filtering {
 		switch {
 		case key.Matches(km, pickerCloseKey) && !p.list.IsFiltered():

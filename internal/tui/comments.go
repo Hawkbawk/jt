@@ -50,7 +50,7 @@ func (p *commentsPopup) loading() bool {
 	return p.textPopup.loading() || p.sending
 }
 
-func (p *commentsPopup) update(msg tea.Msg) (popup, tea.Cmd) {
+func (p *commentsPopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	switch msg := msg.(type) {
 	case issueLoadedMsg:
 		_, cmd := p.textPopup.update(msg)
@@ -87,7 +87,7 @@ func (p *commentsPopup) update(msg tea.Msg) (popup, tea.Cmd) {
 	return p, cmd
 }
 
-func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (popup, tea.Cmd) {
+func (p *commentsPopup) updateInput(msg tea.KeyPressMsg) (legacyPopup, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.blur):
 		p.input.Blur()

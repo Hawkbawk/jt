@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type issueTypesLoadedMsg struct {
@@ -111,10 +112,9 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finishEdit(msg, editResult(msg))
 
 	case tea.WindowSizeMsg:
-		m.resize(msg)
+		popupCmd := m.resize(msg)
 		m.fit()
-		cmd := m.form.update(msg)
-		return m, cmd
+		return m, tea.Batch(popupCmd, m.form.update(msg))
 
 	case ThemeChangedMsg:
 		cmd := m.restyle()
@@ -130,8 +130,10 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		cmd := m.tick(msg, m.busy())
-		return m, cmd
+		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case popup.OpenMsg, popup.CloseMsg:
+		return m, m.updatePopup(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -167,7 +169,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.popup != nil {
+	if m.popupOpen() {
 		return m.forwardToPopup(msg, m.searching)
 	}
 	return m.updateForm(msg)
@@ -261,7 +263,7 @@ func (m SearchModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 		cmd := m.forwardToPopup(msg, m.searching)
 		return m, cmd
 	}
-	m.popup = nil
+	m.legacy = nil
 	m.status = e.status
 	m.refocus = &resultCursor{key: e.key, index: m.results.table.GetHighlightedRowIndex()}
 	cmd := m.search(m.lastJQL)
@@ -288,7 +290,7 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.popup != nil {
+	if m.popupOpen() {
 		cmd := m.forwardToPopup(msg, m.searching)
 		return m, cmd
 	}
@@ -406,8 +408,11 @@ func (m SearchModel) render() string {
 		return ""
 	}
 	body := m.bodyView()
-	if m.popup != nil {
-		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
+	switch {
+	case m.legacy != nil:
+		body = overlay(body, m.legacy.view(m.spinner.View()), m.width)
+	default:
+		body = m.popup.Overlay(body)
 	}
 	mode := "basic"
 	if m.form.advanced {

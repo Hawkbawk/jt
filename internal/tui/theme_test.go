@@ -25,9 +25,9 @@ func openThemePopup(t *testing.T, fs *fakeSettings) (BoardModel, *themePopup) {
 	m.settings = fs
 	m = drain(t, m, m.Init())
 	m, _ = press(t, m, "t")
-	p, ok := m.popup.(*themePopup)
+	p, ok := m.legacy.(*themePopup)
 	if !ok {
-		t.Fatalf("t should open the theme popup, got %T", m.popup)
+		t.Fatalf("t should open the theme popup, got %T", m.legacy)
 	}
 	return m, p
 }
@@ -52,8 +52,8 @@ func TestThemePopupFiltersAppliesAndSaves(t *testing.T) {
 	m, _ := openThemePopup(t, fs)
 	m = pressDrain(t, m, append(append([]string{"/"}, strings.Split("catppuccin_mocha", "")...), "enter", "enter")...)
 
-	if m.popup != nil || styles.Current() != tint.TintCatppuccinMocha {
-		t.Fatalf("popup=%v current=%v, want closed with Catppuccin Mocha applied", m.popup, styles.Current().ID)
+	if m.legacy != nil || styles.Current() != tint.TintCatppuccinMocha {
+		t.Fatalf("popup=%v current=%v, want closed with Catppuccin Mocha applied", m.legacy, styles.Current().ID)
 	}
 	if len(fs.saved) != 1 || fs.saved[0] != "catppuccin_mocha" {
 		t.Fatalf("saved = %v", fs.saved)
@@ -66,13 +66,13 @@ func TestThemePopupEscClearsFilterBeforeClosing(t *testing.T) {
 	fs := &fakeSettings{}
 	m, _ := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "x", "enter", "esc")
-	p, ok := m.popup.(*themePopup)
+	p, ok := m.legacy.(*themePopup)
 	if !ok || p.list.IsFiltered() {
-		t.Fatalf("the first esc should clear the filter and keep the popup open, popup=%T", m.popup)
+		t.Fatalf("the first esc should clear the filter and keep the popup open, popup=%T", m.legacy)
 	}
 	m = pressDrain(t, m, "esc")
-	if m.popup != nil || styles.Current() != tint.TintNord || len(fs.saved) != 0 {
-		t.Fatalf("esc should close without changing the theme, popup=%T saved=%v", m.popup, fs.saved)
+	if m.legacy != nil || styles.Current() != tint.TintNord || len(fs.saved) != 0 {
+		t.Fatalf("esc should close without changing the theme, popup=%T saved=%v", m.legacy, fs.saved)
 	}
 }
 
@@ -82,13 +82,13 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 	fs := &fakeSettings{}
 	m, _ := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "r")
-	if p, ok := m.popup.(*themePopup); !ok || p.list.FilterValue() != "r" {
-		t.Fatalf("r while filtering should type into the filter, popup=%T", m.popup)
+	if p, ok := m.legacy.(*themePopup); !ok || p.list.FilterValue() != "r" {
+		t.Fatalf("r while filtering should type into the filter, popup=%T", m.legacy)
 	}
 
 	m = pressDrain(t, m, "esc")
 	m, cmd := press(t, m, "r")
-	if m.popup != nil || styles.Current() != tint.TintNord || cmd == nil {
+	if m.legacy != nil || styles.Current() != tint.TintNord || cmd == nil {
 		t.Fatal("r should close the popup and read the terminal's theme in a command, not in Update")
 	}
 	m = drain(t, m, cmd)

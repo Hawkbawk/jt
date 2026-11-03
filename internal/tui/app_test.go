@@ -252,11 +252,11 @@ func TestQQuitsFromBoard(t *testing.T) {
 func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, _ = press(t, m, "v")
-	if m.popup == nil {
+	if m.legacy == nil {
 		t.Fatal("v should open a popup")
 	}
 	m, cmd := press(t, m, "q")
-	if isQuit(cmd) || m.popup != nil {
+	if isQuit(cmd) || m.legacy != nil {
 		t.Fatal("q in a popup should close it, not quit")
 	}
 }

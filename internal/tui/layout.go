@@ -10,10 +10,14 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // layout is the state and behavior the jt screens share: the window size,
 // spinner, status line, help footer, quit confirmation and the open popup.
+//
+// Popups are moving from legacy, which layout sizes and draws itself, to the
+// popup host, which owns its content.
 type layout struct {
 	settings      Settings
 	width, height int
@@ -21,8 +25,9 @@ type layout struct {
 	status        string
 	help          help.Model
 
-	popup popup
-	quit  quitGuard
+	legacy legacyPopup
+	popup  popup.Model
+	quit   quitGuard
 }
 
 func newLayout(settings Settings) layout {
@@ -30,6 +35,7 @@ func newLayout(settings Settings) layout {
 		settings: settings,
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
 		help:     styles.Help(),
+		popup:    popup.New(popup.WithStyle(styles.Popup)),
 	}
 }
 
@@ -44,11 +50,12 @@ func (c layout) bodyHeight() int {
 }
 
 // resize applies a new window size and refits the popup.
-func (c *layout) resize(msg tea.WindowSizeMsg) {
+func (c *layout) resize(msg tea.WindowSizeMsg) tea.Cmd {
 	c.width, c.height = msg.Width, msg.Height
-	if c.popup != nil {
-		c.popup.setSize(popupSize(c.width, c.bodyHeight()))
+	if c.legacy != nil {
+		c.legacy.setSize(popupSize(c.width, c.bodyHeight()))
 	}
+	return c.updatePopup(tea.WindowSizeMsg{Width: c.width, Height: c.bodyHeight()})
 }
 
 // restyle rebuilds what the layout copied from the styles when it was built.
@@ -71,9 +78,21 @@ func (c *layout) onThemeSaved(msg themeSavedMsg) {
 	}
 }
 
+// updatePopup passes msg to the popup host.
+func (c *layout) updatePopup(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	c.popup, cmd = c.popup.Update(msg)
+	return cmd
+}
+
+// popupOpen reports whether either kind of popup is showing.
+func (c layout) popupOpen() bool {
+	return c.legacy != nil || c.popup.IsOpen()
+}
+
 // popupLoading reports whether the open popup is waiting on the network.
 func (c layout) popupLoading() bool {
-	p, ok := c.popup.(interface{ loading() bool })
+	p, ok := c.legacy.(interface{ loading() bool })
 	return ok && p.loading()
 }
 
@@ -91,24 +110,25 @@ func (c *layout) tick(msg spinner.TickMsg, busy bool) tea.Cmd {
 // forwardToPopup passes msg to the open popup. otherBusy is whether anything
 // besides the popup is already running the spinner.
 func (c *layout) forwardToPopup(msg tea.Msg, otherBusy bool) tea.Cmd {
-	if c.popup == nil {
-		return nil
+	hostCmd := c.updatePopup(msg)
+	if c.legacy == nil {
+		return hostCmd
 	}
 	wasBusy := otherBusy || c.popupLoading()
 	var cmd tea.Cmd
-	c.popup, cmd = c.popup.update(msg)
+	c.legacy, cmd = c.legacy.update(msg)
 	// Popups start their own loads (sending or reloading a comment), so the
 	// spinner has to be started here once they become busy.
 	if !wasBusy && (otherBusy || c.popupLoading()) {
 		cmd = c.runWithSpinner(cmd)
 	}
-	return cmd
+	return tea.Batch(hostCmd, cmd)
 }
 
 // openPopup shows p and runs load, the command that fills it.
-func (c *layout) openPopup(p popup, load tea.Cmd) tea.Cmd {
+func (c *layout) openPopup(p legacyPopup, load tea.Cmd) tea.Cmd {
 	p.setSize(popupSize(c.width, c.bodyHeight()))
-	c.popup = p
+	c.legacy = p
 	return c.runWithSpinner(load)
 }
 

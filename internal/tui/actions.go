@@ -44,7 +44,7 @@ func newIssueActions(b Backend) issueActions {
 
 // handle returns the command for msg on the given issue. Keys that open a
 // popup also return it, with the command that loads its content.
-func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) (popup, tea.Cmd) {
+func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) (legacyPopup, tea.Cmd) {
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.view):

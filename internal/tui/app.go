@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 // Backend is the Jira functionality the TUI depends on.
@@ -80,9 +81,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finishEdit(msg, editResult(msg))
 
 	case tea.WindowSizeMsg:
-		m.resize(msg)
+		cmd := m.resize(msg)
 		m.picker.setSize(m.width, m.bodyHeight())
-		return m, nil
+		return m, cmd
 
 	case ThemeChangedMsg:
 		m.restyle()
@@ -101,7 +102,10 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		return m, m.tick(msg, m.busy())
+		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case popup.OpenMsg, popup.CloseMsg:
+		return m, m.updatePopup(msg)
 
 	case projectSelectedMsg:
 		m.status = ""
@@ -146,13 +150,13 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.projects) && !m.picker.open:
 		// A popup may hold unsaved work, so it has to be closed first.
-		if m.popup != nil {
+		if m.popupOpen() {
 			return m, nil
 		}
 		return m, m.runWithSpinner(m.picker.show(m.board.nav != nil))
 	case m.picker.open:
 		return m, m.picker.update(msg)
-	case m.popup != nil:
+	case m.popupOpen():
 		return m.forwardToPopup(msg)
 	}
 	return m.handleBoardKey(msg)
@@ -196,7 +200,7 @@ func (m BoardModel) finishEdit(msg tea.Msg, e issueEdit) (tea.Model, tea.Cmd) {
 	if e.err != nil {
 		return m.forwardToPopup(msg)
 	}
-	m.popup = nil
+	m.legacy = nil
 	m.status = e.status
 	return m, m.runWithSpinner(m.board.reload(e.key))
 }

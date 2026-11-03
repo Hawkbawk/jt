@@ -78,7 +78,7 @@ func (p *filterPopup) switchTab(delta int) {
 	p.cursor = p.activeRow()
 }
 
-func (p *filterPopup) update(msg tea.Msg) (popup, tea.Cmd) {
+func (p *filterPopup) update(msg tea.Msg) (legacyPopup, tea.Cmd) {
 	km, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return p, nil

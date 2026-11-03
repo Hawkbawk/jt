@@ -33,18 +33,18 @@ func loadedDetailModel(t *testing.T) BoardModel {
 func TestViewPopupLoadsAndScrolls(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := press(t, m, "v")
-	p, ok := m.popup.(*textPopup)
+	p, ok := m.legacy.(*textPopup)
 	if !ok || !p.loading() {
 		t.Fatal("v should open a loading detail popup")
 	}
 	m = drain(t, m, cmd)
-	p = m.popup.(*textPopup)
+	p = m.legacy.(*textPopup)
 	if p.detail == nil || !strings.Contains(m.View().Content, "T-1") {
 		t.Fatal("detail not loaded into popup")
 	}
 
 	m, _ = press(t, m, "down", "down")
-	if p := m.popup.(*textPopup); p.vp.YOffset() != 2 {
+	if p := m.legacy.(*textPopup); p.vp.YOffset() != 2 {
 		t.Fatalf("down arrow should scroll, YOffset=%d", p.vp.YOffset())
 	}
 
@@ -53,7 +53,7 @@ func TestViewPopupLoadsAndScrolls(t *testing.T) {
 		t.Fatal("board moved while popup was open")
 	}
 	m, _ = press(t, m, "esc")
-	if m.popup != nil {
+	if m.legacy != nil {
 		t.Fatal("esc should close the popup")
 	}
 }
@@ -64,7 +64,7 @@ func TestViewPopupTopAndBottom(t *testing.T) {
 	m = drain(t, m, cmd)
 
 	m, _ = press(t, m, "G")
-	p := m.popup.(*textPopup)
+	p := m.legacy.(*textPopup)
 	if !p.vp.AtBottom() || p.vp.YOffset() == 0 {
 		t.Fatalf("G should jump to the bottom, YOffset=%d", p.vp.YOffset())
 	}
@@ -73,10 +73,10 @@ func TestViewPopupTopAndBottom(t *testing.T) {
 	}
 
 	m, _ = press(t, m, "g")
-	if p := m.popup.(*textPopup); !p.vp.AtTop() {
+	if p := m.legacy.(*textPopup); !p.vp.AtTop() {
 		t.Fatalf("g should jump to the top, YOffset=%d", p.vp.YOffset())
 	}
-	if v := ansi.Strip(m.popup.view("")); !strings.Contains(v, "g/G top/bottom") {
+	if v := ansi.Strip(m.legacy.view("")); !strings.Contains(v, "g/G top/bottom") {
 		t.Fatalf("footer is missing g/G:\n%s", v)
 	}
 }
@@ -85,9 +85,9 @@ func TestViewPopupHorizontalScroll(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := press(t, m, "v")
 	m = drain(t, m, cmd)
-	before := m.popup.(*textPopup).vp.View()
+	before := m.legacy.(*textPopup).vp.View()
 	m, _ = press(t, m, "right")
-	if m.popup.(*textPopup).vp.View() == before {
+	if m.legacy.(*textPopup).vp.View() == before {
 		t.Fatal("right arrow should scroll wide content horizontally")
 	}
 }
@@ -95,7 +95,7 @@ func TestViewPopupHorizontalScroll(t *testing.T) {
 func TestViewIgnoredOnEmptyColumn(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "l", "v")
-	if m.popup != nil {
+	if m.legacy != nil {
 		t.Fatal("popup opened without a selected issue")
 	}
 }
@@ -104,7 +104,7 @@ func TestStaleIssueLoadIsIgnored(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "v")
 	next, _ := m.Update(issueLoadedMsg{key: "OTHER-1", detail: &jira.IssueDetail{}})
-	if !next.(BoardModel).popup.(*textPopup).loading() {
+	if !next.(BoardModel).legacy.(*textPopup).loading() {
 		t.Fatal("popup accepted an issue it did not request")
 	}
 }
@@ -112,7 +112,7 @@ func TestStaleIssueLoadIsIgnored(t *testing.T) {
 func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, _ = press(t, m, "v", "ctrl+p")
-	if m.popup == nil || m.picker.open {
+	if m.legacy == nil || m.picker.open {
 		t.Fatal("ctrl+p should do nothing while a popup is open")
 	}
 }
@@ -121,7 +121,7 @@ func TestCommentsPopupShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := press(t, m, "c")
 	m = drain(t, m, cmd)
-	p, ok := m.popup.(*commentsPopup)
+	p, ok := m.legacy.(*commentsPopup)
 	if !ok {
 		t.Fatal("c should open the comments popup")
 	}
@@ -132,7 +132,7 @@ func TestCommentsPopupShowsAllComments(t *testing.T) {
 		}
 	}
 	m, _ = press(t, m, "q")
-	if m.popup != nil {
+	if m.legacy != nil {
 		t.Fatal("q should close the popup")
 	}
 }

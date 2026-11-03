@@ -18,8 +18,10 @@ func (m BoardModel) render() string {
 	switch {
 	case m.picker.open:
 		body = overlay(body, m.picker.view(m.spinner.View()), m.width)
-	case m.popup != nil:
-		body = overlay(body, m.popup.view(m.spinner.View()), m.width)
+	case m.legacy != nil:
+		body = overlay(body, m.legacy.view(m.spinner.View()), m.width)
+	default:
+		body = m.popup.Overlay(body)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(m.board.headerParts(m.spinner.View())), body, m.footerView(keys))
 }
