@@ -16,6 +16,8 @@ import (
 // Settings persists the user's choices.
 type Settings interface {
 	SaveTheme(id string) error
+	// SaveBoard sets the board to open for the default project.
+	SaveBoard(id int) error
 }
 
 var pickerCloseKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
@@ -38,6 +40,17 @@ type themeSavedMsg struct {
 func saveTheme(s Settings, id string) tea.Cmd {
 	return func() tea.Msg {
 		return themeSavedMsg{err: s.SaveTheme(id)}
+	}
+}
+
+// boardSavedMsg reports whether the picked board was written to the settings.
+type boardSavedMsg struct {
+	err error
+}
+
+func saveBoard(s Settings, id int) tea.Cmd {
+	return func() tea.Msg {
+		return boardSavedMsg{err: s.SaveBoard(id)}
 	}
 }
 

@@ -15,6 +15,7 @@ type boardKeys struct {
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
 	toggle, undo, theme, back          key.Binding
+	boards, favorite                   key.Binding
 
 	navigate, topBottom, scroll, write key.Binding
 }
@@ -34,11 +35,14 @@ var keys = boardKeys{
 	assign:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign")),
 	yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
 	open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
-	filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
+	filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 	theme:    key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 	refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	projects: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "projects")),
+	boards:   key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "boards")),
 	quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+
+	favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite board")),
 
 	// close dismisses a popup.
 	close:     key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close")),
@@ -66,7 +70,7 @@ var resultsNavigateHelp = key.NewBinding(key.WithKeys("j", "k", "up", "down"), k
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeys) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.theme, k.refresh, k.projects, k.quit}
+	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.theme, k.refresh, k.projects, k.boards, k.favorite, k.quit}
 }
 
 // FullHelp implements help.KeyMap.

@@ -26,6 +26,8 @@ type fakeBackend struct {
 	comments       []string
 	commentErr     error
 	boardCalls     []string
+	boardIDCalls   []int
+	boards         []jira.BoardSummary
 	filterCalls    []string
 	editFields     []jira.EditField
 	editErr        error
@@ -50,8 +52,11 @@ func (f *fakeBackend) Search(jql string) ([]jira.Issue, error) {
 	return f.found, f.findErr
 }
 
-func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
+func (f *fakeBackend) Boards(string) ([]jira.BoardSummary, error) { return f.boards, nil }
+
+func (f *fakeBackend) Board(project string, boardID int, filterJQL string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)
+	f.boardIDCalls = append(f.boardIDCalls, boardID)
 	f.filterCalls = append(f.filterCalls, filterJQL)
 	if f.boardErr != nil {
 		return nil, f.boardErr
@@ -436,8 +441,14 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 }
 
 type fakeSettings struct {
-	saved []string
-	err   error
+	saved  []string
+	boards []int
+	err    error
+}
+
+func (f *fakeSettings) SaveBoard(id int) error {
+	f.boards = append(f.boards, id)
+	return f.err
 }
 
 func (f *fakeSettings) SaveTheme(id string) error {

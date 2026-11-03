@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -19,7 +20,8 @@ type Backend interface {
 	Projects() ([]jira.Project, error)
 	IssueTypes() ([]string, error)
 	Search(jql string) ([]jira.Issue, error)
-	Board(project, filterJQL string) (*jira.Board, error)
+	Boards(project string) ([]jira.BoardSummary, error)
+	Board(project string, boardID int, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
 	Transitions(iss jira.Issue) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
@@ -113,6 +115,17 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.updatePopup(msg)
 
+	case boardpicker.SelectedMsg:
+		return m.selectBoard(msg)
+
+	case boardSavedMsg:
+		if msg.err != nil {
+			m.status = styles.Error().Render("saving board: " + msg.err.Error())
+		} else {
+			m.status = styles.Dim().Render("Saved as the default board")
+		}
+		return m, nil
+
 	case boardLoadedMsg:
 		m.board.update(msg)
 		return m, nil
@@ -128,6 +141,15 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// A popup's responses and form run on their own messages, so it gets
 	// what's left.
 	return m, m.updatePopup(msg)
+}
+
+// selectBoard opens the picked board.
+func (m BoardModel) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd) {
+	if msg.Project != m.board.project {
+		return m, nil
+	}
+	m.status = ""
+	return m, m.runWithSpinner(m.board.openBoard(msg.Board.ID))
 }
 
 func (m BoardModel) newProjectPopup(cancellable bool) *projectpicker.Picker {
@@ -173,6 +195,16 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if key.Matches(msg, keys.theme) {
 		return m, popup.Open(newThemePopup())
+	}
+	if key.Matches(msg, keys.boards) && m.board.nav != nil {
+		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
+	}
+	if key.Matches(msg, keys.favorite) && m.board.nav != nil {
+		if m.board.project != m.board.backend.DefaultProject() {
+			m.status = styles.Warn().Render("Only the default project's board can be the default")
+			return m, nil
+		}
+		return m, saveBoard(m.settings, m.board.nav.board.ID)
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
 		return m, popup.Open(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter))

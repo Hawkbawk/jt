@@ -118,12 +118,12 @@ func (c *Client) boards(project string) ([]boardInfo, error) {
 	return res.Values, nil
 }
 
-// Board loads the board for a project. The configured board is used
-// when it belongs to the project, otherwise one is chosen from the project's
-// boards. filterJQL, when set, narrows the issues loaded.
-func (c *Client) Board(project, filterJQL string) (*Board, error) {
-	var boardID int
-	if c.cfg.Project == project {
+// Board loads a board for a project. boardID picks the board when it's not
+// zero. Otherwise the configured board is used when it belongs to the project,
+// and failing that one is chosen from the project's boards. filterJQL, when
+// set, narrows the issues loaded.
+func (c *Client) Board(project string, boardID int, filterJQL string) (*Board, error) {
+	if boardID == 0 && c.cfg.Project == project {
 		boardID = c.cfg.BoardID
 	}
 
