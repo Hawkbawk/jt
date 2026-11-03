@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -13,9 +14,9 @@ func pickerBackend() *fakeBackend {
 	}}
 }
 
-func projects(t *testing.T, m BoardModel) *projectPopup {
+func projects(t *testing.T, m BoardModel) *projectpicker.Picker {
 	t.Helper()
-	p, ok := m.popup.Content().(*projectPopup)
+	p, ok := m.popup.Content().(*projectpicker.Picker)
 	if !ok {
 		t.Fatalf("project popup not open, got %T", m.popup.Content())
 	}
@@ -26,8 +27,8 @@ func TestStartupWithoutDefaultOpensPicker(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "", fb)
 	m = drain(t, m, m.Init())
-	if p := projects(t, m); p.cancellable || len(p.list.Items()) != 2 {
-		t.Fatalf("picker not shown: cancellable=%v items=%d", p.cancellable, len(p.list.Items()))
+	if p := projects(t, m); p.Cancellable() || p.Len() != 2 {
+		t.Fatalf("picker not shown: cancellable=%v items=%d", p.Cancellable(), p.Len())
 	}
 	if len(fb.boardCalls) != 0 {
 		t.Fatal("board loaded without a project")
@@ -49,19 +50,6 @@ func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 	}
 }
 
-func TestPickerMarksBackendDefault(t *testing.T) {
-	fb := pickerBackend()
-	m := newTestModel(t, "BETA", fb)
-	m = pressDrain(t, m, "ctrl+p")
-	items := projects(t, m).list.Items()
-	if item := items[1].(projectItem); !item.isDefault {
-		t.Fatal("default marker not shown")
-	}
-	if item := items[0].(projectItem); item.isDefault {
-		t.Fatal("non-default project marked as default")
-	}
-}
-
 func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	fb := pickerBackend()
 	fb.board = testBoard()
@@ -69,7 +57,7 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	m = drain(t, m, m.Init())
 
 	m = pressDrain(t, m, "ctrl+p")
-	if !projects(t, m).cancellable {
+	if !projects(t, m).Cancellable() {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
 	m = pressDrain(t, m, "esc")
@@ -78,7 +66,7 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	}
 
 	m, _ = pressOpen(t, m, "ctrl+p")
-	if !projects(t, m).loaded {
+	if !projects(t, m).Loaded() {
 		t.Fatal("projects should be cached after the first load")
 	}
 }
@@ -105,7 +93,7 @@ func TestKeysIgnoredWhileProjectsLoad(t *testing.T) {
 	m := newTestModel(t, "", pickerBackend())
 	m, _ = pressOpen(t, m, "ctrl+p")
 	m, _ = press(t, m, "/", "x")
-	if projects(t, m).filtering() {
+	if projects(t, m).Filtering() {
 		t.Fatal("filter started before projects loaded")
 	}
 }

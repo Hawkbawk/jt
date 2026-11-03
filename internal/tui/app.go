@@ -6,9 +6,11 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // Backend is the Jira functionality the TUI depends on.
@@ -81,7 +83,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		return m, m.resize(msg)
 
-	case ThemeChangedMsg:
+	case tuimsg.ThemeChanged:
 		m.restyle()
 		return m, m.updatePopup(msg)
 
@@ -101,13 +103,13 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case popup.OpenMsg, popup.CloseMsg:
 		return m, m.updatePopup(msg)
 
-	case projectSelectedMsg:
+	case projectpicker.SelectedMsg:
 		m.status = ""
-		return m, m.runWithSpinner(m.board.open(msg.key))
+		return m, m.runWithSpinner(m.board.open(msg.Key))
 
-	case projectsLoadedMsg:
-		if msg.err == nil {
-			m.projects = msg.projects
+	case projectpicker.LoadedMsg:
+		if msg.Err == nil {
+			m.projects = msg.Projects
 		}
 		return m, m.updatePopup(msg)
 
@@ -128,8 +130,8 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, m.updatePopup(msg)
 }
 
-func (m BoardModel) newProjectPopup(cancellable bool) *projectPopup {
-	return newProjectPopup(m.board.backend, m.projects, cancellable)
+func (m BoardModel) newProjectPopup(cancellable bool) *projectpicker.Picker {
+	return projectpicker.New(m.board.backend, m.projects, cancellable)
 }
 
 func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {

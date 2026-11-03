@@ -17,6 +17,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // version is set at build time with
@@ -137,7 +138,7 @@ func run(m tea.Model) error {
 	// from inside Update, so it runs on its own goroutine.
 	defer tint.Subscribe(func(ev tint.Event) {
 		if ev.Kind == tint.CurrentChanged {
-			go p.Send(tui.ThemeChangedMsg{})
+			go p.Send(tuimsg.ThemeChanged{})
 		}
 	})()
 

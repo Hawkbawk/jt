@@ -284,7 +284,7 @@ func (p *editPopup) unsaved() int { return len(p.changed()) }
 
 // fieldDelegate is the themed delegate with no gap between rows.
 func fieldDelegate() list.DefaultDelegate {
-	d := themedDelegate()
+	d := styles.ListDelegate()
 	d.SetSpacing(0)
 	return d
 }

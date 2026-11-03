@@ -9,6 +9,7 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // useTint makes t current for the test and restores the previous tint after.
@@ -125,9 +126,9 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 		t.Error("picking a tint should restyle the spinner")
 	}
 
-	// The terminal's theme changing arrives as a ThemeChangedMsg.
+	// The terminal's theme changing arrives as a tuimsg.ThemeChanged.
 	tint.SetTint(tint.TintCatppuccinMocha)
-	next, _ = m.Update(ThemeChangedMsg{})
+	next, _ = m.Update(tuimsg.ThemeChanged{})
 	m = next.(BoardModel)
 	if m.spinner.Style.GetForeground() != tint.TintCatppuccinMocha.Blue {
 		t.Error("a tint change from outside jt should restyle the spinner")

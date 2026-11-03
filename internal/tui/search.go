@@ -10,8 +10,10 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 type issueTypesLoadedMsg struct {
@@ -66,7 +68,7 @@ func (m SearchModel) WithWarning(text string) SearchModel {
 
 // Init implements tea.Model.
 func (m SearchModel) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), loadProjects(m.backend, 0), m.form.form.Init())
+	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend, 0), m.form.form.Init())
 }
 
 func (m SearchModel) busy() bool { return m.searching }
@@ -118,7 +120,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fit()
 		return m, tea.Batch(popupCmd, m.form.update(msg))
 
-	case ThemeChangedMsg:
+	case tuimsg.ThemeChanged:
 		cmd := m.restyle()
 		return m, cmd
 
@@ -149,12 +151,12 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.form.update(nil)
 		return m, cmd
 
-	case projectsLoadedMsg:
-		if msg.err != nil {
-			m.status = styles.Error().Render("loading projects: " + msg.err.Error())
+	case projectpicker.LoadedMsg:
+		if msg.Err != nil {
+			m.status = styles.Error().Render("loading projects: " + msg.Err.Error())
 			return m, nil
 		}
-		m.form.setProjects(msg.projects)
+		m.form.setProjects(msg.Projects)
 		cmd := m.form.update(nil)
 		return m, cmd
 
