@@ -18,9 +18,7 @@ type Settings interface {
 	SaveTheme(id string) error
 }
 
-// ThemeChangedMsg reports that the current tint changed outside of jt, for
-// example because the terminal's theme was edited.
-type ThemeChangedMsg struct{}
+var pickerCloseKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
 
 // themeSelectedMsg reports the tint picked in the theme popup, and the ID to
 // save for it. An empty ID follows the terminal's theme.
@@ -87,7 +85,7 @@ func newThemePopup() *themePopup {
 		}
 	}
 
-	l := list.New(items, themedDelegate(), 0, 0)
+	l := list.New(items, styles.ListDelegate(), 0, 0)
 	l.Title = "Theme"
 	l.Styles.Title = styles.Title()
 	l.KeyMap.Quit = key.NewBinding()

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/fang/v2"
 	"charm.land/glamour/v2"
@@ -212,4 +213,13 @@ func Markdown(md string, width int) string {
 		return md
 	}
 	return out
+}
+
+// ListDelegate returns a list delegate that marks the selected item in the
+// highlight color.
+func ListDelegate() list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(Highlight()).BorderForeground(Highlight())
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(Highlight()).BorderForeground(Highlight())
+	return d
 }

@@ -430,7 +430,6 @@ func TestRefreshReloadsBoardAndKeepsFocus(t *testing.T) {
 
 func TestRefreshIgnoredWithoutProject(t *testing.T) {
 	m := newTestModel(t, "", &fakeBackend{})
-	m.picker.open = false
 	if _, cmd := press(t, m, "r"); cmd != nil {
 		t.Fatal("r without a project should do nothing")
 	}

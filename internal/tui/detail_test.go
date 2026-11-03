@@ -101,7 +101,7 @@ func TestViewIgnoredOnEmptyColumn(t *testing.T) {
 func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = pressDrain(t, m, "v", "ctrl+p")
-	if !m.popup.IsOpen() || m.picker.open {
+	if _, ok := m.popup.Content().(*detailPopup); !ok {
 		t.Fatal("ctrl+p should do nothing while a popup is open")
 	}
 }
