@@ -1,6 +1,7 @@
 package fakejira_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/hawkbawk/jt/internal/fakejira"
@@ -67,5 +68,73 @@ func TestSearch(t *testing.T) {
 	none, _ := f.Search(`created >= "2999-01-01 00:00"`)
 	if len(none) != 0 {
 		t.Errorf("future search found %d issues", len(none))
+	}
+}
+
+func TestNewWithSeedGeneratesRepeatableRichData(t *testing.T) {
+	first := fakejira.NewWithSeed(42)
+	second := fakejira.NewWithSeed(42)
+	other := fakejira.NewWithSeed(43)
+
+	firstIssues, err := first.Search(`project = "DEMO" ORDER BY key ASC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondIssues, err := second.Search(`project = "DEMO" ORDER BY key ASC`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstIssues) < 50 || len(firstIssues) != len(secondIssues) {
+		t.Fatalf("seeded issues = %d and %d, want at least 50 and equal counts", len(firstIssues), len(secondIssues))
+	}
+	for i := range firstIssues {
+		if firstIssues[i].Summary != secondIssues[i].Summary ||
+			firstIssues[i].Status != secondIssues[i].Status ||
+			firstIssues[i].Assignee != secondIssues[i].Assignee {
+			t.Fatalf("issue %s differs for the same seed", firstIssues[i].Key)
+		}
+	}
+	otherDetail, err := other.Issue(firstIssues[2].Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstIssues[2].Summary == otherDetail.Issue.Summary {
+		t.Fatal("different seeds produced the same generated summary")
+	}
+
+	firstDetail, err := first.Issue("DEMO-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDetail, err := second.Issue("DEMO-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstDetail.Description != secondDetail.Description || len(firstDetail.Comments) != len(secondDetail.Comments) {
+		t.Fatal("issue details differ for the same seed")
+	}
+	for i := range firstDetail.Comments {
+		if firstDetail.Comments[i].Body != secondDetail.Comments[i].Body {
+			t.Fatalf("comment %d differs for the same seed", i)
+		}
+	}
+
+	commentCounts := map[int]bool{}
+	descriptionLengths := map[int]bool{}
+	for n := 3; n <= 60; n++ {
+		detail, err := first.Issue(fmt.Sprintf("DEMO-%d", n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		commentCounts[len(detail.Comments)] = true
+		descriptionLengths[len(detail.Description)] = true
+	}
+	if len(commentCounts) < 3 || len(descriptionLengths) < 3 {
+		t.Fatalf("insufficient variation: comment counts=%v, description lengths=%v", commentCounts, descriptionLengths)
+	}
+
+	users, err := first.SearchUsers("", "")
+	if err != nil || len(users) < 15 {
+		t.Fatalf("active users = %d, %v; want at least 15", len(users), err)
 	}
 }

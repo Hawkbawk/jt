@@ -2,9 +2,12 @@ package fakejira
 
 import (
 	"fmt"
+	mathrand "math/rand"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/go-faker/faker/v4"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -105,13 +108,23 @@ func fieldDefs() []jira.EditField {
 }
 
 func seedUsers() []user {
-	return []user{
+	users := []user{
 		{Option: jira.Option{ID: "user-sam", Name: "Sam Tester"}, Email: "sam@example.com", Active: true},
 		{Option: jira.Option{ID: "user-ada", Name: "Ada Lovelace"}, Email: "ada@example.com", Active: true},
 		{Option: jira.Option{ID: "user-grace", Name: "Grace Hopper"}, Email: "grace@example.com", Active: true},
 		{Option: jira.Option{ID: "user-alan", Name: "Alan Turing"}, Email: "alan@example.com", Active: true},
-		{Option: jira.Option{ID: "user-old", Name: "Former Employee"}, Email: "old@example.com", Active: false},
 	}
+	for i := 4; i < maxUsers-1; i++ {
+		users = append(users, user{
+			Option: jira.Option{ID: fmt.Sprintf("user-%02d", i), Name: faker.Name()},
+			Email:  fmt.Sprintf("teammate%02d@example.com", i),
+			Active: true,
+		})
+	}
+	return append(users, user{
+		Option: jira.Option{ID: "user-old", Name: "Former Employee"},
+		Email:  "old@example.com",
+	})
 }
 
 func seedProjects() []jira.Project {
@@ -170,7 +183,7 @@ const longDescription = "## Background\n\n" +
 	"3. Keep waiting\n\n" +
 	"### Filler for scrolling\n\n"
 
-func seedIssues(now time.Time, users []user) []*issue {
+func seedIssues(now time.Time, users []user, rng *mathrand.Rand) []*issue {
 	const day = 24 * time.Hour
 	var filler strings.Builder
 	for i := 1; i <= 40; i++ {
@@ -249,59 +262,109 @@ func seedIssues(now time.Time, users []user) []*issue {
 	})
 	bug.Comments = []comment{{Author: who("user-sam"), Body: "I can reproduce this on main.", Created: bug.Created.Add(time.Hour)}}
 
-	return []*issue{
-		big,
-		bug,
-		mk("DEMO-3", "Task", statusToDo, "", "user-grace", 2*day, map[string]value{
-			"summary":  text("Write release notes for 0.2"),
-			"priority": prio("Low"),
-		}),
-		mk("DEMO-4", "Story", statusToDo, "user-grace", "user-ada", 5*day, map[string]value{
-			"summary":     text("Filter the board by assignee"),
-			"description": text("Add a filter menu listing everyone with an issue on the board."),
-			"priority":    prio("Medium"),
-			"labels":      labels("frontend"),
-		}),
-		mk("DEMO-5", "Bug", statusInProgress, "user-alan", "user-sam", 6*day, map[string]value{
-			"summary":     text("Comments with tables render badly"),
-			"description": text("Tables in comments lose their borders."),
-			"priority":    prio("Medium"),
-		}),
-		mk("DEMO-6", "Story", statusInReview, "user-sam", "user-grace", 9*day, map[string]value{
-			"summary":     text("Copy the issue URL to the clipboard"),
-			"description": text("Pressing y copies the issue's browser URL."),
-			"priority":    prio("Low"),
-			"labels":      labels("frontend"),
-		}),
-		mk("DEMO-7", "Task", statusInReview, "", "user-ada", 4*day, map[string]value{
-			"summary":  text("Bump dependencies"),
-			"priority": prio("Lowest"),
-		}),
-		mk("DEMO-8", "Story", statusDone, "user-ada", "user-sam", 20*day, map[string]value{
-			"summary":     text("Pick a theme from bubbletint"),
-			"description": text("Press t to choose a theme."),
-			"priority":    prio("Medium"),
-		}),
-		mk("DEMO-9", "Bug", statusDone, "user-grace", "user-alan", 15*day, map[string]value{
-			"summary":  text("Status line overflows on narrow terminals"),
-			"priority": prio("High"),
-			"labels":   labels("frontend"),
-		}),
-		mk("OPS-1", "Task", statusToDo, "user-alan", "user-alan", day, map[string]value{
-			"summary":  text("Rotate the staging certificates"),
-			"priority": prio("High"),
-		}),
-		mk("OPS-2", "Task", statusInProgress, "user-sam", "user-alan", 2*day, map[string]value{
-			"summary":     text("Move CI runners to the new cluster"),
-			"description": text("Runners should autoscale."),
-			"priority":    prio("Medium"),
-		}),
-		mk("OPS-3", "Bug", statusInReview, "", "user-grace", 3*day, map[string]value{
-			"summary":  text("Backups skip the attachments volume"),
-			"priority": prio("Highest"),
-		}),
-		mk("OPS-4", "Task", statusDone, "user-ada", "user-alan", 8*day, map[string]value{
-			"summary": text("Upgrade the database"),
-		}),
+	issues := []*issue{big, bug}
+	statuses := []jira.Option{statusToDo, statusInProgress, statusInReview, statusDone}
+	types := []string{"Bug", "Epic", "Story", "Task"}
+	labelNames := []string{"backend", "frontend", "infrastructure", "documentation", "testing", "performance"}
+	userID := func(index int) string { return users[index].ID }
+
+	for _, project := range []struct {
+		key   string
+		first int
+		last  int
+	}{
+		{key: "DEMO", first: 3, last: 60},
+		{key: "OPS", first: 1, last: 24},
+	} {
+		for n := project.first; n <= project.last; n++ {
+			age := time.Duration(rng.Intn(180)+1)*day + time.Duration(rng.Intn(24))*time.Hour
+			assignee := ""
+			if rng.Intn(5) != 0 {
+				assignee = userID(1 + rng.Intn(len(users)-2))
+			}
+			reporter := userID(rng.Intn(len(users) - 1))
+			iss := mk(
+				fmt.Sprintf("%s-%d", project.key, n),
+				types[rng.Intn(len(types))],
+				statuses[rng.Intn(len(statuses))],
+				assignee,
+				reporter,
+				age,
+				generatedValues(now, rng, labelNames, users),
+			)
+			issues = append(issues, iss)
+			seedComments(iss, users, now, rng)
+		}
+	}
+	return issues
+}
+
+func generatedValues(now time.Time, rng *mathrand.Rand, labelNames []string, users []user) map[string]value {
+	values := map[string]value{
+		"summary":           {Text: faker.Sentence()},
+		"priority":          {Chosen: []jira.Option{priorities[rng.Intn(len(priorities))]}},
+		"customfield_10030": {Chosen: []jira.Option{teams[rng.Intn(len(teams))]}},
+	}
+
+	switch rng.Intn(5) {
+	case 0:
+		values["description"] = value{Text: faker.Sentence()}
+	case 1, 2, 3:
+		values["description"] = value{Text: faker.Paragraph()}
+	case 4:
+		values["description"] = value{Text: strings.Join([]string{
+			faker.Paragraph(),
+			faker.Paragraph(),
+			faker.Paragraph(),
+			faker.Paragraph(),
+		}, "\n\n")}
+	}
+
+	var selectedLabels []string
+	for i := 0; i < rng.Intn(4); i++ {
+		label := labelNames[rng.Intn(len(labelNames))]
+		if !slices.Contains(selectedLabels, label) {
+			selectedLabels = append(selectedLabels, label)
+		}
+	}
+	if len(selectedLabels) > 0 {
+		var chosenLabels []jira.Option
+		for _, label := range selectedLabels {
+			chosenLabels = append(chosenLabels, jira.Option{ID: label, Name: label})
+		}
+		values["labels"] = value{Chosen: chosenLabels}
+	}
+
+	if rng.Intn(2) == 0 {
+		values["components"] = value{Chosen: []jira.Option{components[rng.Intn(len(components))]}}
+	}
+	if rng.Intn(3) == 0 {
+		values["duedate"] = value{Text: now.AddDate(0, 0, rng.Intn(60)+1).Format("2006-01-02")}
+	}
+	if rng.Intn(2) == 0 {
+		values["customfield_10016"] = value{Text: fmt.Sprint([]int{1, 2, 3, 5, 8, 13}[rng.Intn(6)])}
+	}
+	if rng.Intn(2) == 0 {
+		values["customfield_10020"] = value{Chosen: []jira.Option{users[1+rng.Intn(len(users)-2)].Option}}
+	}
+	return values
+}
+
+func seedComments(iss *issue, users []user, now time.Time, rng *mathrand.Rand) {
+	count := rng.Intn(9)
+	for i := 0; i < count; i++ {
+		body := faker.Sentence()
+		switch rng.Intn(3) {
+		case 1:
+			body = faker.Paragraph()
+		case 2:
+			body = strings.Join([]string{faker.Paragraph(), faker.Paragraph(), faker.Paragraph()}, "\n\n")
+		}
+		author := users[rng.Intn(len(users)-1)]
+		iss.Comments = append(iss.Comments, comment{
+			Author:  author.Option,
+			Body:    body,
+			Created: iss.Created.Add(time.Duration(i+1) * now.Sub(iss.Created) / time.Duration(count+1)),
+		})
 	}
 }

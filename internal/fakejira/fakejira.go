@@ -7,6 +7,7 @@ package fakejira
 import (
 	"errors"
 	"fmt"
+	mathrand "math/rand"
 	"net/url"
 	"regexp"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-faker/faker/v4"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -23,6 +25,11 @@ const (
 	dateLayout    = "2006-01-02"
 	maxUsers      = 20
 )
+
+// DefaultSeed is used by New and by --fake when JT_FAKE_SEED is unset.
+const DefaultSeed int64 = 1
+
+var fakerSeedMu sync.Mutex
 
 // Backend implements the methods jt's TUI calls on the Jira client.
 type Backend struct {
@@ -38,6 +45,16 @@ type Backend struct {
 
 // New returns a backend seeded with demo data.
 func New() *Backend {
+	return NewWithSeed(DefaultSeed)
+}
+
+// NewWithSeed returns a backend with reproducible demo data for seed.
+func NewWithSeed(seed int64) *Backend {
+	fakerSeedMu.Lock()
+	defer fakerSeedMu.Unlock()
+	faker.SetRandomSource(faker.NewSafeSource(mathrand.NewSource(seed)))
+
+	rng := mathrand.New(mathrand.NewSource(seed))
 	b := &Backend{
 		project:  DefaultProject,
 		now:      time.Now,
@@ -46,7 +63,7 @@ func New() *Backend {
 		boards:   seedBoards(),
 		fields:   fieldDefs(),
 	}
-	b.issues = seedIssues(b.now(), b.users)
+	b.issues = seedIssues(b.now(), b.users, rng)
 	return b
 }
 

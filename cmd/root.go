@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/fang/v2"
@@ -44,7 +45,8 @@ var rootCmd = &cobra.Command{
 	Long: `jt is a terminal kanban board for Jira.
 
 Environment:
-  JT_CONFIG_FILE    Path to the jt settings file`,
+  JT_CONFIG_FILE    Path to the jt settings file
+  JT_FAKE_SEED      Integer seed for repeatable --fake demo data`,
 	Args: cobra.NoArgs,
 	RunE: runBoard,
 }
@@ -123,7 +125,15 @@ func openBackend() (tui.Backend, tui.Settings, error) {
 		if version != "" {
 			return nil, nil, errors.New("the --fake flag is only available in development builds")
 		}
-		return fakejira.New(), sessionSettings{}, nil
+		seed := fakejira.DefaultSeed
+		if value, ok := os.LookupEnv("JT_FAKE_SEED"); ok {
+			parsed, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return nil, nil, fmt.Errorf("JT_FAKE_SEED must be an integer: %w", err)
+			}
+			seed = parsed
+		}
+		return fakejira.NewWithSeed(seed), sessionSettings{}, nil
 	}
 	if cfgErr != nil {
 		return nil, nil, cfgErr
