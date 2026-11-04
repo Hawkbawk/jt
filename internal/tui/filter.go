@@ -9,6 +9,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 var filterTabHelp = key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab/shift+tab", "switch"))
@@ -92,7 +93,7 @@ func (p *filterPopup) buildForm() {
 	if len(t.filters) == 0 {
 		p.selectField.Description(t.empty)
 	}
-	p.form = newForm(p.selectField)
+	p.form = pane.NewForm(p.selectField)
 	km := huh.NewDefaultKeyMap()
 	km.Quit = key.NewBinding(key.WithDisabled())
 	km.Select.Filter.SetHelp("/", "search")

@@ -11,7 +11,9 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/reltime"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 const anyOption = "Any"
@@ -88,11 +90,11 @@ func (f *searchForm) build() tea.Cmd {
 			Placeholder("project = DEMO AND status != Done ORDER BY updated DESC").
 			CharLimit(0).ShowLineNumbers(false).Lines(5).Value(&f.jql).Validate(requireJQL)
 		f.fields = []huh.Field{jql}
-		f.form = newForm(f.fields...)
+		f.form = pane.NewForm(f.fields...)
 	} else {
 		left, right := f.basicColumns()
 		f.fields = append(append([]huh.Field{}, left...), right...)
-		f.form = newGroupsForm(huh.NewGroup(left...), huh.NewGroup(right...)).
+		f.form = pane.NewGroupsForm(huh.NewGroup(left...), huh.NewGroup(right...)).
 			WithLayout(huh.LayoutColumns(2))
 	}
 	f.restyle()
@@ -314,7 +316,7 @@ func parseTimeRange(text string, now time.Time) (jira.TimeRange, error) {
 // parseBound reads one end of a range. The end of a range given as a date
 // covers that whole day.
 func parseBound(text string, now time.Time, end bool) (time.Time, error) {
-	t, err := parseTimeText(text, now, false)
+	t, err := reltime.ParseTime(text, now, false)
 	if err != nil {
 		return t, err
 	}

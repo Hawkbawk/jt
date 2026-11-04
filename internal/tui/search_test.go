@@ -528,7 +528,7 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 		t.Fatalf("comments = %q", fb.comments)
 	}
 	m = searchPressDrain(t, m, "esc", "e")
-	if p, ok := m.popup.Content().(*editPopup); !ok || p.key != "DEMO-2" {
+	if !m.popup.IsOpen() || !strings.Contains(m.View().Content, "Edit · DEMO-2") {
 		t.Fatalf("edit shortcut should use the hovered result: %T", m.popup.Content())
 	}
 }
