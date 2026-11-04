@@ -175,6 +175,7 @@ func (b *Backend) Comments(key string) (*jira.CommentList, error) {
 		list.Items = append(list.Items, jira.Comment{
 			Author:  c.Author.Name,
 			Created: c.Created.Local().Format(displayLayout),
+			Edited:  c.Edited,
 			Body:    c.Body,
 		})
 	}

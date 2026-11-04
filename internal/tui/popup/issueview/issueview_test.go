@@ -145,3 +145,13 @@ func TestSpinnerStopsWhenIdleAndRestarts(t *testing.T) {
 		t.Fatal("the tick chain should end when nothing is busy")
 	}
 }
+
+func TestEditedCommentIsMarked(t *testing.T) {
+	l := &jira.CommentList{Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Edited: true, Body: "a"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "b"},
+	}}
+	if got := strings.Count(renderComments(l, 40, plain), "edited"); got != 1 {
+		t.Fatalf("got %d edited markers, want 1", got)
+	}
+}

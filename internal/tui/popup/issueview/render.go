@@ -49,7 +49,11 @@ func renderComments(l *jira.CommentList, width int, md Markdown) string {
 	sep := styles.Dim().Render(strings.Repeat("─", width))
 	parts := make([]string, 0, len(l.Items))
 	for _, c := range l.Items {
-		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(" · "+c.Created)
+		meta := " · " + c.Created
+		if c.Edited {
+			meta += " · edited"
+		}
+		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(meta)
 		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
 	}
 	return strings.Join(parts, "\n"+sep+"\n")

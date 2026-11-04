@@ -63,6 +63,7 @@ type Filter struct {
 type Comment struct {
 	Author  string
 	Created string
+	Edited  bool
 	Body    string
 }
 

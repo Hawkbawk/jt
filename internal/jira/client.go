@@ -339,6 +339,7 @@ func (c *Client) Comments(key string) (*CommentList, error) {
 			} `json:"author"`
 			Body    *adf.ADF `json:"body"`
 			Created string   `json:"created"`
+			Updated string   `json:"updated"`
 		} `json:"comments"`
 		Total int `json:"total"`
 	}
@@ -350,6 +351,7 @@ func (c *Client) Comments(key string) (*CommentList, error) {
 		out = append(out, Comment{
 			Author:  cm.Author.DisplayName,
 			Created: formatTime(cm.Created),
+			Edited:  editedAfter(cm.Created, cm.Updated),
 			Body:    toMarkdown(cm.Body),
 		})
 	}
@@ -470,6 +472,20 @@ func toMarkdown(v any) string {
 	default:
 		return ""
 	}
+}
+
+// editedAfter reports whether updated is later than created by more than the
+// small gap Jira leaves on comments that were never edited.
+func editedAfter(created, updated string) bool {
+	c, err := time.Parse(jiraTimeLayout, created)
+	if err != nil {
+		return false
+	}
+	u, err := time.Parse(jiraTimeLayout, updated)
+	if err != nil {
+		return false
+	}
+	return u.Sub(c) > time.Second
 }
 
 func formatTime(s string) string {
