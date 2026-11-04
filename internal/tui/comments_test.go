@@ -74,7 +74,7 @@ func TestCommentsSendErrorKeepsDraft(t *testing.T) {
 func TestCommentsTopAndBottom(t *testing.T) {
 	fb := detailBackend()
 	for i := range 40 {
-		fb.detail.Comments = append(fb.detail.Comments, fb.detail.Comments[i%2])
+		fb.commentList.Items = append(fb.commentList.Items, fb.commentList.Items[i%2])
 	}
 	m := openComments(t, fb)
 
@@ -101,7 +101,7 @@ func TestCommentsFooterSaysWhenOlderCommentsAreNotLoaded(t *testing.T) {
 		t.Fatalf("footer should stay quiet when every comment is loaded:\n%s", v)
 	}
 
-	fb.detail.CommentsTotal = 240
+	fb.commentList.Total = 240
 	m = openComments(t, fb)
 	if v := m.View().Content; !strings.Contains(v, "Newest 2 of 240") {
 		t.Fatalf("footer should say older comments are missing:\n%s", v)

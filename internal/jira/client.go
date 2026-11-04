@@ -303,8 +303,7 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 	return out, nil
 }
 
-// Issue fetches an issue with its description and its newest comments, newest
-// first.
+// Issue fetches an issue with its description.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
 	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(0))
 	if err != nil {
@@ -326,16 +325,12 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 		Created:     formatTime(f.Created),
 		Updated:     formatTime(f.Updated),
 	}
-	d.Comments, d.CommentsTotal, err = c.comments(key)
-	if err != nil {
-		return nil, err
-	}
 	return d, nil
 }
 
-// comments fetches the newest comments on an issue, newest first, along with
+// Comments fetches the newest comments on an issue, newest first, along with
 // how many it has in all.
-func (c *Client) comments(key string) ([]Comment, int, error) {
+func (c *Client) Comments(key string) (*CommentList, error) {
 	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d", url.PathEscape(key), commentsLimit)
 	var res struct {
 		Comments []struct {
@@ -348,7 +343,7 @@ func (c *Client) comments(key string) ([]Comment, int, error) {
 		Total int `json:"total"`
 	}
 	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	out := make([]Comment, 0, len(res.Comments))
 	for _, cm := range res.Comments {
@@ -358,7 +353,7 @@ func (c *Client) comments(key string) ([]Comment, int, error) {
 			Body:    toMarkdown(cm.Body),
 		})
 	}
-	return out, res.Total, nil
+	return &CommentList{Items: out, Total: res.Total}, nil
 }
 
 // Transitions lists the transitions available for an issue. They're fetched

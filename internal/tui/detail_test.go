@@ -15,11 +15,10 @@ func detailBackend() *fakeBackend {
 	return &fakeBackend{detail: &jira.IssueDetail{
 		Issue:       jira.Issue{Key: "T-1", Summary: "one", Status: "Open"},
 		Description: strings.Repeat("line\n", 100) + strings.Repeat("wide", 100),
-		Comments: []jira.Comment{
-			{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
-			{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
-		},
-	}}
+	}, commentList: &jira.CommentList{Total: 2, Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
+	}}}
 }
 
 func loadedDetailModel(t *testing.T) BoardModel {

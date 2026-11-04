@@ -13,11 +13,14 @@ import (
 )
 
 type fakeBackend struct {
-	detail *jira.IssueDetail
-	err    error
+	detail   *jira.IssueDetail
+	comments *jira.CommentList
+	err      error
 }
 
 func (f fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, f.err }
+
+func (f fakeBackend) Comments(string) (*jira.CommentList, error) { return f.comments, f.err }
 
 func plain(md string, _ int) string { return md }
 
@@ -25,11 +28,14 @@ func detail() *jira.IssueDetail {
 	return &jira.IssueDetail{
 		Issue:       jira.Issue{Key: "T-1", Summary: "one", Status: "Open"},
 		Description: strings.Repeat("line\n", 100),
-		Comments: []jira.Comment{
-			{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
-			{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
-		},
 	}
+}
+
+func comments() *jira.CommentList {
+	return &jira.CommentList{Total: 2, Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
+	}}
 }
 
 func sized(m *Model, w, h int) *Model {
@@ -72,7 +78,7 @@ func TestLoadShowsDetailsAndRerendersOnResize(t *testing.T) {
 }
 
 func TestCommentsShowEveryComment(t *testing.T) {
-	m := sized(Comments(fakeBackend{detail: detail()}, "T-1", plain), 60, 20)
+	m := sized(Comments(fakeBackend{comments: comments()}, "T-1", plain), 60, 20)
 	loaded(m)
 	v := view(m)
 	for _, want := range []string{"Comments · T-1", "Ada", "first comment", "Grace", "second comment"} {
@@ -83,7 +89,7 @@ func TestCommentsShowEveryComment(t *testing.T) {
 }
 
 func TestNoComments(t *testing.T) {
-	if got := renderComments(&jira.IssueDetail{}, 40, plain); !strings.Contains(got, "No comments") {
+	if got := renderComments(&jira.CommentList{}, 40, plain); !strings.Contains(got, "No comments") {
 		t.Fatalf("got %q", got)
 	}
 }

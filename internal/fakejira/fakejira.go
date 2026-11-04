@@ -141,7 +141,7 @@ func (b *Backend) Board(project string, boardID int, filterJQL string) (*jira.Bo
 	}, nil
 }
 
-// Issue returns an issue with its description and comments.
+// Issue returns an issue with its description.
 func (b *Backend) Issue(key string) (*jira.IssueDetail, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -159,15 +159,26 @@ func (b *Backend) Issue(key string) (*jira.IssueDetail, error) {
 	for _, l := range iss.Values["labels"].Chosen {
 		d.Labels = append(d.Labels, l.Name)
 	}
+	return d, nil
+}
+
+// Comments returns an issue's comments, newest first.
+func (b *Backend) Comments(key string) (*jira.CommentList, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	iss, err := b.issue(key)
+	if err != nil {
+		return nil, err
+	}
+	list := &jira.CommentList{Total: len(iss.Comments)}
 	for _, c := range slices.Backward(iss.Comments) {
-		d.Comments = append(d.Comments, jira.Comment{
+		list.Items = append(list.Items, jira.Comment{
 			Author:  c.Author.Name,
 			Created: c.Created.Local().Format(displayLayout),
 			Body:    c.Body,
 		})
 	}
-	d.CommentsTotal = len(d.Comments)
-	return d, nil
+	return list, nil
 }
 
 // Transitions lists a move to every status but the issue's current one.

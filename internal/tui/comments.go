@@ -122,8 +122,8 @@ func (p *commentsPopup) View() tea.View {
 	case p.sendErr != nil:
 		hint = styles.Error().Render("Error: " + p.sendErr.Error())
 	}
-	if d := p.issue.Detail(); d != nil && d.CommentsTotal > len(d.Comments) && !p.sending && p.sendErr == nil {
-		prefix := styles.Dim().Render(fmt.Sprintf("Newest %d of %d · ", len(d.Comments), d.CommentsTotal))
+	if l := p.issue.CommentList(); l != nil && l.Total > len(l.Items) && !p.sending && p.sendErr == nil {
+		prefix := styles.Dim().Render(fmt.Sprintf("Newest %d of %d · ", len(l.Items), l.Total))
 		hint = prefix + helpView(commentsHelpKeys, p.issue.Width()-lipgloss.Width(prefix))
 		if p.input.Focused() {
 			hint = prefix + helpView(writingHelpKeys, p.issue.Width()-lipgloss.Width(prefix))

@@ -66,6 +66,14 @@ type Comment struct {
 	Body    string
 }
 
+// CommentList is an issue's comments, newest first.
+type CommentList struct {
+	Items []Comment
+	// Total is how many comments the issue has, which can be more than the
+	// Items loaded.
+	Total int
+}
+
 // IssueDetail is the full view of an issue.
 type IssueDetail struct {
 	Issue
@@ -74,10 +82,6 @@ type IssueDetail struct {
 	Labels      []string
 	Created     string
 	Updated     string
-	Comments    []Comment
-	// CommentsTotal is how many comments the issue has, which can be more
-	// than the Comments loaded.
-	CommentsTotal int
 }
 
 // Transition is a workflow transition available for an issue.

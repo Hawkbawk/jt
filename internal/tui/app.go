@@ -25,6 +25,7 @@ type Backend interface {
 	Boards(project string) ([]jira.BoardSummary, error)
 	Board(project string, boardID int, filterJQL string) (*jira.Board, error)
 	Issue(key string) (*jira.IssueDetail, error)
+	Comments(key string) (*jira.CommentList, error)
 	Transitions(iss jira.Issue) ([]jira.Transition, error)
 	Transition(key, transitionID string) error
 	Assign(key, assigneeID string) error
