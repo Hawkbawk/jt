@@ -128,8 +128,54 @@ func TestFilterPopupSearchNoMatchesAndCancel(t *testing.T) {
 		t.Fatal("enter with no matches should not apply a stale selection")
 	}
 	m = pressDrain(t, m, "esc")
+	if !m.popup.IsOpen() || m.popup.Content().(*filterPopup).selectField.GetFiltering() {
+		t.Fatal("esc should stop searching without closing the popup")
+	}
+	m = pressDrain(t, m, "esc")
 	if m.popup.IsOpen() || m.board.filter.Name != "Only Bugs" || len(fb.filterCalls) != calls {
-		t.Fatal("esc should cancel search without changing the active filter")
+		t.Fatal("esc after an unmatched search should close without changing the active filter")
+	}
+}
+
+func TestFilterPopupEscapeStopsAndClearsSearch(t *testing.T) {
+	m, fb := filterModel(t)
+	m = pressDrain(t, m, "f", "/", "b", "u", "g", "esc")
+	p := m.popup.Content().(*filterPopup)
+	v := ansi.Strip(m.View().Content)
+	if p.selectField.GetFiltering() || !strings.Contains(v, "Only Bugs") || strings.Contains(v, "Recent") {
+		t.Fatal("esc should stop editing the search and keep the matching options")
+	}
+	if !strings.Contains(v, "esc clear search") || strings.Contains(v, "esc close") {
+		t.Fatal("help should show the form's clear-search binding, not close")
+	}
+	m = pressDrain(t, m, "esc")
+	v = ansi.Strip(m.View().Content)
+	if !m.popup.IsOpen() || !strings.Contains(v, "Recent") || !strings.Contains(v, "All issues") {
+		t.Fatal("a second esc should clear the search without closing")
+	}
+	if !strings.Contains(v, "esc close") {
+		t.Fatal("help should show close after the search is cleared")
+	}
+	calls := len(fb.filterCalls)
+	m = pressDrain(t, m, "esc")
+	if m.popup.IsOpen() || len(fb.filterCalls) != calls {
+		t.Fatal("esc without a search should close without applying a filter")
+	}
+}
+
+func TestFilterPopupHelpFollowsSearchState(t *testing.T) {
+	m, _ := filterModel(t)
+	m = pressDrain(t, m, "f")
+	v := ansi.Strip(m.View().Content)
+	for _, want := range []string{"tab/shift+tab switch", "/ search", "enter apply", "esc close"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("help missing %q", want)
+		}
+	}
+	m = pressDrain(t, m, "/")
+	v = ansi.Strip(m.View().Content)
+	if !strings.Contains(v, "esc stop search") || strings.Contains(v, "esc close") || strings.Contains(v, "/ search") {
+		t.Fatal("help should show stop-search while editing the query")
 	}
 }
 

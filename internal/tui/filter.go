@@ -8,9 +8,10 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 )
+
+var filterTabHelp = key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab/shift+tab", "switch"))
 
 // filterSelectedMsg reports the chosen filter. A nil filter clears it.
 type filterSelectedMsg struct {
@@ -92,6 +93,13 @@ func (p *filterPopup) buildForm() {
 		p.selectField.Description(t.empty)
 	}
 	p.form = newForm(p.selectField)
+	km := huh.NewDefaultKeyMap()
+	km.Quit = key.NewBinding(key.WithDisabled())
+	km.Select.Filter.SetHelp("/", "search")
+	km.Select.SetFilter.SetHelp("esc", "stop search")
+	km.Select.ClearFilter.SetHelp("esc", "clear search")
+	km.Select.Submit.SetHelp("enter", "apply")
+	p.form.WithKeyMap(km)
 }
 
 // Init implements tea.Model.
@@ -105,7 +113,10 @@ func (p *filterPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(km, keys.blur) || (!p.selectField.GetFiltering() && key.Matches(km, keys.close)):
+		case key.Matches(km, keys.blur) && p.consumesEsc():
+			_, cmd := p.form.Update(msg)
+			return p, cmd
+		case !p.selectField.GetFiltering() && key.Matches(km, keys.close):
 			return p, popup.Close()
 		case key.Matches(km, keys.nextTab) || (!p.selectField.GetFiltering() && key.Matches(km, keys.right)):
 			p.switchTab(1)
@@ -126,6 +137,10 @@ func (p *filterPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return p, cmd
 }
 
+func (p *filterPopup) consumesEsc() bool {
+	return key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.selectField.KeyBinds()...)
+}
+
 // View implements tea.Model.
 func (p *filterPopup) View() tea.View {
 	names := make([]string, len(p.tabs))
@@ -135,9 +150,9 @@ func (p *filterPopup) View() tea.View {
 	header := []string{renderTabs(names, p.tab), ""}
 	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
 	body := strings.Split(p.form.View(), "\n")
-	hint := "tab switch · j/k select · / search · enter apply · esc cancel"
-	if p.selectField.GetFiltering() {
-		hint = "tab switch · ↑/↓ select · enter apply · esc cancel"
+	bindings := append(helpKeys{filterTabHelp}, p.selectField.KeyBinds()...)
+	if !p.consumesEsc() {
+		bindings = append(bindings, keys.close)
 	}
-	return tea.NewView(popup.Stack(p.height, header, body, styles.Dim().Render(hint)))
+	return tea.NewView(popup.Stack(p.height, header, body, helpView(bindings, p.width)))
 }
