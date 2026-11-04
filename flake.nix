@@ -24,7 +24,7 @@
           pname = "jt";
           inherit version;
           src = self;
-          vendorHash = "sha256-C/wNAvdMN8DZZB4ITOYlUV5mrPK58JyG9uCI6Tj2kYo=";
+          vendorHash = "sha256-PleT32bx+y17MX8luD7T9qAdcAGjXa+QxQM6H5aCcWE=";
           ldflags = [ "-s" "-w" "-X github.com/hawkbawk/jt/cmd.version=${version}" ];
           doCheck = false;
           nativeBuildInputs = [ pkgs.installShellFiles ];

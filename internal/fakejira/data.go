@@ -1,7 +1,6 @@
 package fakejira
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,9 +11,9 @@ import (
 const DefaultProject = "DEMO"
 
 type user struct {
-	jira.Option
-	Email  string
-	Active bool
+	jira.Option `fake:"{jirauser}"`
+	Email       string `fake:"{email}"`
+	Active      bool   `fake:"{chance:90}"`
 }
 
 type board struct {
@@ -105,16 +104,6 @@ func fieldDefs() []jira.EditField {
 	}
 }
 
-func seedUsers() []user {
-	return []user{
-		{Option: jira.Option{ID: "user-sam", Name: "Sam Tester"}, Email: "sam@example.com", Active: true},
-		{Option: jira.Option{ID: "user-ada", Name: "Ada Lovelace"}, Email: "ada@example.com", Active: true},
-		{Option: jira.Option{ID: "user-grace", Name: "Grace Hopper"}, Email: "grace@example.com", Active: true},
-		{Option: jira.Option{ID: "user-alan", Name: "Alan Turing"}, Email: "alan@example.com", Active: true},
-		{Option: jira.Option{ID: "user-old", Name: "Former Employee"}, Email: "old@example.com", Active: false},
-	}
-}
-
 func seedProjects() []jira.Project {
 	return []jira.Project{
 		{Key: "DEMO", Name: "Demo"},
@@ -154,156 +143,5 @@ func seedBoards() []board {
 				{Name: "Done", StatusIDs: []string{statusDone.ID}},
 			},
 		},
-	}
-}
-
-const longDescription = "## Background\n\n" +
-	"The board takes a long time to load for projects with thousands of issues. This ticket tracks paging through the results and showing a spinner while the board loads.\n\n" +
-	"## Acceptance criteria\n\n" +
-	"- Boards with more than 100 issues load every page\n" +
-	"- A spinner shows while the board loads\n" +
-	"- Errors from Jira show in the status line\n\n" +
-	"## Notes\n\n" +
-	"```go\nfor start := 0; start < maxIssues; start += pageSize {\n\t// fetch a page\n}\n```\n\n" +
-	"### Steps to reproduce\n\n" +
-	"1. Open a project with a large board\n" +
-	"2. Wait\n" +
-	"3. Keep waiting\n\n" +
-	"### Filler for scrolling\n\n"
-
-func seedIssues(now time.Time, users []user) []*issue {
-	const day = 24 * time.Hour
-	var filler strings.Builder
-	for i := 1; i <= 40; i++ {
-		fmt.Fprintf(&filler, "Line %d of filler text so the issue view has something to scroll through.\n\n", i)
-	}
-	filler.WriteString("The end of the description.")
-
-	who := func(id string) jira.Option {
-		for _, u := range users {
-			if u.ID == id {
-				return u.Option
-			}
-		}
-		return jira.Option{}
-	}
-	mk := func(key, typ string, st jira.Option, assignee, reporter string, age time.Duration, values map[string]value) *issue {
-		created := now.Add(-age)
-		return &issue{
-			Key: key, Type: typ, Status: st, Assignee: who(assignee), Reporter: who(reporter),
-			Created: created, Updated: created.Add(age / 2), Values: values,
-		}
-	}
-	text := func(s string) value { return value{Text: s} }
-	chosen := func(opts ...jira.Option) value { return value{Chosen: opts} }
-	pick := func(opts []jira.Option, ids ...string) value {
-		var out []jira.Option
-		for _, id := range ids {
-			if i := jira.IndexID(opts, id); i >= 0 {
-				out = append(out, opts[i])
-			}
-		}
-		return chosen(out...)
-	}
-	labels := func(names ...string) value {
-		var out []jira.Option
-		for _, n := range names {
-			out = append(out, jira.Option{ID: n, Name: n})
-		}
-		return chosen(out...)
-	}
-	prio := func(name string) value {
-		for _, p := range priorities {
-			if p.Name == name {
-				return chosen(p)
-			}
-		}
-		return value{}
-	}
-
-	big := mk("DEMO-1", "Story", statusInProgress, "user-sam", "user-ada", 12*day, map[string]value{
-		"summary":           text("Load large boards page by page"),
-		"description":       text(longDescription + filler.String()),
-		"priority":          prio("High"),
-		"labels":            labels("backend", "performance"),
-		"components":        pick(components, "100"),
-		"duedate":           text(now.Add(7 * day).Format("2006-01-02")),
-		"customfield_10016": text("5"),
-		"customfield_10030": pick(teams, "200"),
-		"customfield_10020": chosen(who("user-grace")),
-		"customfield_10040": text("https://example.com/design/boards"),
-	})
-	authors := []string{"user-ada", "user-grace", "user-sam", "user-alan"}
-	for i := range 12 {
-		big.Comments = append(big.Comments, comment{
-			Author:  who(authors[i%len(authors)]),
-			Body:    fmt.Sprintf("Update %d: still working through the paging edge cases.\n\nNext up is error handling.", i+1),
-			Created: big.Created.Add(time.Duration(i+1) * 12 * time.Hour),
-			Edited:  i%4 == 3,
-		})
-	}
-
-	bug := mk("DEMO-2", "Bug", statusToDo, "user-ada", "user-sam", 3*day, map[string]value{
-		"summary":     text("Crash when a column has no statuses"),
-		"description": text("Opening a board whose column has no statuses panics.\n\nSee the trace in the comments."),
-		"priority":    prio("Highest"),
-		"labels":      labels("backend"),
-	})
-	bug.Comments = []comment{{Author: who("user-sam"), Body: "I can reproduce this on main.", Created: bug.Created.Add(time.Hour)}}
-
-	return []*issue{
-		big,
-		bug,
-		mk("DEMO-3", "Task", statusToDo, "", "user-grace", 2*day, map[string]value{
-			"summary":  text("Write release notes for 0.2"),
-			"priority": prio("Low"),
-		}),
-		mk("DEMO-4", "Story", statusToDo, "user-grace", "user-ada", 5*day, map[string]value{
-			"summary":     text("Filter the board by assignee"),
-			"description": text("Add a filter menu listing everyone with an issue on the board."),
-			"priority":    prio("Medium"),
-			"labels":      labels("frontend"),
-		}),
-		mk("DEMO-5", "Bug", statusInProgress, "user-alan", "user-sam", 6*day, map[string]value{
-			"summary":     text("Comments with tables render badly"),
-			"description": text("Tables in comments lose their borders."),
-			"priority":    prio("Medium"),
-		}),
-		mk("DEMO-6", "Story", statusInReview, "user-sam", "user-grace", 9*day, map[string]value{
-			"summary":     text("Copy the issue URL to the clipboard"),
-			"description": text("Pressing y copies the issue's browser URL."),
-			"priority":    prio("Low"),
-			"labels":      labels("frontend"),
-		}),
-		mk("DEMO-7", "Task", statusInReview, "", "user-ada", 4*day, map[string]value{
-			"summary":  text("Bump dependencies"),
-			"priority": prio("Lowest"),
-		}),
-		mk("DEMO-8", "Story", statusDone, "user-ada", "user-sam", 20*day, map[string]value{
-			"summary":     text("Pick a theme from bubbletint"),
-			"description": text("Press t to choose a theme."),
-			"priority":    prio("Medium"),
-		}),
-		mk("DEMO-9", "Bug", statusDone, "user-grace", "user-alan", 15*day, map[string]value{
-			"summary":  text("Status line overflows on narrow terminals"),
-			"priority": prio("High"),
-			"labels":   labels("frontend"),
-		}),
-		mk("OPS-1", "Task", statusToDo, "user-alan", "user-alan", day, map[string]value{
-			"summary":  text("Rotate the staging certificates"),
-			"priority": prio("High"),
-		}),
-		mk("OPS-2", "Task", statusInProgress, "user-sam", "user-alan", 2*day, map[string]value{
-			"summary":     text("Move CI runners to the new cluster"),
-			"description": text("Runners should autoscale."),
-			"priority":    prio("Medium"),
-		}),
-		mk("OPS-3", "Bug", statusInReview, "", "user-grace", 3*day, map[string]value{
-			"summary":  text("Backups skip the attachments volume"),
-			"priority": prio("Highest"),
-		}),
-		mk("OPS-4", "Task", statusDone, "user-ada", "user-alan", 8*day, map[string]value{
-			"summary": text("Upgrade the database"),
-		}),
 	}
 }
