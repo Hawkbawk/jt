@@ -8,6 +8,7 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
@@ -144,11 +145,15 @@ func (p *filterPopup) consumesEsc() bool {
 
 // View implements tea.Model.
 func (p *filterPopup) View() tea.View {
-	names := make([]string, len(p.tabs))
+	tabs := make([]string, len(p.tabs))
 	for i, t := range p.tabs {
-		names[i] = t.name
+		style := styles.Dim().Padding(0, 1)
+		if i == p.tab {
+			style = styles.Title().Padding(0, 1).Underline(true)
+		}
+		tabs[i] = style.Render(t.name)
 	}
-	header := []string{renderTabs(names, p.tab), ""}
+	header := []string{strings.Join(tabs, ""), ""}
 	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
 	body := strings.Split(p.form.View(), "\n")
 	bindings := append(helpKeys{filterTabHelp}, p.selectField.KeyBinds()...)
