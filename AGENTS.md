@@ -14,7 +14,7 @@ The Nix flake provides the dev shell (direnv is set up via `.envrc`) and sets `G
 - Test all: `go test ./...`
 - Single test: `go test ./internal/tui -run TestName`
 - Lint: `golangci-lint run` (config in `.golangci.yml`; formatters are gofumpt and goimports)
-- Demo data: `go run . --fake` runs on an in-memory backend without the settings file or keyring.
+- Demo data: `go run . --fake` runs on an in-memory backend without the settings file or keyring. It prints its seed; `--fake-seed N` repeats a run, and `--fake-users` and `--fake-issues` set the size.
 - Nix build: `nix build`. After changing `go.mod`/`go.sum`, update `vendorHash` in `flake.nix`.
 
 ## Architecture
@@ -28,7 +28,7 @@ Two layers, wired together by the cobra commands in `cmd/`, plus `jt init`. `mai
 
 `internal/tui/popup` hosts any `tea.Model` as a modal (project picker, board picker, issue view, comments, move, assign, edit, filter, theme). There are no open or close methods: `popup.Open(model)`, `popup.Close()` and `popup.CloseWith(msg)` return commands, and the host handles the resulting messages in its `Update`. The host sizes its content with a `tea.WindowSizeMsg` for the area inside the frame, which it draws, and passes everything else (including async responses) through to the content, so screens give the host every message they don't consume (`updatePopup`) and let `popup.Captures` keep input from reaching the screen behind it. A popup owns its spinner and starts its own loads in `Init`. It tags its requests with a `newPopupID` and ignores responses that carry another ID, since a late response can reach a newer popup for the same issue. A popup reports a change to an issue by closing with `issueEditedMsg`, which the screens turn into a reload. `popup.Stack` pins a footer under a header and body, and `popup/issueview` is a `tea.Model` that loads either an issue (details) or its comments, only when that popup opens, and shows them as scrollable text under a title. Its owner sizes it for the room left above its own footer, draws the footer, and reloads it after a change. The other packages under `popup` don't import jira.
 
-`internal/fakejira` is an in-memory, stateful implementation of `tui.Backend` seeded with demo data. The root command's `--fake` flag uses it, and only works in development builds, which have no `version` set by ldflags. `Execute` checks for the flag before loading settings, and theme changes go to `sessionSettings`, which saves nothing. When `tui.Backend` gains a method, implement it in the fake too.
+`internal/fakejira` is an in-memory, stateful implementation of `tui.Backend` filled with demo data that gofakeit generates from a seed (`WithSeed`, else random) and a `Size` (`WithSize`). Seed structs in `generate.go` carry `fake` tags, with custom lookups (`jirauser`, `jirastatus`, `chance` and others) for the jira types; references between generated data are picked afterwards. The root command's `--fake` flag uses it, and only works in development builds, which have no `version` set by ldflags. `Execute` checks for the flag before loading settings, and theme changes go to `sessionSettings`, which saves nothing. When `tui.Backend` gains a method, implement it in the fake too.
 
 `internal/system` holds the side-effecting helpers (clipboard with an OSC 52 and tmux fallback, open in browser). They are injected into the shared `issueActions` as `copyText` and `openURL` so tests can stub them.
 

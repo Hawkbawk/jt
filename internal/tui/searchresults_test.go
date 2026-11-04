@@ -1,29 +1,28 @@
 package tui
 
 import (
-	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v7"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/go-faker/faker/v4"
 
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
 func TestResultListTruncatesLongSummary(t *testing.T) {
-	seed := time.Now().UnixNano()
+	seed := uint64(time.Now().UnixNano())
 	if env := os.Getenv("JT_TEST_SEED"); env != "" {
 		var err error
-		if seed, err = strconv.ParseInt(env, 10, 64); err != nil {
+		if seed, err = strconv.ParseUint(env, 10, 64); err != nil {
 			t.Fatalf("JT_TEST_SEED: %v", err)
 		}
 	}
 	t.Logf("faker seed: %d (set JT_TEST_SEED to replay)", seed)
-	faker.SetRandomSource(rand.NewSource(seed))
+	faker := gofakeit.New(seed)
 	var long strings.Builder
 	for long.Len() < 400 {
 		long.WriteString(faker.Sentence())

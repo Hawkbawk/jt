@@ -35,7 +35,9 @@ var (
 
 	// fake runs the screens on in-memory demo data. It's only allowed in
 	// development builds.
-	fake bool
+	fake                          bool
+	fakeSeed                      uint64
+	fakeUserCount, fakeIssueCount int
 )
 
 var rootCmd = &cobra.Command{
@@ -51,8 +53,13 @@ Environment:
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&fake, "fake", false, "use in-memory demo data instead of Jira, without reading or writing settings")
+	rootCmd.PersistentFlags().Uint64Var(&fakeSeed, "fake-seed", 0, "seed for the --fake data, to repeat a run")
+	rootCmd.PersistentFlags().IntVar(&fakeUserCount, "fake-users", 0, "number of people in the --fake data")
+	rootCmd.PersistentFlags().IntVar(&fakeIssueCount, "fake-issues", 0, "number of DEMO issues in the --fake data; OPS gets a third as many")
 	if version != "" {
-		_ = rootCmd.PersistentFlags().MarkHidden("fake")
+		for _, name := range []string{"fake", "fake-seed", "fake-users", "fake-issues"} {
+			_ = rootCmd.PersistentFlags().MarkHidden(name)
+		}
 	}
 }
 
@@ -123,7 +130,9 @@ func openBackend() (tui.Backend, tui.Settings, error) {
 		if version != "" {
 			return nil, nil, errors.New("the --fake flag is only available in development builds")
 		}
-		return fakejira.New(), sessionSettings{}, nil
+		backend := fakejira.New(fakeOptions()...)
+		fmt.Fprintf(os.Stderr, "fake data seed: %d (repeat it with --fake-seed)\n", backend.Seed())
+		return backend, sessionSettings{}, nil
 	}
 	if cfgErr != nil {
 		return nil, nil, cfgErr
@@ -133,6 +142,23 @@ func openBackend() (tui.Backend, tui.Settings, error) {
 		return nil, nil, err
 	}
 	return client, cfg, nil
+}
+
+// fakeOptions turns the --fake-* flags into options for the fake backend.
+func fakeOptions() []fakejira.Option {
+	var opts []fakejira.Option
+	if fakeSeed != 0 {
+		opts = append(opts, fakejira.WithSeed(fakeSeed))
+	}
+	size := fakejira.DefaultSize
+	if fakeUserCount > 0 {
+		size.Users = fakeUserCount
+	}
+	if fakeIssueCount > 0 {
+		size.DemoIssues = fakeIssueCount
+		size.OpsIssues = max(fakeIssueCount/3, 1)
+	}
+	return append(opts, fakejira.WithSize(size))
 }
 
 // run shows m until it quits, following changes to the terminal's theme.

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v7"
+
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -29,6 +31,9 @@ type Backend struct {
 	mu       sync.Mutex
 	project  string
 	now      func() time.Time
+	seed     uint64
+	size     Size
+	faker    *gofakeit.Faker
 	users    []user
 	projects []jira.Project
 	boards   []board
@@ -36,19 +41,46 @@ type Backend struct {
 	issues   []*issue
 }
 
-// New returns a backend seeded with demo data.
-func New() *Backend {
+// Option configures New.
+type Option func(*Backend)
+
+// WithSeed makes the generated data repeatable. Without it, each backend gets
+// a random seed.
+func WithSeed(seed uint64) Option {
+	return func(b *Backend) { b.seed = seed }
+}
+
+// WithSize sets how many users, issues and comments to generate. Counts too
+// small to build a board from are raised.
+func WithSize(size Size) Option {
+	return func(b *Backend) { b.size = size }
+}
+
+// New returns a backend filled with generated demo data.
+func New(opts ...Option) *Backend {
 	b := &Backend{
 		project:  DefaultProject,
 		now:      time.Now,
-		users:    seedUsers(),
+		seed:     uint64(time.Now().UnixNano()),
+		size:     DefaultSize,
 		projects: seedProjects(),
 		boards:   seedBoards(),
 		fields:   fieldDefs(),
 	}
-	b.issues = seedIssues(b.now(), b.users)
+	for _, opt := range opts {
+		opt(b)
+	}
+	var err error
+	b.faker = gofakeit.New(b.seed)
+	b.users, b.issues, err = generate(b.faker, b.now(), b.size)
+	if err != nil {
+		panic(err)
+	}
 	return b
 }
+
+// Seed returns the seed the data was generated from.
+func (b *Backend) Seed() uint64 { return b.seed }
 
 // DefaultProject returns the project to open on start.
 func (b *Backend) DefaultProject() string {
@@ -237,7 +269,7 @@ func (b *Backend) Assign(key, assigneeID string) error {
 	return nil
 }
 
-// AddComment adds a comment by the signed-in user.
+// AddComment adds a comment by a random active user.
 func (b *Backend) AddComment(key, body string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -249,7 +281,7 @@ func (b *Backend) AddComment(key, body string) error {
 		return errors.New("comment body can not be empty")
 	}
 	now := b.now()
-	iss.Comments = append(iss.Comments, comment{Author: b.users[0].Option, Body: body, Created: now})
+	iss.Comments = append(iss.Comments, comment{Author: b.activeUser().Option, Body: body, Created: now})
 	iss.Updated = now
 	return nil
 }
@@ -391,6 +423,20 @@ func (b *Backend) issue(key string) (*issue, error) {
 		}
 	}
 	return nil, fmt.Errorf("issue %s does not exist", key)
+}
+
+// activeUser picks a random active user, or the first user if none is.
+func (b *Backend) activeUser() user {
+	var active []user
+	for _, u := range b.users {
+		if u.Active {
+			active = append(active, u)
+		}
+	}
+	if len(active) == 0 {
+		return b.users[0]
+	}
+	return active[b.faker.IntN(len(active))]
 }
 
 func (b *Backend) user(id string) *user {
