@@ -65,6 +65,29 @@ func (c Config) SaveTheme(id string) error {
 	return c.viper.WriteConfig()
 }
 
+// SaveBoard writes the board to open for the default project, keeping the
+// file's other keys.
+func (c Config) SaveBoard(id int) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.viper.Set("jira.board_id", id)
+	return c.viper.WriteConfig()
+}
+
+// SaveProject writes the default project. Boards belong to a project, so the
+// saved board is forgotten when the project changes.
+func (c Config) SaveProject(project string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.viper.GetString("jira.project") != project {
+		c.viper.Set("jira.board_id", 0)
+	}
+	c.viper.Set("jira.project", project)
+	return c.viper.WriteConfig()
+}
+
 // Path is where the settings file lives.
 func (c Config) Path() string {
 	return c.viper.ConfigFileUsed()

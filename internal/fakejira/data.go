@@ -138,6 +138,14 @@ func seedBoards() []board {
 			},
 		},
 		{
+			ID: 3, Name: "Demo team board", Type: "scrum", Project: "DEMO",
+			Columns: []jira.Column{
+				{Name: "Open", StatusIDs: []string{statusToDo.ID}},
+				{Name: "Active", StatusIDs: []string{statusInProgress.ID, statusInReview.ID}},
+				{Name: "Closed", StatusIDs: []string{statusDone.ID}},
+			},
+		},
+		{
 			ID: 2, Name: "Ops sprint board", Type: "scrum", Project: "OPS",
 			Columns: []jira.Column{
 				{Name: "Backlog", StatusIDs: []string{statusToDo.ID}},

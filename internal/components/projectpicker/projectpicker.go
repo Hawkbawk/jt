@@ -31,6 +31,12 @@ type LoadedMsg struct {
 	Err      error
 }
 
+// FavoriteMsg asks the host to make a project the default. The picker stays
+// open, and the host calls Refresh once the default has changed.
+type FavoriteMsg struct {
+	Key string
+}
+
 // SelectedMsg reports the project the user picked.
 type SelectedMsg struct {
 	Key string
@@ -39,6 +45,7 @@ type SelectedMsg struct {
 var (
 	openKey  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
 	closeKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
+	favKey   = key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite"))
 )
 
 var lastID atomic.Int64
@@ -103,7 +110,7 @@ func newList(cancellable bool) list.Model {
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		keys := []key.Binding{openKey}
+		keys := []key.Binding{openKey, favKey}
 		if cancellable {
 			keys = append(keys, closeKey)
 		}
@@ -132,7 +139,13 @@ func (p *Picker) Init() tea.Cmd {
 	return tea.Batch(Load(p.src, p.id), p.spin.Tick)
 }
 
+// Refresh marks the source's current default project.
+func (p *Picker) Refresh() tea.Cmd {
+	return p.setProjects(p.projects)
+}
+
 func (p *Picker) setProjects(projects []jira.Project) tea.Cmd {
+	p.projects = projects
 	defaultKey := p.src.DefaultProject()
 	items := make([]list.Item, len(projects))
 	for i, pr := range projects {
@@ -198,6 +211,12 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return popup.Close()
 		}
 		return nil
+	case key.Matches(msg, favKey):
+		sel, ok := p.list.SelectedItem().(item)
+		if !ok {
+			return nil
+		}
+		return func() tea.Msg { return FavoriteMsg{Key: sel.Key} }
 	case key.Matches(msg, openKey):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {

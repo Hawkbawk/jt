@@ -13,6 +13,7 @@ import (
 
 type boardLoadedMsg struct {
 	project  string
+	boardID  int
 	board    *jira.Board
 	focusKey string
 	err      error
@@ -23,6 +24,8 @@ type boardLoadedMsg struct {
 type boardPane struct {
 	backend   Backend
 	project   string
+	boardID   int
+	boardIDs  map[string]int
 	nav       *boardNav
 	filter    *jira.Filter
 	quick     []jira.Filter
@@ -33,25 +36,36 @@ type boardPane struct {
 
 func newBoardPane(b Backend) boardPane {
 	project := b.DefaultProject()
-	return boardPane{backend: b, project: project, loading: project != ""}
+	return boardPane{backend: b, project: project, boardIDs: map[string]int{}, loading: project != ""}
 }
 
 // fetch loads project's board without touching the pane's state.
 func (b boardPane) fetch(project, focusKey string) tea.Cmd {
-	backend := b.backend
+	backend, boardID := b.backend, b.boardID
 	filterJQL := ""
 	if b.filter != nil {
 		filterJQL = b.filter.JQL
 	}
 	return func() tea.Msg {
-		board, err := backend.Board(project, filterJQL)
-		return boardLoadedMsg{project: project, board: board, focusKey: focusKey, err: err}
+		board, err := backend.Board(project, boardID, filterJQL)
+		return boardLoadedMsg{project: project, boardID: boardID, board: board, focusKey: focusKey, err: err}
 	}
 }
 
-// open switches to project, dropping the current board.
+// open switches to project, dropping the current board. It shows the board
+// chosen for project earlier in the session, if any.
 func (b *boardPane) open(project string) tea.Cmd {
 	b.project = project
+	b.boardID = b.boardIDs[project]
+	b.nav = nil
+	b.filter, b.quick, b.assignees = nil, nil, nil
+	return b.reload("")
+}
+
+// openBoard switches to another board of the current project.
+func (b *boardPane) openBoard(id int) tea.Cmd {
+	b.boardID = id
+	b.boardIDs[b.project] = id
 	b.nav = nil
 	b.filter, b.quick, b.assignees = nil, nil, nil
 	return b.reload("")
@@ -70,10 +84,10 @@ func (b *boardPane) reload(focusKey string) tea.Cmd {
 	return b.fetch(b.project, focusKey)
 }
 
-// update applies a loaded board, ignoring results for a project that's no
-// longer current.
+// update applies a loaded board, ignoring results for a project or board
+// that's no longer current.
 func (b *boardPane) update(msg boardLoadedMsg) {
-	if msg.project != b.project {
+	if msg.project != b.project || msg.boardID != b.boardID {
 		return
 	}
 	b.loading = false

@@ -27,6 +27,7 @@ const (
 // Backend implements the methods jt's TUI calls on the Jira client.
 type Backend struct {
 	mu       sync.Mutex
+	project  string
 	now      func() time.Time
 	users    []user
 	projects []jira.Project
@@ -38,6 +39,7 @@ type Backend struct {
 // New returns a backend seeded with demo data.
 func New() *Backend {
 	b := &Backend{
+		project:  DefaultProject,
 		now:      time.Now,
 		users:    seedUsers(),
 		projects: seedProjects(),
@@ -50,8 +52,21 @@ func New() *Backend {
 
 // DefaultProject returns the project to open on start.
 func (b *Backend) DefaultProject() string {
-	return DefaultProject
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.project
 }
+
+// SetDefaultProject changes the project to open.
+func (b *Backend) SetDefaultProject(project string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.project = project
+}
+
+// SetDefaultBoard does nothing, since the fake always opens a project's first
+// board.
+func (b *Backend) SetDefaultBoard(int) {}
 
 // Projects lists the projects, sorted by key.
 func (b *Backend) Projects() ([]jira.Project, error) {
@@ -74,11 +89,27 @@ func (b *Backend) IssueTypes() ([]string, error) {
 	return slices.Compact(out), nil
 }
 
-// Board loads the project's board, narrowed by filterJQL when set.
-func (b *Backend) Board(project, filterJQL string) (*jira.Board, error) {
+// Boards lists the project's boards.
+func (b *Backend) Boards(project string) ([]jira.BoardSummary, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	i := slices.IndexFunc(b.boards, func(bd board) bool { return bd.Project == project })
+	var out []jira.BoardSummary
+	for _, bd := range b.boards {
+		if bd.Project == project {
+			out = append(out, jira.BoardSummary{ID: bd.ID, Name: bd.Name, Type: bd.Type})
+		}
+	}
+	return out, nil
+}
+
+// Board loads the project's board, narrowed by filterJQL when set. A zero
+// boardID picks the project's first board.
+func (b *Backend) Board(project string, boardID int, filterJQL string) (*jira.Board, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	i := slices.IndexFunc(b.boards, func(bd board) bool {
+		return bd.Project == project && (boardID == 0 || bd.ID == boardID)
+	})
 	if i < 0 {
 		return nil, fmt.Errorf("no boards found for project %s", project)
 	}

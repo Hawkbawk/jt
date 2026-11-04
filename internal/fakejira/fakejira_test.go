@@ -11,7 +11,7 @@ var _ tui.Backend = (*fakejira.Backend)(nil)
 
 func TestBoardLoadsAndMovesPersist(t *testing.T) {
 	f := fakejira.New()
-	b, err := f.Board(fakejira.DefaultProject, "")
+	b, err := f.Board(fakejira.DefaultProject, 0, "")
 	if err != nil || len(b.Columns) == 0 {
 		t.Fatalf("board = %v, %v", b, err)
 	}
@@ -26,6 +26,19 @@ func TestBoardLoadsAndMovesPersist(t *testing.T) {
 	d, err := f.Issue(iss.Key)
 	if err != nil || d.Status != ts[0].Name {
 		t.Fatalf("after move: %+v, %v", d, err)
+	}
+}
+
+func TestBoardsAndBoardByID(t *testing.T) {
+	f := fakejira.New()
+	boards, err := f.Boards(fakejira.DefaultProject)
+	if err != nil || len(boards) < 2 {
+		t.Fatalf("boards = %v, %v", boards, err)
+	}
+	first, _ := f.Board(fakejira.DefaultProject, 0, "")
+	other, err := f.Board(fakejira.DefaultProject, boards[1].ID, "")
+	if err != nil || other.ID != boards[1].ID || other.ID == first.ID {
+		t.Fatalf("board = %+v, %v", other, err)
 	}
 }
 

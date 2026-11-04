@@ -100,6 +100,10 @@ type sessionSettings struct{}
 
 func (sessionSettings) SaveTheme(string) error { return nil }
 
+func (sessionSettings) SaveBoard(int) error { return nil }
+
+func (sessionSettings) SaveProject(string) error { return nil }
+
 func runBoard(*cobra.Command, []string) error {
 	backend, settings, err := openBackend()
 	if err != nil {

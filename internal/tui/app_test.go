@@ -14,6 +14,7 @@ import (
 
 type fakeBackend struct {
 	defaultProject string
+	defaultBoard   int
 	projects       []jira.Project
 	board          *jira.Board
 	boardErr       error
@@ -26,6 +27,8 @@ type fakeBackend struct {
 	comments       []string
 	commentErr     error
 	boardCalls     []string
+	boardIDCalls   []int
+	boards         []jira.BoardSummary
 	filterCalls    []string
 	editFields     []jira.EditField
 	editErr        error
@@ -41,6 +44,10 @@ type fakeBackend struct {
 
 func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
 
+func (f *fakeBackend) SetDefaultProject(project string) { f.defaultProject = project }
+
+func (f *fakeBackend) SetDefaultBoard(id int) { f.defaultBoard = id }
+
 func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
 
 func (f *fakeBackend) IssueTypes() ([]string, error) { return f.issueTypes, nil }
@@ -50,8 +57,11 @@ func (f *fakeBackend) Search(jql string) ([]jira.Issue, error) {
 	return f.found, f.findErr
 }
 
-func (f *fakeBackend) Board(project, filterJQL string) (*jira.Board, error) {
+func (f *fakeBackend) Boards(string) ([]jira.BoardSummary, error) { return f.boards, nil }
+
+func (f *fakeBackend) Board(project string, boardID int, filterJQL string) (*jira.Board, error) {
 	f.boardCalls = append(f.boardCalls, project)
+	f.boardIDCalls = append(f.boardIDCalls, boardID)
 	f.filterCalls = append(f.filterCalls, filterJQL)
 	if f.boardErr != nil {
 		return nil, f.boardErr
@@ -436,8 +446,20 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 }
 
 type fakeSettings struct {
-	saved []string
-	err   error
+	saved    []string
+	boards   []int
+	projects []string
+	err      error
+}
+
+func (f *fakeSettings) SaveProject(key string) error {
+	f.projects = append(f.projects, key)
+	return f.err
+}
+
+func (f *fakeSettings) SaveBoard(id int) error {
+	f.boards = append(f.boards, id)
+	return f.err
 }
 
 func (f *fakeSettings) SaveTheme(id string) error {
