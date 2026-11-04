@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/system"
@@ -58,7 +59,7 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	case key.Matches(msg, keys.assign):
 		return popup.Open(newAssignPopup(b, iss))
 	case key.Matches(msg, keys.edit):
-		return popup.Open(newEditPopup(b, iss))
+		return popup.Open(issueedit.New(b, iss))
 	case key.Matches(msg, keys.yank):
 		return runAction(a.copyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
 	case key.Matches(msg, keys.open):

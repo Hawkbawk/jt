@@ -1,4 +1,4 @@
-package tui
+package issueedit
 
 import (
 	"charm.land/huh/v2"

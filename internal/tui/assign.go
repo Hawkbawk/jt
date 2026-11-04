@@ -8,10 +8,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/components/userselect"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 type assignDoneMsg struct {
@@ -40,9 +42,9 @@ type assignPopup struct {
 
 // newAssignPopup starts on the issue's current assignee.
 func newAssignPopup(b Backend, iss jira.Issue) *assignPopup {
-	p := &assignPopup{id: newPopupID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: newSpinner()}
+	p := &assignPopup{id: pane.NewID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: pane.NewSpinner()}
 	p.picker = userselect.New("Assignee", searchUsers(b, iss.Key)).Value(&p.assignee)
-	p.form = newForm(p.picker.Field())
+	p.form = pane.NewForm(p.picker.Field())
 	return p
 }
 
@@ -55,7 +57,7 @@ func (p *assignPopup) loading() bool { return p.applying }
 func (p *assignPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	was := p.loading()
 	cmd := p.update(msg)
-	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+	return p, pane.Restart(p.spin, was, p.loading(), cmd)
 }
 
 func (p *assignPopup) update(msg tea.Msg) tea.Cmd {
@@ -64,7 +66,7 @@ func (p *assignPopup) update(msg tea.Msg) tea.Cmd {
 		p.width, p.height = msg.Width, msg.Height
 		return nil
 	case spinner.TickMsg:
-		return tickSpinner(&p.spin, msg, p.loading())
+		return pane.Tick(&p.spin, msg, p.loading())
 	case assignDoneMsg:
 		if msg.id != p.id {
 			return nil
@@ -78,7 +80,7 @@ func (p *assignPopup) update(msg tea.Msg) tea.Cmd {
 			return closeEdited(msg.issueKey, status)
 		}
 		// The form finished to send the assignment, so a retry needs a new one.
-		p.form = newForm(p.picker.Field())
+		p.form = pane.NewForm(p.picker.Field())
 		return p.form.Init()
 	case tea.KeyPressMsg:
 		// Typed text always goes to the form, so only esc closes.
@@ -103,9 +105,14 @@ func (p *assignPopup) update(msg tea.Msg) tea.Cmd {
 
 // View implements tea.Model.
 func (p *assignPopup) View() tea.View {
-	p.form.WithWidth(p.width).WithHeight(max(1, p.height-issueChromeLines-2))
+	p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.ChromeLines-2))
 	lines := strings.Split(p.form.View(), "\n")
 	hint := styles.Dim().Render("enter next · shift+tab back to search · esc close")
-	lines = append(lines, "", statusLine(p.spin.View(), p.width, p.err, p.applying, "Assigning…", hint))
-	return tea.NewView(popup.Stack(p.height, issueHeader("Assign", p.issueKey), lines, helpView(paneHelpKeys, p.width)))
+	lines = append(lines, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Assigning…", hint))
+	return tea.NewView(popup.Stack(p.height, pane.Header("Assign", p.issueKey), lines, helpView(pane.HelpKeys, p.width)))
+}
+
+// searchUsers looks up people who can be put on the issue.
+func searchUsers(b Backend, issueKey string) usersearch.Func {
+	return func(query string) ([]jira.Option, error) { return b.SearchUsers(issueKey, query) }
 }

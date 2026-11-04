@@ -8,6 +8,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 type transitionsLoadedMsg struct {
@@ -47,7 +48,7 @@ type movePopup struct {
 }
 
 func newMovePopup(b Backend, iss jira.Issue) *movePopup {
-	return &movePopup{id: newPopupID(), issue: iss, backend: b, spin: newSpinner()}
+	return &movePopup{id: pane.NewID(), issue: iss, backend: b, spin: pane.NewSpinner()}
 }
 
 // Init implements tea.Model.
@@ -63,7 +64,7 @@ func (p *movePopup) loading() bool {
 func (p *movePopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	was := p.loading()
 	cmd := p.update(msg)
-	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+	return p, pane.Restart(p.spin, was, p.loading(), cmd)
 }
 
 func (p *movePopup) update(msg tea.Msg) tea.Cmd {
@@ -71,7 +72,7 @@ func (p *movePopup) update(msg tea.Msg) tea.Cmd {
 	case tea.WindowSizeMsg:
 		p.width, p.height = msg.Width, msg.Height
 	case spinner.TickMsg:
-		return tickSpinner(&p.spin, msg, p.loading())
+		return pane.Tick(&p.spin, msg, p.loading())
 	case transitionsLoadedMsg:
 		if msg.id == p.id {
 			p.transitions, p.err, p.loaded = msg.transitions, msg.err, true
@@ -119,17 +120,6 @@ func (p *movePopup) View() tea.View {
 		}
 		lines = append(lines, p.render(labels, p.width)...)
 	}
-	lines = append(lines, "", statusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
-	return tea.NewView(popup.Stack(p.height, issueHeader("Move", p.issue.Key), lines, helpView(paneHelpKeys, p.width)))
-}
-
-// statusLine shows the error, the in-progress text or the hint, in that order.
-func statusLine(spin string, innerW int, err error, applying bool, progress, hint string) string {
-	switch {
-	case err != nil:
-		return styles.Error().Width(innerW).Render("Error: " + err.Error())
-	case applying:
-		return spin + " " + progress
-	}
-	return styles.Dim().Render(hint)
+	lines = append(lines, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
+	return tea.NewView(popup.Stack(p.height, pane.Header("Move", p.issue.Key), lines, helpView(pane.HelpKeys, p.width)))
 }

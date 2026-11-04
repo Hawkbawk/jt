@@ -81,9 +81,9 @@ func (m BoardModel) busy() bool {
 // Update implements tea.Model.
 func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case issueEditedMsg:
-		m.status = msg.status
-		return m, m.runWithSpinner(m.board.reload(msg.key))
+	case tuimsg.Finished:
+		m.status = msg.Status()
+		return m, m.runWithSpinner(m.board.reload(msg.IssueKey()))
 
 	case tea.WindowSizeMsg:
 		return m, m.resize(msg)

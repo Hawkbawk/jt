@@ -110,9 +110,9 @@ func (m *SearchModel) fit() {
 // Update implements tea.Model.
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case issueEditedMsg:
-		m.status = msg.status
-		m.refocus = &resultCursor{key: msg.key, index: m.results.table.GetHighlightedRowIndex()}
+	case tuimsg.Finished:
+		m.status = msg.Status()
+		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
 		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:

@@ -1,4 +1,7 @@
-package tui
+// Package issueedit is the popup that edits an issue's fields. It lists the
+// fields the issue allows, edits one at a time in a form, and saves the changes
+// together. When a save succeeds it closes with an Edited message.
+package issueedit
 
 import (
 	"errors"
@@ -19,7 +22,32 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
+
+// Backend loads and saves an issue's fields.
+type Backend interface {
+	EditFields(iss jira.Issue) ([]jira.EditField, error)
+	Edit(key string, fields []jira.EditField) error
+	SearchUsers(issueKey, query string) ([]jira.Option, error)
+}
+
+// Edited is what the popup closes with after saving. It's a tuimsg.Finished.
+type Edited struct {
+	Key   string
+	Count int
+}
+
+var _ tuimsg.Finished = Edited{}
+
+// IssueKey implements tuimsg.Finished.
+func (e Edited) IssueKey() string { return e.Key }
+
+// Status implements tuimsg.Finished.
+func (e Edited) Status() string {
+	return fmt.Sprintf("Updated %d %s on %s", e.Count, plural(e.Count, "field"), e.Key)
+}
 
 type fieldsLoadedMsg struct {
 	id     int64
@@ -232,9 +260,19 @@ func listHeight(n int) int {
 	return min(n, 6) + 1
 }
 
-// editPopup lists an issue's editable fields and edits one at a time in a
+var (
+	keyClose   = key.NewBinding(key.WithKeys("esc", "q"))
+	keyBlur    = key.NewBinding(key.WithKeys("esc"))
+	keyConfirm = key.NewBinding(key.WithKeys("y", "Y"))
+	keyDeny    = key.NewBinding(key.WithKeys("n", "N", "esc"))
+	keyAccept  = key.NewBinding(key.WithKeys("enter"))
+	keySend    = key.NewBinding(key.WithKeys("ctrl+s"))
+	keyUndo    = key.NewBinding(key.WithKeys("u"))
+)
+
+// Model lists an issue's editable fields and edits one at a time in a
 // form. Changes are kept until they're all saved together.
-type editPopup struct {
+type Model struct {
 	id      int64
 	key     string
 	issue   jira.Issue
@@ -257,30 +295,31 @@ type editPopup struct {
 	formH int
 }
 
-func newEditPopup(b Backend, iss jira.Issue) *editPopup {
-	return &editPopup{id: newPopupID(), key: iss.Key, issue: iss, backend: b, spin: newSpinner(), help: styles.Help()}
+// New returns the popup that edits iss, which loads the fields when it opens.
+func New(b Backend, iss jira.Issue) *Model {
+	return &Model{id: pane.NewID(), key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help()}
 }
 
 // Init implements tea.Model.
-func (p *editPopup) Init() tea.Cmd {
+func (p *Model) Init() tea.Cmd {
 	return tea.Batch(loadFields(p.backend, p.id, p.issue), p.spin.Tick)
 }
 
-func (p *editPopup) loading() bool {
+func (p *Model) loading() bool {
 	return (!p.loaded && p.err == nil) || p.saving
 }
 
 // capturing is true while typed text goes to a form field or the list filter.
-func (p *editPopup) capturing() bool {
+func (p *Model) capturing() bool {
 	return p.editing != nil || p.list.SettingFilter()
 }
 
 // consumesEsc is true when esc steps back within the pane instead of closing it.
-func (p *editPopup) consumesEsc() bool {
+func (p *Model) consumesEsc() bool {
 	return p.editing != nil || p.list.FilterState() != list.Unfiltered
 }
 
-func (p *editPopup) unsaved() int { return len(p.changed()) }
+func (p *Model) unsaved() int { return len(p.changed()) }
 
 // fieldDelegate is the themed delegate with no gap between rows.
 func fieldDelegate() list.DefaultDelegate {
@@ -304,7 +343,7 @@ func newFieldList(vals []*fieldValue) list.Model {
 }
 
 // edit opens a form for v alone.
-func (p *editPopup) edit(v *fieldValue) tea.Cmd {
+func (p *Model) edit(v *fieldValue) tea.Cmd {
 	p.editing = v
 	v.begin()
 	if v.isUser() {
@@ -312,57 +351,43 @@ func (p *editPopup) edit(v *fieldValue) tea.Cmd {
 	} else {
 		v.input = v.huhField()
 	}
-	p.form = newForm(v.input)
+	p.form = pane.NewForm(v.input)
 	p.growText()
 	return p.form.Init()
 }
 
-// newForm puts fields in a themed form that leaves ctrl+c to the app.
-func newForm(fields ...huh.Field) *huh.Form {
-	return newGroupsForm(huh.NewGroup(fields...))
-}
-
-func newGroupsForm(groups ...*huh.Group) *huh.Form {
-	km := huh.NewDefaultKeyMap()
-	km.Quit = key.NewBinding(key.WithDisabled())
-	return huh.NewForm(groups...).
-		WithTheme(styles.FormTheme()).
-		WithKeyMap(km).
-		WithShowHelp(false)
-}
-
 // closeForm goes back to the list of fields.
-func (p *editPopup) closeForm() {
+func (p *Model) closeForm() {
 	p.editing, p.form = nil, nil
 }
 
 // Update implements tea.Model.
-func (p *editPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	was := p.loading()
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width, p.height = msg.Width, msg.Height
 	case spinner.TickMsg:
-		cmd = tickSpinner(&p.spin, msg, p.loading())
+		cmd = pane.Tick(&p.spin, msg, p.loading())
 	case tea.KeyPressMsg:
 		cmd = p.updateKey(msg)
 	default:
 		cmd = p.update(msg)
 	}
-	return p, restartSpinner(p.spin, was, p.loading(), cmd)
+	return p, pane.Restart(p.spin, was, p.loading(), cmd)
 }
 
-func (p *editPopup) updateKey(km tea.KeyPressMsg) tea.Cmd {
+func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 	if p.confirmClose {
 		return p.updateConfirm(km)
 	}
-	if p.consumesEsc() && key.Matches(km, keys.blur) {
+	if p.consumesEsc() && key.Matches(km, keyBlur) {
 		return p.update(km)
 	}
-	closes := keys.close
+	closes := keyClose
 	if p.capturing() {
-		closes = keys.blur
+		closes = keyBlur
 	}
 	if key.Matches(km, closes) {
 		if p.unsaved() > 0 {
@@ -374,20 +399,20 @@ func (p *editPopup) updateKey(km tea.KeyPressMsg) tea.Cmd {
 	return p.update(km)
 }
 
-func (p *editPopup) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
+func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(km, keys.confirm):
+	case key.Matches(km, keyConfirm):
 		return popup.Close()
-	case key.Matches(km, keys.deny):
+	case key.Matches(km, keyDeny):
 		p.confirmClose = false
-	case key.Matches(km, keys.send):
+	case key.Matches(km, keySend):
 		p.confirmClose = false
 		return p.update(km)
 	}
 	return nil
 }
 
-func (p *editPopup) update(msg tea.Msg) tea.Cmd {
+func (p *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case fieldsLoadedMsg:
 		if msg.id != p.id {
@@ -405,8 +430,7 @@ func (p *editPopup) update(msg tea.Msg) tea.Cmd {
 		}
 		p.saving, p.err = false, msg.err
 		if msg.err == nil {
-			status := fmt.Sprintf("Updated %d %s on %s", msg.count, plural(msg.count, "field"), msg.key)
-			return closeEdited(msg.key, status)
+			return popup.CloseWith(Edited{Key: msg.key, Count: msg.count})
 		}
 		return nil
 	}
@@ -414,17 +438,17 @@ func (p *editPopup) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	km, isKey := msg.(tea.KeyMsg)
-	if isKey && p.form == nil && key.Matches(km, keys.send) {
+	if isKey && p.form == nil && key.Matches(km, keySend) {
 		return p.save()
 	}
 	if p.form == nil {
-		if isKey && key.Matches(km, keys.accept) && !p.list.SettingFilter() {
+		if isKey && key.Matches(km, keyAccept) && !p.list.SettingFilter() {
 			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
 				return p.edit(v)
 			}
 			return nil
 		}
-		if isKey && key.Matches(km, keys.undo) && !p.list.SettingFilter() {
+		if isKey && key.Matches(km, keyUndo) && !p.list.SettingFilter() {
 			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
 				v.reset()
 			}
@@ -434,7 +458,7 @@ func (p *editPopup) update(msg tea.Msg) tea.Cmd {
 		p.list, cmd = p.list.Update(msg)
 		return cmd
 	}
-	if isKey && key.Matches(km, keys.blur) {
+	if isKey && key.Matches(km, keyBlur) {
 		p.editing.revert()
 		p.closeForm()
 		return nil
@@ -448,7 +472,7 @@ func (p *editPopup) update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (p *editPopup) save() tea.Cmd {
+func (p *Model) save() tea.Cmd {
 	changed := p.changed()
 	if p.saving || len(changed) == 0 {
 		return nil
@@ -462,7 +486,7 @@ func (p *editPopup) save() tea.Cmd {
 
 // changed returns the fields that differ from how they loaded. What is still
 // being entered in an open form doesn't count until enter keeps it.
-func (p *editPopup) changed() []jira.EditField {
+func (p *Model) changed() []jira.EditField {
 	var out []jira.EditField
 	for _, v := range p.vals {
 		f := v.current()
@@ -477,13 +501,13 @@ func (p *editPopup) changed() []jira.EditField {
 }
 
 // holding is true while a field's form is open, which blocks saving.
-func (p *editPopup) holding() bool { return p.form != nil }
+func (p *Model) holding() bool { return p.form != nil }
 
 // View implements tea.Model.
-func (p *editPopup) View() tea.View {
+func (p *Model) View() tea.View {
 	p.help.SetWidth(p.width)
 	title := styles.Title().Render("Edit · " + p.key)
-	footer := p.help.View(paneHelpKeys)
+	footer := p.help.View(pane.HelpKeys)
 	if n := p.unsaved(); n > 0 {
 		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
 		warn := "● " + changes
@@ -497,7 +521,7 @@ func (p *editPopup) View() tea.View {
 	}
 	spin := p.spin.View()
 	var lines []string
-	formH := max(1, p.height-issueChromeLines-2)
+	formH := max(1, p.height-pane.ChromeLines-2)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
@@ -515,7 +539,7 @@ func (p *editPopup) View() tea.View {
 		p.list.SetSize(p.width, formH)
 		lines = strings.Split(p.list.View(), "\n")
 	}
-	lines = append(lines, "", statusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
+	lines = append(lines, "", pane.StatusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
 	return tea.NewView(popup.Stack(p.height, []string{title, ""}, lines, footer))
 }
 
@@ -523,14 +547,14 @@ func (p *editPopup) View() tea.View {
 type refreshMsg struct{}
 
 // growText gives a text area being edited most of the form's height.
-func (p *editPopup) growText() {
+func (p *Model) growText() {
 	if t, ok := p.editing.input.(*huh.Text); ok {
 		t.Lines(max(minTextLines, p.formH-3))
 		p.form.Update(refreshMsg{})
 	}
 }
 
-func (p *editPopup) hint() string {
+func (p *Model) hint() string {
 	switch {
 	case p.form != nil && p.editing.isUser():
 		return styles.Dim().Render("enter next · shift+tab back to search · space toggles · esc back")

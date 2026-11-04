@@ -11,6 +11,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 // layout is the state and behavior the jt screens share: the window size,
@@ -29,7 +30,7 @@ type layout struct {
 func newLayout(settings Settings) layout {
 	return layout{
 		settings: settings,
-		spinner:  newSpinner(),
+		spinner:  pane.NewSpinner(),
 		help:     styles.Help(),
 		popup:    popup.New(popup.WithStyle(styles.Popup)),
 	}
@@ -81,7 +82,7 @@ func (c *layout) updatePopup(msg tea.Msg) tea.Cmd {
 // tick advances the spinner while busy. The tick chain ends once nothing is
 // busy.
 func (c *layout) tick(msg spinner.TickMsg, busy bool) tea.Cmd {
-	return tickSpinner(&c.spinner, msg, busy)
+	return pane.Tick(&c.spinner, msg, busy)
 }
 
 // withView wraps the rendered screen in a full-window view themed to match.

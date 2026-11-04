@@ -12,6 +12,7 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
+	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 const commentInputHeight = 5
@@ -43,7 +44,7 @@ func newCommentsPopup(b Backend, issueKey string, md markdownRenderer) *comments
 	ta.SetHeight(commentInputHeight)
 
 	return &commentsPopup{
-		id: newPopupID(), backend: b, issueKey: issueKey,
+		id: pane.NewID(), backend: b, issueKey: issueKey,
 		issue: issueview.Comments(b, issueKey, md), input: ta,
 	}
 }
