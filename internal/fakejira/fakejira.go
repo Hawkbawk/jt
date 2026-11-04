@@ -55,6 +55,10 @@ func NewWithSeed(seed int64) *Backend {
 	faker.SetRandomSource(faker.NewSafeSource(mathrand.NewSource(seed)))
 
 	rng := mathrand.New(mathrand.NewSource(seed))
+	generation := &fakeGeneration{rng: rng, now: time.Now()}
+	activeGeneration = generation
+	defer func() { activeGeneration = nil }()
+
 	b := &Backend{
 		project:  DefaultProject,
 		now:      time.Now,
@@ -63,7 +67,8 @@ func NewWithSeed(seed int64) *Backend {
 		boards:   seedBoards(),
 		fields:   fieldDefs(),
 	}
-	b.issues = seedIssues(b.now(), b.users, rng)
+	generation.users = b.users
+	b.issues = seedIssues(generation.now, b.users, rng)
 	return b
 }
 

@@ -3,7 +3,7 @@ package fakejira
 import (
 	"fmt"
 	mathrand "math/rand"
-	"slices"
+	"reflect"
 	"strings"
 	"time"
 
@@ -20,6 +20,11 @@ type user struct {
 	Active bool
 }
 
+type fakePerson struct {
+	Name  string `faker:"name"`
+	Email string `faker:"email"`
+}
+
 type board struct {
 	ID      int
 	Name    string
@@ -30,9 +35,26 @@ type board struct {
 }
 
 type comment struct {
-	Author  jira.Option
-	Body    string
-	Created time.Time
+	Author  jira.Option `faker:"demo_comment_author"`
+	Body    string      `faker:"demo_comment_body"`
+	Created time.Time   `faker:"-"`
+}
+
+type fakeIssue struct {
+	Summary     string        `faker:"sentence"`
+	Description string        `faker:"demo_description"`
+	Type        string        `faker:"demo_issue_type"`
+	Status      jira.Option   `faker:"demo_status"`
+	Assignee    jira.Option   `faker:"demo_assignee"`
+	Reporter    jira.Option   `faker:"demo_reporter"`
+	Priority    jira.Option   `faker:"demo_priority"`
+	Team        jira.Option   `faker:"demo_team"`
+	Labels      []jira.Option `faker:"demo_labels"`
+	Components  []jira.Option `faker:"demo_components"`
+	DueDate     string        `faker:"demo_due_date"`
+	StoryPoints string        `faker:"demo_story_points"`
+	Reviewers   []jira.Option `faker:"demo_reviewers"`
+	Comments    []comment     `faker:"demo_comments"`
 }
 
 // value is an editable field's value: Text for text, number and date kinds,
@@ -54,6 +76,136 @@ type issue struct {
 	// and labels are read from here too.
 	Values   map[string]value
 	Comments []comment
+}
+
+type fakeGeneration struct {
+	rng          *mathrand.Rand
+	now          time.Time
+	issueCreated time.Time
+	users        []user
+}
+
+var activeGeneration *fakeGeneration
+
+func init() {
+	providers := map[string]func(reflect.Value) (any, error){
+		"demo_description": fieldProvider(func(g *fakeGeneration) any {
+			switch g.rng.Intn(5) {
+			case 0:
+				return faker.Sentence()
+			case 1, 2, 3:
+				return faker.Paragraph()
+			default:
+				return strings.Join([]string{
+					faker.Paragraph(),
+					faker.Paragraph(),
+					faker.Paragraph(),
+					faker.Paragraph(),
+				}, "\n\n")
+			}
+		}),
+		"demo_issue_type": fieldProvider(func(g *fakeGeneration) any {
+			return []string{"Bug", "Epic", "Story", "Task"}[g.rng.Intn(4)]
+		}),
+		"demo_status": fieldProvider(func(g *fakeGeneration) any {
+			return allStatuses[g.rng.Intn(len(allStatuses))]
+		}),
+		"demo_assignee": fieldProvider(func(g *fakeGeneration) any {
+			if g.rng.Intn(5) == 0 {
+				return jira.Option{}
+			}
+			return g.users[g.rng.Intn(len(g.users)-1)].Option
+		}),
+		"demo_reporter": fieldProvider(func(g *fakeGeneration) any {
+			return g.users[g.rng.Intn(len(g.users)-1)].Option
+		}),
+		"demo_priority": fieldProvider(func(g *fakeGeneration) any {
+			return priorities[g.rng.Intn(len(priorities))]
+		}),
+		"demo_team": fieldProvider(func(g *fakeGeneration) any {
+			return teams[g.rng.Intn(len(teams))]
+		}),
+		"demo_labels": fieldProvider(func(g *fakeGeneration) any {
+			labels := []string{"backend", "frontend", "infrastructure", "documentation", "testing", "performance"}
+			var chosen []jira.Option
+			count := g.rng.Intn(4)
+			for i := 0; i < count; i++ {
+				label := labels[g.rng.Intn(len(labels))]
+				if jira.IndexID(chosen, label) < 0 {
+					chosen = append(chosen, jira.Option{ID: label, Name: label})
+				}
+			}
+			return chosen
+		}),
+		"demo_components": fieldProvider(func(g *fakeGeneration) any {
+			if g.rng.Intn(2) == 0 {
+				return []jira.Option{}
+			}
+			return []jira.Option{components[g.rng.Intn(len(components))]}
+		}),
+		"demo_due_date": fieldProvider(func(g *fakeGeneration) any {
+			if g.rng.Intn(3) != 0 {
+				return ""
+			}
+			return g.now.AddDate(0, 0, g.rng.Intn(60)+1).Format("2006-01-02")
+		}),
+		"demo_story_points": fieldProvider(func(g *fakeGeneration) any {
+			if g.rng.Intn(2) == 0 {
+				return ""
+			}
+			return fmt.Sprint([]int{1, 2, 3, 5, 8, 13}[g.rng.Intn(6)])
+		}),
+		"demo_reviewers": fieldProvider(func(g *fakeGeneration) any {
+			if g.rng.Intn(2) == 0 {
+				return []jira.Option{}
+			}
+			return []jira.Option{g.users[g.rng.Intn(len(g.users)-1)].Option}
+		}),
+		"demo_comments": func(reflect.Value) (any, error) {
+			if activeGeneration == nil {
+				return nil, fmt.Errorf("fake data generator is not active")
+			}
+			g := activeGeneration
+			count := g.rng.Intn(9)
+			comments := make([]comment, 0, count)
+			for i := 0; i < count; i++ {
+				var c comment
+				if err := faker.FakeData(&c); err != nil {
+					return nil, err
+				}
+				c.Created = g.issueCreated.Add(time.Duration(i+1) * g.now.Sub(g.issueCreated) / time.Duration(count+1))
+				comments = append(comments, c)
+			}
+			return comments, nil
+		},
+		"demo_comment_author": fieldProvider(func(g *fakeGeneration) any {
+			return g.users[g.rng.Intn(len(g.users)-1)].Option
+		}),
+		"demo_comment_body": fieldProvider(func(g *fakeGeneration) any {
+			switch g.rng.Intn(3) {
+			case 0:
+				return faker.Sentence()
+			case 1:
+				return faker.Paragraph()
+			default:
+				return strings.Join([]string{faker.Paragraph(), faker.Paragraph(), faker.Paragraph()}, "\n\n")
+			}
+		}),
+	}
+	for tag, provider := range providers {
+		if err := faker.AddProvider(tag, provider); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func fieldProvider(generate func(*fakeGeneration) any) func(reflect.Value) (any, error) {
+	return func(reflect.Value) (any, error) {
+		if activeGeneration == nil {
+			return nil, fmt.Errorf("fake data generator is not active")
+		}
+		return generate(activeGeneration), nil
+	}
 }
 
 func (i *issue) project() string {
@@ -115,9 +267,13 @@ func seedUsers() []user {
 		{Option: jira.Option{ID: "user-alan", Name: "Alan Turing"}, Email: "alan@example.com", Active: true},
 	}
 	for i := 4; i < maxUsers-1; i++ {
+		var person fakePerson
+		if err := faker.FakeData(&person); err != nil {
+			panic(err)
+		}
 		users = append(users, user{
-			Option: jira.Option{ID: fmt.Sprintf("user-%02d", i), Name: faker.Name()},
-			Email:  fmt.Sprintf("teammate%02d@example.com", i),
+			Option: jira.Option{ID: fmt.Sprintf("user-%02d", i), Name: person.Name},
+			Email:  person.Email,
 			Active: true,
 		})
 	}
@@ -263,10 +419,6 @@ func seedIssues(now time.Time, users []user, rng *mathrand.Rand) []*issue {
 	bug.Comments = []comment{{Author: who("user-sam"), Body: "I can reproduce this on main.", Created: bug.Created.Add(time.Hour)}}
 
 	issues := []*issue{big, bug}
-	statuses := []jira.Option{statusToDo, statusInProgress, statusInReview, statusDone}
-	types := []string{"Bug", "Epic", "Story", "Task"}
-	labelNames := []string{"backend", "frontend", "infrastructure", "documentation", "testing", "performance"}
-	userID := func(index int) string { return users[index].ID }
 
 	for _, project := range []struct {
 		key   string
@@ -278,93 +430,40 @@ func seedIssues(now time.Time, users []user, rng *mathrand.Rand) []*issue {
 	} {
 		for n := project.first; n <= project.last; n++ {
 			age := time.Duration(rng.Intn(180)+1)*day + time.Duration(rng.Intn(24))*time.Hour
-			assignee := ""
-			if rng.Intn(5) != 0 {
-				assignee = userID(1 + rng.Intn(len(users)-2))
+			created := now.Add(-age)
+			activeGeneration.issueCreated = created
+			var generated fakeIssue
+			if err := faker.FakeData(&generated); err != nil {
+				panic(err)
 			}
-			reporter := userID(rng.Intn(len(users) - 1))
-			iss := mk(
-				fmt.Sprintf("%s-%d", project.key, n),
-				types[rng.Intn(len(types))],
-				statuses[rng.Intn(len(statuses))],
-				assignee,
-				reporter,
-				age,
-				generatedValues(now, rng, labelNames, users),
-			)
+			iss := mk(fmt.Sprintf("%s-%d", project.key, n), generated.Type, generated.Status,
+				generated.Assignee.ID, generated.Reporter.ID, age, generatedValues(generated))
+			iss.Comments = generated.Comments
 			issues = append(issues, iss)
-			seedComments(iss, users, now, rng)
 		}
 	}
 	return issues
 }
 
-func generatedValues(now time.Time, rng *mathrand.Rand, labelNames []string, users []user) map[string]value {
+func generatedValues(generated fakeIssue) map[string]value {
 	values := map[string]value{
-		"summary":           {Text: faker.Sentence()},
-		"priority":          {Chosen: []jira.Option{priorities[rng.Intn(len(priorities))]}},
-		"customfield_10030": {Chosen: []jira.Option{teams[rng.Intn(len(teams))]}},
+		"summary":           {Text: generated.Summary},
+		"priority":          {Chosen: []jira.Option{generated.Priority}},
+		"customfield_10030": {Chosen: []jira.Option{generated.Team}},
+		"labels":            {Chosen: generated.Labels},
+		"components":        {Chosen: generated.Components},
 	}
-
-	switch rng.Intn(5) {
-	case 0:
-		values["description"] = value{Text: faker.Sentence()}
-	case 1, 2, 3:
-		values["description"] = value{Text: faker.Paragraph()}
-	case 4:
-		values["description"] = value{Text: strings.Join([]string{
-			faker.Paragraph(),
-			faker.Paragraph(),
-			faker.Paragraph(),
-			faker.Paragraph(),
-		}, "\n\n")}
+	if generated.Description != "" {
+		values["description"] = value{Text: generated.Description}
 	}
-
-	var selectedLabels []string
-	for i := 0; i < rng.Intn(4); i++ {
-		label := labelNames[rng.Intn(len(labelNames))]
-		if !slices.Contains(selectedLabels, label) {
-			selectedLabels = append(selectedLabels, label)
-		}
+	if generated.DueDate != "" {
+		values["duedate"] = value{Text: generated.DueDate}
 	}
-	if len(selectedLabels) > 0 {
-		var chosenLabels []jira.Option
-		for _, label := range selectedLabels {
-			chosenLabels = append(chosenLabels, jira.Option{ID: label, Name: label})
-		}
-		values["labels"] = value{Chosen: chosenLabels}
+	if generated.StoryPoints != "" {
+		values["customfield_10016"] = value{Text: generated.StoryPoints}
 	}
-
-	if rng.Intn(2) == 0 {
-		values["components"] = value{Chosen: []jira.Option{components[rng.Intn(len(components))]}}
-	}
-	if rng.Intn(3) == 0 {
-		values["duedate"] = value{Text: now.AddDate(0, 0, rng.Intn(60)+1).Format("2006-01-02")}
-	}
-	if rng.Intn(2) == 0 {
-		values["customfield_10016"] = value{Text: fmt.Sprint([]int{1, 2, 3, 5, 8, 13}[rng.Intn(6)])}
-	}
-	if rng.Intn(2) == 0 {
-		values["customfield_10020"] = value{Chosen: []jira.Option{users[1+rng.Intn(len(users)-2)].Option}}
+	if len(generated.Reviewers) > 0 {
+		values["customfield_10020"] = value{Chosen: generated.Reviewers}
 	}
 	return values
-}
-
-func seedComments(iss *issue, users []user, now time.Time, rng *mathrand.Rand) {
-	count := rng.Intn(9)
-	for i := 0; i < count; i++ {
-		body := faker.Sentence()
-		switch rng.Intn(3) {
-		case 1:
-			body = faker.Paragraph()
-		case 2:
-			body = strings.Join([]string{faker.Paragraph(), faker.Paragraph(), faker.Paragraph()}, "\n\n")
-		}
-		author := users[rng.Intn(len(users)-1)]
-		iss.Comments = append(iss.Comments, comment{
-			Author:  author.Option,
-			Body:    body,
-			Created: iss.Created.Add(time.Duration(i+1) * now.Sub(iss.Created) / time.Duration(count+1)),
-		})
-	}
 }
