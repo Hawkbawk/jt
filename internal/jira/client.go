@@ -27,6 +27,7 @@ const (
 	pageSize          = 100
 	boardIssuesLimit  = 1000
 	searchIssuesLimit = 100
+	commentsLimit     = 100
 
 	jiraTimeLayout = "2006-01-02T15:04:05.000-0700"
 	displayLayout  = "2006-01-02 15:04"
@@ -302,9 +303,10 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 	return out, nil
 }
 
-// Issue fetches an issue with its description and all comments.
+// Issue fetches an issue with its description and its newest comments, newest
+// first.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
-	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(1<<16))
+	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(0))
 	if err != nil {
 		return nil, err
 	}
@@ -324,14 +326,37 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 		Created:     formatTime(f.Created),
 		Updated:     formatTime(f.Updated),
 	}
-	for _, cm := range f.Comment.Comments {
-		d.Comments = append(d.Comments, Comment{
+	d.Comments, err = c.comments(key)
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+// comments fetches the newest comments on an issue, newest first.
+func (c *Client) comments(key string) ([]Comment, error) {
+	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d", url.PathEscape(key), commentsLimit)
+	var res struct {
+		Comments []struct {
+			Author struct {
+				DisplayName string `json:"displayName"`
+			} `json:"author"`
+			Body    *adf.ADF `json:"body"`
+			Created string   `json:"created"`
+		} `json:"comments"`
+	}
+	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
+		return nil, err
+	}
+	out := make([]Comment, 0, len(res.Comments))
+	for _, cm := range res.Comments {
+		out = append(out, Comment{
 			Author:  cm.Author.DisplayName,
 			Created: formatTime(cm.Created),
 			Body:    toMarkdown(cm.Body),
 		})
 	}
-	return d, nil
+	return out, nil
 }
 
 // Transitions lists the transitions available for an issue. They're fetched

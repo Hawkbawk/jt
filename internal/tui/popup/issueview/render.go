@@ -1,7 +1,6 @@
 package issueview
 
 import (
-	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -49,9 +48,7 @@ func renderComments(d *jira.IssueDetail, width int, md Markdown) string {
 	}
 	sep := styles.Dim().Render(strings.Repeat("─", width))
 	parts := make([]string, 0, len(d.Comments))
-	comments := slices.Clone(d.Comments)
-	slices.Reverse(comments)
-	for _, c := range comments {
+	for _, c := range d.Comments {
 		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(" · "+c.Created)
 		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
 	}

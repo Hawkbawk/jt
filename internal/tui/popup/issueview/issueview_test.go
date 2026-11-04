@@ -72,20 +72,13 @@ func TestLoadShowsDetailsAndRerendersOnResize(t *testing.T) {
 }
 
 func TestCommentsShowEveryComment(t *testing.T) {
-	d := detail()
-	m := sized(Comments(fakeBackend{detail: d}, "T-1", plain), 60, 20)
+	m := sized(Comments(fakeBackend{detail: detail()}, "T-1", plain), 60, 20)
 	loaded(m)
 	v := view(m)
 	for _, want := range []string{"Comments · T-1", "Ada", "first comment", "Grace", "second comment"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("comments missing %q:\n%s", want, v)
 		}
-	}
-	if strings.Index(v, "second comment") > strings.Index(v, "first comment") {
-		t.Fatalf("newest comment should appear first:\n%s", v)
-	}
-	if d.Comments[0].Body != "first comment" {
-		t.Fatal("rendering should not change the source comment order")
 	}
 }
 

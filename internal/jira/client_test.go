@@ -15,8 +15,14 @@ import (
 func TestNewUsesSettingsAndToken(t *testing.T) {
 	var gotPath, gotUser, gotPass string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		if gotPath == "" {
+			gotPath = r.URL.Path
+		}
 		gotUser, gotPass, _ = r.BasicAuth()
+		if strings.HasSuffix(r.URL.Path, "/comment") {
+			_, _ = w.Write([]byte(`{"comments": []}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"key": "A-1", "fields": {}}`))
 	}))
 	defer ts.Close()

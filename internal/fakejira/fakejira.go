@@ -159,7 +159,7 @@ func (b *Backend) Issue(key string) (*jira.IssueDetail, error) {
 	for _, l := range iss.Values["labels"].Chosen {
 		d.Labels = append(d.Labels, l.Name)
 	}
-	for _, c := range iss.Comments {
+	for _, c := range slices.Backward(iss.Comments) {
 		d.Comments = append(d.Comments, jira.Comment{
 			Author:  c.Author.Name,
 			Created: c.Created.Local().Format(displayLayout),
