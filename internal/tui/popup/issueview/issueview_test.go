@@ -80,6 +80,9 @@ func TestCommentsShowEveryComment(t *testing.T) {
 			t.Errorf("comments missing %q:\n%s", want, v)
 		}
 	}
+	if strings.Index(v, "second comment") > strings.Index(v, "first comment") {
+		t.Fatalf("newest comment should appear first:\n%s", v)
+	}
 }
 
 func TestNoComments(t *testing.T) {

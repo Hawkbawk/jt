@@ -48,7 +48,8 @@ func renderComments(d *jira.IssueDetail, width int, md Markdown) string {
 	}
 	sep := styles.Dim().Render(strings.Repeat("─", width))
 	parts := make([]string, 0, len(d.Comments))
-	for _, c := range d.Comments {
+	for i := len(d.Comments) - 1; i >= 0; i-- {
+		c := d.Comments[i]
 		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(" · "+c.Created)
 		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
 	}
