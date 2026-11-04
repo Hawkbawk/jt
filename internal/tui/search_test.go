@@ -520,7 +520,7 @@ func TestSearchSelectPreviewsAndRestoresFocus(t *testing.T) {
 func TestSearchCommentAndEditShortcuts(t *testing.T) {
 	t.Parallel()
 	m, fb := searched(t)
-	fb.detail = &jira.IssueDetail{Issue: foundIssues()[1]}
+	fb.commentList = &jira.CommentList{}
 	m = searchPressDrain(t, m, "j", "c", "enter")
 	m = searchType(t, m, "A comment")
 	m = searchPressDrain(t, m, "ctrl+s")

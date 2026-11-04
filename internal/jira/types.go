@@ -63,7 +63,16 @@ type Filter struct {
 type Comment struct {
 	Author  string
 	Created string
+	Edited  bool
 	Body    string
+}
+
+// CommentList is an issue's comments, newest first.
+type CommentList struct {
+	Items []Comment
+	// Total is how many comments the issue has, which can be more than the
+	// Items loaded.
+	Total int
 }
 
 // IssueDetail is the full view of an issue.
@@ -74,7 +83,6 @@ type IssueDetail struct {
 	Labels      []string
 	Created     string
 	Updated     string
-	Comments    []Comment
 }
 
 // Transition is a workflow transition available for an issue.

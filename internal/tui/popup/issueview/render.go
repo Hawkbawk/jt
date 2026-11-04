@@ -42,14 +42,18 @@ func renderDetail(d *jira.IssueDetail, width int, md Markdown) string {
 	return b.String()
 }
 
-func renderComments(d *jira.IssueDetail, width int, md Markdown) string {
-	if len(d.Comments) == 0 {
+func renderComments(l *jira.CommentList, width int, md Markdown) string {
+	if len(l.Items) == 0 {
 		return styles.Dim().Render("No comments.")
 	}
 	sep := styles.Dim().Render(strings.Repeat("─", width))
-	parts := make([]string, 0, len(d.Comments))
-	for _, c := range d.Comments {
-		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(" · "+c.Created)
+	parts := make([]string, 0, len(l.Items))
+	for _, c := range l.Items {
+		meta := " · " + c.Created
+		if c.Edited {
+			meta += " · edited"
+		}
+		header := lipgloss.NewStyle().Bold(true).Render(orDash(c.Author)) + styles.Dim().Render(meta)
 		parts = append(parts, header+"\n"+strings.TrimRight(md(c.Body, width), "\n"))
 	}
 	return strings.Join(parts, "\n"+sep+"\n")

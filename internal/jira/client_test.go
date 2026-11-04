@@ -15,8 +15,14 @@ import (
 func TestNewUsesSettingsAndToken(t *testing.T) {
 	var gotPath, gotUser, gotPass string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		if gotPath == "" {
+			gotPath = r.URL.Path
+		}
 		gotUser, gotPass, _ = r.BasicAuth()
+		if strings.HasSuffix(r.URL.Path, "/comment") {
+			_, _ = w.Write([]byte(`{"comments": []}`))
+			return
+		}
 		_, _ = w.Write([]byte(`{"key": "A-1", "fields": {}}`))
 	}))
 	defer ts.Close()
@@ -85,5 +91,25 @@ func TestFailedResponseErrorIsOneLine(t *testing.T) {
 	_, err := c.Search("ORDER BY updated DESC")
 	if err == nil || err.Error() != "Unbounded JQL queries are not allowed here." {
 		t.Errorf("err = %q", err)
+	}
+}
+
+func TestEditedAfter(t *testing.T) {
+	const created = "2026-10-01T09:00:00.000+0000"
+	tests := []struct {
+		name, updated string
+		want          bool
+	}{
+		{"same", created, false},
+		{"within a second", "2026-10-01T09:00:00.400+0000", false},
+		{"later", "2026-10-01T09:05:00.000+0000", true},
+		{"unparsable", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := editedAfter(created, tt.updated); got != tt.want {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

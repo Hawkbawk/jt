@@ -19,6 +19,7 @@ type fakeBackend struct {
 	board          *jira.Board
 	boardErr       error
 	detail         *jira.IssueDetail
+	commentList    *jira.CommentList
 	transitions    []jira.Transition
 	moveErr        error
 	moved          []string
@@ -72,6 +73,8 @@ func (f *fakeBackend) Board(project string, boardID int, filterJQL string) (*jir
 }
 
 func (f *fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, nil }
+
+func (f *fakeBackend) Comments(string) (*jira.CommentList, error) { return f.commentList, nil }
 
 func (f *fakeBackend) Transitions(jira.Issue) ([]jira.Transition, error) { return f.transitions, nil }
 

@@ -27,6 +27,7 @@ const (
 	pageSize          = 100
 	boardIssuesLimit  = 1000
 	searchIssuesLimit = 100
+	commentsLimit     = 100
 
 	jiraTimeLayout = "2006-01-02T15:04:05.000-0700"
 	displayLayout  = "2006-01-02 15:04"
@@ -302,9 +303,9 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 	return out, nil
 }
 
-// Issue fetches an issue with its description and all comments.
+// Issue fetches an issue with its description.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
-	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(1<<16))
+	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(0))
 	if err != nil {
 		return nil, err
 	}
@@ -324,14 +325,37 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 		Created:     formatTime(f.Created),
 		Updated:     formatTime(f.Updated),
 	}
-	for _, cm := range f.Comment.Comments {
-		d.Comments = append(d.Comments, Comment{
+	return d, nil
+}
+
+// Comments fetches the newest comments on an issue, newest first, along with
+// how many it has in all.
+func (c *Client) Comments(key string) (*CommentList, error) {
+	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d", url.PathEscape(key), commentsLimit)
+	var res struct {
+		Comments []struct {
+			Author struct {
+				DisplayName string `json:"displayName"`
+			} `json:"author"`
+			Body    *adf.ADF `json:"body"`
+			Created string   `json:"created"`
+			Updated string   `json:"updated"`
+		} `json:"comments"`
+		Total int `json:"total"`
+	}
+	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
+		return nil, err
+	}
+	out := make([]Comment, 0, len(res.Comments))
+	for _, cm := range res.Comments {
+		out = append(out, Comment{
 			Author:  cm.Author.DisplayName,
 			Created: formatTime(cm.Created),
+			Edited:  editedAfter(cm.Created, cm.Updated),
 			Body:    toMarkdown(cm.Body),
 		})
 	}
-	return d, nil
+	return &CommentList{Items: out, Total: res.Total}, nil
 }
 
 // Transitions lists the transitions available for an issue. They're fetched
@@ -448,6 +472,20 @@ func toMarkdown(v any) string {
 	default:
 		return ""
 	}
+}
+
+// editedAfter reports whether updated is later than created by more than the
+// small gap Jira leaves on comments that were never edited.
+func editedAfter(created, updated string) bool {
+	c, err := time.Parse(jiraTimeLayout, created)
+	if err != nil {
+		return false
+	}
+	u, err := time.Parse(jiraTimeLayout, updated)
+	if err != nil {
+		return false
+	}
+	return u.Sub(c) > time.Second
 }
 
 func formatTime(s string) string {

@@ -30,6 +30,7 @@ type comment struct {
 	Author  jira.Option
 	Body    string
 	Created time.Time
+	Edited  bool
 }
 
 // value is an editable field's value: Text for text, number and date kinds,
@@ -238,6 +239,7 @@ func seedIssues(now time.Time, users []user) []*issue {
 			Author:  who(authors[i%len(authors)]),
 			Body:    fmt.Sprintf("Update %d: still working through the paging edge cases.\n\nNext up is error handling.", i+1),
 			Created: big.Created.Add(time.Duration(i+1) * 12 * time.Hour),
+			Edited:  i%4 == 3,
 		})
 	}
 

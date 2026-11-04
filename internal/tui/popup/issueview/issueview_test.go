@@ -13,11 +13,14 @@ import (
 )
 
 type fakeBackend struct {
-	detail *jira.IssueDetail
-	err    error
+	detail   *jira.IssueDetail
+	comments *jira.CommentList
+	err      error
 }
 
 func (f fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, f.err }
+
+func (f fakeBackend) Comments(string) (*jira.CommentList, error) { return f.comments, f.err }
 
 func plain(md string, _ int) string { return md }
 
@@ -25,11 +28,14 @@ func detail() *jira.IssueDetail {
 	return &jira.IssueDetail{
 		Issue:       jira.Issue{Key: "T-1", Summary: "one", Status: "Open"},
 		Description: strings.Repeat("line\n", 100),
-		Comments: []jira.Comment{
-			{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
-			{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
-		},
 	}
+}
+
+func comments() *jira.CommentList {
+	return &jira.CommentList{Total: 2, Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
+	}}
 }
 
 func sized(m *Model, w, h int) *Model {
@@ -39,7 +45,7 @@ func sized(m *Model, w, h int) *Model {
 
 // loaded runs the model's load and hands the response back to it.
 func loaded(m *Model) *Model {
-	m.Update(m.Reload(false)())
+	m.Update(m.Reload()())
 	return m
 }
 
@@ -72,7 +78,7 @@ func TestLoadShowsDetailsAndRerendersOnResize(t *testing.T) {
 }
 
 func TestCommentsShowEveryComment(t *testing.T) {
-	m := sized(Comments(fakeBackend{detail: detail()}, "T-1", plain), 60, 20)
+	m := sized(Comments(fakeBackend{comments: comments()}, "T-1", plain), 60, 20)
 	loaded(m)
 	v := view(m)
 	for _, want := range []string{"Comments · T-1", "Ada", "first comment", "Grace", "second comment"} {
@@ -83,7 +89,7 @@ func TestCommentsShowEveryComment(t *testing.T) {
 }
 
 func TestNoComments(t *testing.T) {
-	if got := renderComments(&jira.IssueDetail{}, 40, plain); !strings.Contains(got, "No comments") {
+	if got := renderComments(&jira.CommentList{}, 40, plain); !strings.Contains(got, "No comments") {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -118,19 +124,6 @@ func TestScrollKeys(t *testing.T) {
 	}
 }
 
-func TestReloadScrollsToEndOnRequest(t *testing.T) {
-	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 10)
-	loaded(m)
-	m.Update(m.Reload(false)())
-	if m.ScrollPercent() != 0 {
-		t.Fatalf("a plain reload should stay at the top, at %v", m.ScrollPercent())
-	}
-	m.Update(m.Reload(true)())
-	if m.ScrollPercent() != 1 {
-		t.Fatalf("reload with toEnd should scroll to the end, at %v", m.ScrollPercent())
-	}
-}
-
 func TestViewFillsTheAreaItIsSizedFor(t *testing.T) {
 	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 20)
 	loaded(m)
@@ -150,5 +143,15 @@ func TestSpinnerStopsWhenIdleAndRestarts(t *testing.T) {
 	m.SetBusy(false)
 	if _, cmd := m.Update(spinner.TickMsg{}); cmd != nil {
 		t.Fatal("the tick chain should end when nothing is busy")
+	}
+}
+
+func TestEditedCommentIsMarked(t *testing.T) {
+	l := &jira.CommentList{Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Edited: true, Body: "a"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "b"},
+	}}
+	if got := strings.Count(renderComments(l, 40, plain), "edited"); got != 1 {
+		t.Fatalf("got %d edited markers, want 1", got)
 	}
 }

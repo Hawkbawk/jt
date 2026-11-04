@@ -31,19 +31,22 @@ var (
 	bottom = key.NewBinding(key.WithKeys("G"))
 )
 
-// Backend loads issues.
+// Backend loads issues and their comments.
 type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
+	Comments(key string) (*jira.CommentList, error)
 }
 
 // Markdown renders markdown wrapped to width.
 type Markdown = func(md string, width int) string
 
+// loadedMsg carries what a model loaded: the issue for Details, the comments
+// for Comments.
 type loadedMsg struct {
-	id    int64
-	toEnd bool
-	issue *jira.IssueDetail
-	err   error
+	id       int64
+	issue    *jira.IssueDetail
+	comments *jira.CommentList
+	err      error
 }
 
 var lastID atomic.Int64
@@ -57,9 +60,11 @@ type Model struct {
 	backend Backend
 	key     string
 	title   string
-	render  func(d *jira.IssueDetail, width int, md Markdown) string
+	fetch   func(b Backend, key string) loadedMsg
+	render  func(m *Model, width int, md Markdown) string
 	md      Markdown
 	issue   *jira.IssueDetail
+	list    *jira.CommentList
 
 	vp   viewport.Model
 	spin spinner.Model
@@ -71,35 +76,45 @@ type Model struct {
 
 // Details shows an issue's summary, fields and description.
 func Details(b Backend, issueKey string, md Markdown) *Model {
-	return newModel(b, "Details", issueKey, renderDetail, md)
+	return newModel(b, "Details", issueKey, md,
+		func(b Backend, key string) loadedMsg {
+			d, err := b.Issue(key)
+			return loadedMsg{issue: d, err: err}
+		},
+		func(m *Model, width int, md Markdown) string { return renderDetail(m.issue, width, md) })
 }
 
-// Comments shows an issue's comments.
+// Comments shows an issue's comments, which load only when it opens.
 func Comments(b Backend, issueKey string, md Markdown) *Model {
-	return newModel(b, "Comments", issueKey, renderComments, md)
+	return newModel(b, "Comments", issueKey, md,
+		func(b Backend, key string) loadedMsg {
+			l, err := b.Comments(key)
+			return loadedMsg{comments: l, err: err}
+		},
+		func(m *Model, width int, md Markdown) string { return renderComments(m.list, width, md) })
 }
 
-func newModel(b Backend, title, issueKey string, render func(*jira.IssueDetail, int, Markdown) string, md Markdown) *Model {
+func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend, string) loadedMsg, render func(*Model, int, Markdown) string) *Model {
 	vp := viewport.New()
 	vp.SetHorizontalStep(4)
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title()))
 	return &Model{
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
-		render: render, md: md, vp: vp, spin: sp, loading: true,
+		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
 	}
 }
 
 // Init loads the issue and starts the spinner.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(false), m.spin.Tick) }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Tick) }
 
 // Reload fetches the issue again and swaps in the new text when it arrives,
-// keeping the old text meanwhile. With toEnd the view then scrolls to the
-// bottom, which is where a new comment shows up.
-func (m *Model) Reload(toEnd bool) tea.Cmd {
-	b, id, issueKey := m.backend, m.id, m.key
+// keeping the old text meanwhile.
+func (m *Model) Reload() tea.Cmd {
+	b, id, issueKey, fetch := m.backend, m.id, m.key, m.fetch
 	return func() tea.Msg {
-		d, err := b.Issue(issueKey)
-		return loadedMsg{id: id, toEnd: toEnd, issue: d, err: err}
+		msg := fetch(b, issueKey)
+		msg.id = id
+		return msg
 	}
 }
 
@@ -126,6 +141,14 @@ func (m *Model) Ready() bool { return !m.loading && m.err == nil }
 // Spinner returns the current spinner frame, for the owner's own busy hints.
 func (m *Model) Spinner() string { return m.spin.View() }
 
+// Detail is the loaded issue, or nil before the first load or for a model that
+// shows comments.
+func (m *Model) Detail() *jira.IssueDetail { return m.issue }
+
+// CommentList is the loaded comments, or nil before the first load or for a
+// model that shows details.
+func (m *Model) CommentList() *jira.CommentList { return m.list }
+
 // Width is the width of the text area.
 func (m *Model) Width() int { return m.vp.Width() }
 
@@ -133,8 +156,8 @@ func (m *Model) Width() int { return m.vp.Width() }
 func (m *Model) ScrollPercent() float64 { return m.vp.ScrollPercent() }
 
 func (m *Model) refresh() {
-	if m.issue != nil {
-		m.vp.SetContent(m.render(m.issue, m.vp.Width(), m.md))
+	if m.issue != nil || m.list != nil {
+		m.vp.SetContent(m.render(m, m.vp.Width(), m.md))
 	}
 }
 
@@ -148,12 +171,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.id != m.id:
 		case msg.err != nil:
 			m.err, m.loading = msg.err, false
-		case msg.issue != nil:
-			m.issue, m.err, m.loading = msg.issue, nil, false
+		case msg.issue != nil || msg.comments != nil:
+			m.issue, m.list, m.err, m.loading = msg.issue, msg.comments, nil, false
 			m.refresh()
-			if msg.toEnd {
-				m.vp.GotoBottom()
-			}
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
