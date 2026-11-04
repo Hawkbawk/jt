@@ -107,8 +107,8 @@ const (
 // Option is one of a select field's allowed values, or a person for user
 // fields, where ID is the account ID.
 type Option struct {
-	ID   string
-	Name string
+	ID   string `faker:"demo_user_id"`
+	Name string `faker:"name"`
 }
 
 // IndexID finds the option with id in opts, or -1 when none has it.

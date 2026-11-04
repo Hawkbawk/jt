@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-faker/faker/v4"
+	"github.com/go-faker/faker/v4/pkg/options"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -54,21 +55,31 @@ func NewWithSeed(seed int64) *Backend {
 	defer fakerSeedMu.Unlock()
 	faker.SetRandomSource(faker.NewSafeSource(mathrand.NewSource(seed)))
 
-	rng := mathrand.New(mathrand.NewSource(seed))
-	generation := &fakeGeneration{rng: rng, now: time.Now()}
-	activeGeneration = generation
+	activeGeneration = &fakeGeneration{rng: mathrand.New(mathrand.NewSource(seed)), now: time.Now()}
 	defer func() { activeGeneration = nil }()
+
+	var generated fakeBackend
+	if err := faker.FakeData(&generated,
+		options.WithRandomMapAndSliceMinSize(0),
+		options.WithRandomMapAndSliceMaxSize(8),
+	); err != nil {
+		panic(err)
+	}
+	for _, iss := range generated.Issues {
+		for i := range iss.Comments {
+			iss.Comments[i].Created = iss.Created.Add(time.Duration(i+1) * activeGeneration.now.Sub(iss.Created) / time.Duration(len(iss.Comments)+1))
+		}
+	}
 
 	b := &Backend{
 		project:  DefaultProject,
 		now:      time.Now,
-		users:    seedUsers(),
-		projects: seedProjects(),
-		boards:   seedBoards(),
+		users:    generated.Users,
+		projects: generated.Projects,
+		boards:   generated.Boards,
 		fields:   fieldDefs(),
+		issues:   generated.Issues,
 	}
-	generation.users = b.users
-	b.issues = seedIssues(generation.now, b.users, rng)
 	return b
 }
 
