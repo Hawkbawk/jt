@@ -82,6 +82,8 @@ jt
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
+Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+tab` to switch lists, `/` to search the current list, and `enter` to apply the highlighted option. Select "All issues" to clear the filter, or press `esc` to cancel.
+
 ### Search
 
 `jt search` (or `jt s`) opens a search screen. Fill in any of the filters and press `ctrl+s` to see matching issues below the form (up to 100). You can filter by issue key, project, issue type, sprint, and created or updated date. Dates can be a relative time like `-2d`, an absolute date like `2026-03-01`, or a range like `2026-01-01..2026-02-01`. Results can be sorted by a field in either direction.
