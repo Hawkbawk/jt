@@ -75,6 +75,9 @@ type IssueDetail struct {
 	Created     string
 	Updated     string
 	Comments    []Comment
+	// CommentsTotal is how many comments the issue has, which can be more
+	// than the Comments loaded.
+	CommentsTotal int
 }
 
 // Transition is a workflow transition available for an issue.

@@ -41,7 +41,6 @@ type Markdown = func(md string, width int) string
 
 type loadedMsg struct {
 	id    int64
-	toEnd bool
 	issue *jira.IssueDetail
 	err   error
 }
@@ -90,16 +89,15 @@ func newModel(b Backend, title, issueKey string, render func(*jira.IssueDetail, 
 }
 
 // Init loads the issue and starts the spinner.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(false), m.spin.Tick) }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Tick) }
 
 // Reload fetches the issue again and swaps in the new text when it arrives,
-// keeping the old text meanwhile. With toEnd the view then scrolls to the
-// bottom, which is where a new comment shows up.
-func (m *Model) Reload(toEnd bool) tea.Cmd {
+// keeping the old text meanwhile.
+func (m *Model) Reload() tea.Cmd {
 	b, id, issueKey := m.backend, m.id, m.key
 	return func() tea.Msg {
 		d, err := b.Issue(issueKey)
-		return loadedMsg{id: id, toEnd: toEnd, issue: d, err: err}
+		return loadedMsg{id: id, issue: d, err: err}
 	}
 }
 
@@ -126,6 +124,9 @@ func (m *Model) Ready() bool { return !m.loading && m.err == nil }
 // Spinner returns the current spinner frame, for the owner's own busy hints.
 func (m *Model) Spinner() string { return m.spin.View() }
 
+// Detail is the loaded issue, or nil before the first load.
+func (m *Model) Detail() *jira.IssueDetail { return m.issue }
+
 // Width is the width of the text area.
 func (m *Model) Width() int { return m.vp.Width() }
 
@@ -151,9 +152,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.issue != nil:
 			m.issue, m.err, m.loading = msg.issue, nil, false
 			m.refresh()
-			if msg.toEnd {
-				m.vp.GotoBottom()
-			}
 		}
 		return m, nil
 	case tea.WindowSizeMsg:

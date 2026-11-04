@@ -326,15 +326,16 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 		Created:     formatTime(f.Created),
 		Updated:     formatTime(f.Updated),
 	}
-	d.Comments, err = c.comments(key)
+	d.Comments, d.CommentsTotal, err = c.comments(key)
 	if err != nil {
 		return nil, err
 	}
 	return d, nil
 }
 
-// comments fetches the newest comments on an issue, newest first.
-func (c *Client) comments(key string) ([]Comment, error) {
+// comments fetches the newest comments on an issue, newest first, along with
+// how many it has in all.
+func (c *Client) comments(key string) ([]Comment, int, error) {
 	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d", url.PathEscape(key), commentsLimit)
 	var res struct {
 		Comments []struct {
@@ -344,9 +345,10 @@ func (c *Client) comments(key string) ([]Comment, error) {
 			Body    *adf.ADF `json:"body"`
 			Created string   `json:"created"`
 		} `json:"comments"`
+		Total int `json:"total"`
 	}
 	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]Comment, 0, len(res.Comments))
 	for _, cm := range res.Comments {
@@ -356,7 +358,7 @@ func (c *Client) comments(key string) ([]Comment, error) {
 			Body:    toMarkdown(cm.Body),
 		})
 	}
-	return out, nil
+	return out, res.Total, nil
 }
 
 // Transitions lists the transitions available for an issue. They're fetched

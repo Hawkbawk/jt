@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
@@ -68,7 +70,7 @@ func (p *commentsPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		p.input.Reset()
 		p.input.Blur()
-		return p, p.issue.Reload(true)
+		return p, p.issue.Reload()
 	case tea.KeyPressMsg:
 		if p.input.Focused() {
 			return p, p.updateInput(msg)
@@ -119,6 +121,13 @@ func (p *commentsPopup) View() tea.View {
 		hint = styles.Dim().Render(p.issue.Spinner() + " Sending…")
 	case p.sendErr != nil:
 		hint = styles.Error().Render("Error: " + p.sendErr.Error())
+	}
+	if d := p.issue.Detail(); d != nil && d.CommentsTotal > len(d.Comments) && !p.sending && p.sendErr == nil {
+		prefix := styles.Dim().Render(fmt.Sprintf("Newest %d of %d · ", len(d.Comments), d.CommentsTotal))
+		hint = prefix + helpView(commentsHelpKeys, p.issue.Width()-lipgloss.Width(prefix))
+		if p.input.Focused() {
+			hint = prefix + helpView(writingHelpKeys, p.issue.Width()-lipgloss.Width(prefix))
+		}
 	}
 	if !p.issue.Ready() {
 		hint = ""

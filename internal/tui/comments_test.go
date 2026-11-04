@@ -93,3 +93,17 @@ func TestCommentsTopAndBottom(t *testing.T) {
 		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", p.input.Value(), p.issue.ScrollPercent())
 	}
 }
+
+func TestCommentsFooterSaysWhenOlderCommentsAreNotLoaded(t *testing.T) {
+	fb := detailBackend()
+	m := openComments(t, fb)
+	if v := m.View().Content; strings.Contains(v, "Newest 2 of") {
+		t.Fatalf("footer should stay quiet when every comment is loaded:\n%s", v)
+	}
+
+	fb.detail.CommentsTotal = 240
+	m = openComments(t, fb)
+	if v := m.View().Content; !strings.Contains(v, "Newest 2 of 240") {
+		t.Fatalf("footer should say older comments are missing:\n%s", v)
+	}
+}

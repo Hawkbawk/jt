@@ -39,7 +39,7 @@ func sized(m *Model, w, h int) *Model {
 
 // loaded runs the model's load and hands the response back to it.
 func loaded(m *Model) *Model {
-	m.Update(m.Reload(false)())
+	m.Update(m.Reload()())
 	return m
 }
 
@@ -115,19 +115,6 @@ func TestScrollKeys(t *testing.T) {
 	press(m, "g")
 	if m.ScrollPercent() != 0 {
 		t.Fatalf("g should scroll to the top, at %v", m.ScrollPercent())
-	}
-}
-
-func TestReloadScrollsToEndOnRequest(t *testing.T) {
-	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 10)
-	loaded(m)
-	m.Update(m.Reload(false)())
-	if m.ScrollPercent() != 0 {
-		t.Fatalf("a plain reload should stay at the top, at %v", m.ScrollPercent())
-	}
-	m.Update(m.Reload(true)())
-	if m.ScrollPercent() != 1 {
-		t.Fatalf("reload with toEnd should scroll to the end, at %v", m.ScrollPercent())
 	}
 }
 

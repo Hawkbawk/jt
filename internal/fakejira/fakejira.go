@@ -166,6 +166,7 @@ func (b *Backend) Issue(key string) (*jira.IssueDetail, error) {
 			Body:    c.Body,
 		})
 	}
+	d.CommentsTotal = len(d.Comments)
 	return d, nil
 }
 
