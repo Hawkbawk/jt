@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
+	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -124,7 +125,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.restyle()
 		return m, cmd
 
-	case themeSelectedMsg:
+	case themepicker.SelectedMsg:
 		cmd := m.selectTheme(msg)
 		cmd = tea.Batch(cmd, m.restyle())
 		return m, cmd
@@ -340,7 +341,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.theme):
-		return m, popup.Open(newThemePopup())
+		return m, popup.Open(themepicker.New())
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {

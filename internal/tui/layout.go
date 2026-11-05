@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -59,10 +60,10 @@ func (c *layout) restyle() {
 }
 
 // selectTheme applies the tint picked in the theme popup and saves it.
-func (c *layout) selectTheme(msg themeSelectedMsg) tea.Cmd {
-	tint.SetTint(msg.tint)
+func (c *layout) selectTheme(msg themepicker.SelectedMsg) tea.Cmd {
+	tint.SetTint(msg.Tint)
 	c.restyle()
-	return saveTheme(c.settings, msg.id)
+	return saveTheme(c.settings, msg.ID)
 }
 
 // onThemeSaved handles the outcome of saving the theme.

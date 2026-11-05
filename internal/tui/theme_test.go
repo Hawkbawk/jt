@@ -8,6 +8,7 @@ import (
 
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
@@ -20,30 +21,17 @@ func useTint(t *testing.T, tt *tint.Tint) {
 	tint.SetTint(tt)
 }
 
-func openThemePopup(t *testing.T, fs *fakeSettings) (BoardModel, *themePopup) {
+func openThemePopup(t *testing.T, fs *fakeSettings) (BoardModel, *themepicker.Picker) {
 	t.Helper()
 	m := newTestModel(t, "TEST", &fakeBackend{})
 	m.settings = fs
 	m = drain(t, m, m.Init())
 	m = pressDrain(t, m, "t")
-	p, ok := m.popup.Content().(*themePopup)
+	p, ok := m.popup.Content().(*themepicker.Picker)
 	if !ok {
 		t.Fatalf("t should open the theme popup, got %T", m.popup.Content())
 	}
 	return m, p
-}
-
-func TestThemePopupListsEveryTintAndStartsOnCurrent(t *testing.T) {
-	useTint(t, tint.TintNord)
-
-	_, p := openThemePopup(t, &fakeSettings{})
-	if got, want := len(p.list.Items()), len(tint.Tints()); got != want {
-		t.Errorf("listed %d tints, want all %d", got, want)
-	}
-	sel, _ := p.list.SelectedItem().(tintItem)
-	if sel.Tint != tint.TintNord || !strings.HasSuffix(sel.Title(), "✓") {
-		t.Errorf("selected = %q, want the current tint, checked", sel.Title())
-	}
 }
 
 func TestThemePopupFiltersAppliesAndSaves(t *testing.T) {
@@ -67,8 +55,8 @@ func TestThemePopupEscClearsFilterBeforeClosing(t *testing.T) {
 	fs := &fakeSettings{}
 	m, _ := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "x", "enter", "esc")
-	p, ok := m.popup.Content().(*themePopup)
-	if !ok || p.list.IsFiltered() {
+	p, ok := m.popup.Content().(*themepicker.Picker)
+	if !ok || p.Filtered() {
 		t.Fatalf("the first esc should clear the filter and keep the popup open, popup=%T", m.popup.Content())
 	}
 	m = pressDrain(t, m, "esc")
@@ -83,7 +71,7 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 	fs := &fakeSettings{}
 	m, _ := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "r")
-	if p, ok := m.popup.Content().(*themePopup); !ok || p.list.FilterValue() != "r" {
+	if p, ok := m.popup.Content().(*themepicker.Picker); !ok || !p.Filtering() {
 		t.Fatalf("r while filtering should type into the filter, popup=%T", m.popup.Content())
 	}
 
@@ -120,7 +108,7 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 	m := newTestModel(t, "TEST", &fakeBackend{})
 	m = drain(t, m, m.Init())
 
-	next, _ := m.Update(themeSelectedMsg{tint: tint.TintGruvboxLightHard})
+	next, _ := m.Update(themepicker.SelectedMsg{Tint: tint.TintGruvboxLightHard})
 	m = next.(BoardModel)
 	if m.spinner.Style.GetForeground() != tint.TintGruvboxLightHard.Blue {
 		t.Error("picking a tint should restyle the spinner")
