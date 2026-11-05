@@ -5,7 +5,7 @@ import (
 )
 
 // boardKeys holds the key bindings jt matches against. navigate, topBottom,
-// scroll and write only appear in help footers; other bindings do the matching.
+// scroll only appear in help footers; other bindings do the matching.
 type boardKeys struct {
 	left, right, up, down, top, bottom key.Binding
 	view, comments, edit, yank, open   key.Binding
@@ -13,11 +13,11 @@ type boardKeys struct {
 	refresh, projects, quit, close     key.Binding
 	filter, nextTab                    key.Binding
 	forceQuit, interrupt, confirm      key.Binding
-	deny, accept, send, blur           key.Binding
+	deny, accept, send                 key.Binding
 	toggle, undo, theme, back          key.Binding
 	boards                             key.Binding
 
-	navigate, topBottom, scroll, write key.Binding
+	navigate, topBottom, scroll key.Binding
 }
 
 var keys = boardKeys{
@@ -50,7 +50,6 @@ var keys = boardKeys{
 	deny:      key.NewBinding(key.WithKeys("n", "N", "esc")),
 	accept:    key.NewBinding(key.WithKeys("enter")),
 	send:      key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "send")),
-	blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop writing")),
 	toggle:    key.NewBinding(key.WithKeys("space")),
 	undo:      key.NewBinding(key.WithKeys("u")),
 	back:      key.NewBinding(key.WithKeys("esc", "/", "shift+tab"), key.WithHelp("esc", "edit search")),
@@ -60,7 +59,6 @@ var keys = boardKeys{
 	navigate:  key.NewBinding(key.WithKeys("h", "j", "k", "l"), key.WithHelp("hjkl", "navigate")),
 	topBottom: key.NewBinding(key.WithKeys("g", "G"), key.WithHelp("g/G", "top/bottom")),
 	scroll:    key.NewBinding(key.WithKeys("up", "down", "left", "right"), key.WithHelp("↑↓←→", "scroll")),
-	write:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "write")),
 }
 
 var resultsNavigateHelp = key.NewBinding(key.WithKeys("j", "k", "up", "down"), key.WithHelp("j/k", "navigate"))
@@ -86,7 +84,5 @@ func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
 
 var (
 	viewHelpKeys      = helpKeys{keys.scroll, keys.topBottom, keys.close}
-	commentsHelpKeys  = helpKeys{keys.scroll, keys.topBottom, keys.write, keys.close}
 	searchResultsHelp = helpKeys{resultsNavigateHelp, keys.topBottom, resultViewHelp, keys.comments, keys.move, keys.assign, keys.edit, keys.yank, keys.open, keys.refresh, keys.theme, keys.back, keys.quit}
-	writingHelpKeys   = helpKeys{keys.send, keys.blur}
 )

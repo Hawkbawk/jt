@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/components/issueassign"
+	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -55,7 +56,7 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	case key.Matches(msg, keys.view):
 		return popup.Open(newDetailPopup(b, iss.Key, a.md))
 	case key.Matches(msg, keys.comments):
-		return popup.Open(newCommentsPopup(b, iss.Key, a.md))
+		return popup.Open(issuecomments.New(b, iss.Key, a.md))
 	case key.Matches(msg, keys.move):
 		return popup.Open(issuemove.New(b, iss))
 	case key.Matches(msg, keys.assign):
