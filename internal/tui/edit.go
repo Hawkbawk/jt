@@ -7,7 +7,7 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
-// issueEditedMsg is how the move and assign popups report a change to an issue.
+// issueEditedMsg is how the assign popup reports a change to an issue.
 type issueEditedMsg struct {
 	key    string
 	status string
