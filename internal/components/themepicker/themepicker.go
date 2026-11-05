@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -26,11 +27,17 @@ type SelectedMsg struct {
 // resetMsg carries the terminal's own theme, once it has answered.
 type resetMsg struct{ tint *tint.Tint }
 
-var (
-	applyKey = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "apply"))
-	resetKey = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reset to terminal"))
-	closeKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
-)
+// keyMap is the picker's key bindings.
+type keyMap struct {
+	popup.KeyMap
+	apply, reset key.Binding
+}
+
+func newKeyMap() keyMap {
+	k := keys.Get()
+	apply, reset := keys.Describe(k.Accept, "apply"), keys.Describe(k.Reset, "reset to terminal")
+	return keyMap{KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(apply, reset), apply: apply, reset: reset}
+}
 
 type item struct {
 	*tint.Tint
@@ -56,6 +63,7 @@ func (i item) FilterValue() string { return i.DisplayName + " " + i.ID }
 // Picker lists every registered tint and closes its popup with a SelectedMsg
 // when one is chosen.
 type Picker struct {
+	keys  keyMap
 	list  list.Model
 	width int
 }
@@ -73,16 +81,17 @@ func New() *Picker {
 		}
 	}
 
+	km := newKeyMap()
 	l := list.New(items, styles.ListDelegate(), 0, 0)
 	l.Title = "Theme"
 	l.Styles.Title = styles.Title()
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{applyKey, resetKey, closeKey}
+		return km.ShortHelp()
 	}
 	l.Select(selected)
-	return &Picker{list: l}
+	return &Picker{list: l, keys: km}
 }
 
 // Len is how many tints are listed.
@@ -135,15 +144,15 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	switch {
-	case key.Matches(msg, closeKey) && !p.list.IsFiltered():
+	case key.Matches(msg, p.keys.Close()) && !p.list.IsFiltered():
 		return popup.Close(), true
-	case key.Matches(msg, applyKey):
+	case key.Matches(msg, p.keys.apply):
 		t := p.Selected()
 		if t == nil {
 			return nil, true
 		}
 		return popup.CloseWith(SelectedMsg{Tint: t, ID: t.ID}), true
-	case key.Matches(msg, resetKey):
+	case key.Matches(msg, p.keys.reset):
 		// Reading the terminal's theme waits on it, so it happens in a command.
 		return func() tea.Msg { return resetMsg{tint: styles.Default(context.Background())} }, true
 	}

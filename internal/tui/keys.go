@@ -1,88 +1,116 @@
 package tui
 
 import (
+	"slices"
+
 	"charm.land/bubbles/v2/key"
+
+	"github.com/hawkbawk/jt/internal/keys"
 )
 
-// boardKeys holds the key bindings jt matches against. navigate, topBottom,
-// scroll only appear in help footers; other bindings do the matching.
-type boardKeys struct {
-	left, right, up, down, top, bottom key.Binding
-	view, comments, edit, yank, open   key.Binding
-	move, assign                       key.Binding
-	refresh, projects, quit, close     key.Binding
-	filter, nextTab                    key.Binding
-	forceQuit, interrupt, confirm      key.Binding
-	deny, accept, send                 key.Binding
-	toggle, undo, theme, back          key.Binding
-	boards                             key.Binding
-
-	navigate, topBottom, scroll key.Binding
+// boardKeyMap is the board's help footer.
+type boardKeyMap struct {
+	navigate, topBottom, view, comments, move, assign key.Binding
+	edit, yank, open, filter, theme, refresh          key.Binding
+	projects, boards, quit                            key.Binding
 }
 
-var keys = boardKeys{
-	left:   key.NewBinding(key.WithKeys("h", "left")),
-	right:  key.NewBinding(key.WithKeys("l", "right")),
-	up:     key.NewBinding(key.WithKeys("k", "up")),
-	down:   key.NewBinding(key.WithKeys("j", "down")),
-	top:    key.NewBinding(key.WithKeys("g")),
-	bottom: key.NewBinding(key.WithKeys("G")),
-
-	view:     key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "view")),
-	comments: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comments")),
-	edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
-	move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
-	assign:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign")),
-	yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
-	open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open")),
-	filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
-	theme:    key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
-	refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-	projects: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "projects")),
-	boards:   key.NewBinding(key.WithKeys("ctrl+b"), key.WithHelp("ctrl+b", "boards")),
-	quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
-
-	// close dismisses a popup.
-	close:     key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close")),
-	forceQuit: key.NewBinding(key.WithKeys("ctrl+d")),
-	interrupt: key.NewBinding(key.WithKeys("ctrl+c")),
-	confirm:   key.NewBinding(key.WithKeys("y", "Y")),
-	deny:      key.NewBinding(key.WithKeys("n", "N", "esc")),
-	accept:    key.NewBinding(key.WithKeys("enter")),
-	send:      key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "send")),
-	toggle:    key.NewBinding(key.WithKeys("space")),
-	undo:      key.NewBinding(key.WithKeys("u")),
-	back:      key.NewBinding(key.WithKeys("esc", "/", "shift+tab"), key.WithHelp("esc", "edit search")),
-	nextTab:   key.NewBinding(key.WithKeys("tab")),
-
-	// help hides bindings without keys, so the help-only ones list theirs.
-	navigate:  key.NewBinding(key.WithKeys("h", "j", "k", "l"), key.WithHelp("hjkl", "navigate")),
-	topBottom: key.NewBinding(key.WithKeys("g", "G"), key.WithHelp("g/G", "top/bottom")),
-	scroll:    key.NewBinding(key.WithKeys("up", "down", "left", "right"), key.WithHelp("↑↓←→", "scroll")),
+func newBoardKeys() boardKeyMap {
+	k := keys.Get()
+	return boardKeyMap{
+		navigate: k.Navigate, topBottom: k.TopBottom, view: k.View, comments: k.Comments,
+		move: k.Move, assign: k.Assign, edit: k.Edit, yank: k.Yank, open: k.Open,
+		filter: k.Filter, theme: k.Theme, refresh: k.Refresh,
+		projects: k.Projects, boards: k.Boards, quit: k.Quit,
+	}
 }
-
-var resultsNavigateHelp = key.NewBinding(key.WithKeys("j", "k", "up", "down"), key.WithHelp("j/k", "navigate"))
 
 // ShortHelp implements help.KeyMap.
-func (k boardKeys) ShortHelp() []key.Binding {
+func (k boardKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.theme, k.refresh, k.projects, k.boards, k.quit}
 }
 
 // FullHelp implements help.KeyMap.
-func (k boardKeys) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
+func (k boardKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// viewKeyMap is the help footer under an issue's details.
+type viewKeyMap struct {
+	scroll, topBottom, close key.Binding
 }
 
-// helpKeys is a help footer made of a fixed list of bindings.
-type helpKeys []key.Binding
+func newViewKeys() viewKeyMap {
+	k := keys.Get()
+	return viewKeyMap{scroll: k.Scroll, topBottom: k.TopBottom, close: k.Close}
+}
 
 // ShortHelp implements help.KeyMap.
-func (k helpKeys) ShortHelp() []key.Binding { return k }
+func (k viewKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.scroll, k.topBottom, k.close}
+}
 
 // FullHelp implements help.KeyMap.
-func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
+func (k viewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
-var (
-	viewHelpKeys      = helpKeys{keys.scroll, keys.topBottom, keys.close}
-	searchResultsHelp = helpKeys{resultsNavigateHelp, keys.topBottom, resultViewHelp, keys.comments, keys.move, keys.assign, keys.edit, keys.yank, keys.open, keys.refresh, keys.theme, keys.back, keys.quit}
-)
+// quitKeyMap is the help shown beside the quit prompt.
+type quitKeyMap struct {
+	confirm, deny, interrupt key.Binding
+}
+
+func newQuitKeys() quitKeyMap {
+	k := keys.Get()
+	return quitKeyMap{
+		confirm:   keys.Describe(k.Confirm, "quit"),
+		deny:      keys.Describe(k.Deny, "stay"),
+		interrupt: keys.Describe(k.Interrupt, "quit"),
+	}
+}
+
+// ShortHelp implements help.KeyMap.
+func (k quitKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.confirm, k.deny, k.interrupt}
+}
+
+// FullHelp implements help.KeyMap.
+func (k quitKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+// searchKeyMap is the search screen's help footer. form holds the focused
+// form field's own bindings; the other fields say which footer to show.
+type searchKeyMap struct {
+	listNavigate, topBottom, viewResult, comments, move, assign key.Binding
+	edit, yank, open, refresh, theme, back, quit                key.Binding
+	search, jqlSearch, switchMode, focusResults                 key.Binding
+
+	form                        []key.Binding
+	results, searched, advanced bool
+}
+
+func newSearchKeys() searchKeyMap {
+	k := keys.Get()
+	return searchKeyMap{
+		listNavigate: k.ListNavigate, topBottom: k.TopBottom, viewResult: k.ViewResult,
+		comments: k.Comments, move: k.Move, assign: k.Assign, edit: k.Edit, yank: k.Yank,
+		open: k.Open, refresh: k.Refresh, theme: k.Theme, back: k.Back, quit: k.Quit,
+		search:       keys.Describe(k.Send, "search"),
+		jqlSearch:    keys.Describe(k.Accept, "search"),
+		switchMode:   k.SwitchMode,
+		focusResults: k.FocusResults,
+	}
+}
+
+// ShortHelp implements help.KeyMap.
+func (k searchKeyMap) ShortHelp() []key.Binding {
+	if k.results {
+		return []key.Binding{k.listNavigate, k.topBottom, k.viewResult, k.comments, k.move, k.assign, k.edit, k.yank, k.open, k.refresh, k.theme, k.back, k.quit}
+	}
+	binds := append(slices.Clone(k.form), k.search, k.switchMode)
+	if k.searched {
+		binds = append(binds, k.focusResults)
+	}
+	if k.advanced {
+		binds = append(binds, k.jqlSearch)
+	}
+	return binds
+}
+
+// FullHelp implements help.KeyMap.
+func (k searchKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }

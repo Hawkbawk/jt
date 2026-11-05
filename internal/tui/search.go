@@ -13,6 +13,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -291,20 +292,20 @@ func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.updatePopup(msg)
 	}
 	switch {
-	case key.Matches(msg, modeKey):
+	case key.Matches(msg, keys.Get().SwitchMode):
 		cmd := m.toggleMode()
 		return m, cmd
-	case m.searched && !m.inResults && key.Matches(msg, keys.nextTab) && m.form.onLastField():
+	case m.searched && !m.inResults && key.Matches(msg, keys.Get().NextTab) && m.form.onLastField():
 		m.focusResults()
 		return m, nil
-	case key.Matches(msg, focusKey) && m.searched:
+	case key.Matches(msg, keys.Get().FocusResults) && m.searched:
 		if m.inResults {
 			cmd := m.focusForm()
 			return m, cmd
 		}
 		m.focusResults()
 		return m, nil
-	case key.Matches(msg, keys.send):
+	case key.Matches(msg, keys.Get().Send):
 		cmd := m.sendKey()
 		return m, cmd
 	case m.resultsFocused():
@@ -329,27 +330,27 @@ func (m *SearchModel) updateForm(msg tea.Msg) tea.Cmd {
 
 func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, keys.quit):
+	case key.Matches(msg, keys.Get().Quit):
 		return m, tea.Quit
-	case key.Matches(msg, keys.back, keys.nextTab):
+	case key.Matches(msg, keys.Get().Back, keys.Get().NextTab):
 		cmd := m.focusForm()
 		return m, cmd
-	case key.Matches(msg, keys.top, keys.bottom):
-		m.results.move(key.Matches(msg, keys.bottom))
+	case key.Matches(msg, keys.Get().Top, keys.Get().Bottom):
+		m.results.move(key.Matches(msg, keys.Get().Bottom))
 		return m, nil
-	case key.Matches(msg, keys.refresh):
+	case key.Matches(msg, keys.Get().Refresh):
 		if m.lastJQL == "" || m.searching {
 			return m, nil
 		}
 		m.status = ""
 		cmd := m.search(m.lastJQL)
 		return m, cmd
-	case key.Matches(msg, keys.theme):
+	case key.Matches(msg, keys.Get().Theme):
 		return m, popup.Open(themepicker.New())
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {
-		if key.Matches(msg, keys.accept) {
+		if key.Matches(msg, keys.Get().Accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}
 		if cmd := m.actions.handle(msg, *sel); cmd != nil {
@@ -378,19 +379,14 @@ func (m SearchModel) bodyView() string {
 		Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
-func (m SearchModel) helpView() helpKeys {
-	if m.resultsFocused() {
-		return searchResultsHelp
+func (m SearchModel) helpView() searchKeyMap {
+	km := newSearchKeys()
+	km.results = m.resultsFocused()
+	km.searched, km.advanced = m.searched, m.form.advanced
+	if !km.results {
+		km.form = m.form.form.KeyBinds()
 	}
-	help := helpKeys(m.form.form.KeyBinds())
-	help = append(help, formSearchHelp, modeKey)
-	if m.searched {
-		help = append(help, focusKey)
-	}
-	if m.form.advanced {
-		help = append(help, jqlSearchHelp)
-	}
-	return help
+	return km
 }
 
 func (m SearchModel) render() string {

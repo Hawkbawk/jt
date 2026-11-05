@@ -1,12 +1,12 @@
 package tui
 
 import (
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/evertras/bubble-table/table"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
@@ -29,17 +29,6 @@ const (
 	colAssignee = "assignee"
 	colSummary  = "summary"
 )
-
-// tableKeys leaves out the keys jt uses itself: g/G jump through resultList.move,
-// and the table's filter and horizontal paging aren't wanted.
-var tableKeys = table.KeyMap{
-	RowDown:   key.NewBinding(key.WithKeys("down", "j")),
-	RowUp:     key.NewBinding(key.WithKeys("up", "k")),
-	PageDown:  key.NewBinding(key.WithKeys("pgdown", "ctrl+d")),
-	PageUp:    key.NewBinding(key.WithKeys("pgup", "ctrl+u")),
-	PageFirst: key.NewBinding(key.WithKeys("home")),
-	PageLast:  key.NewBinding(key.WithKeys("end")),
-}
 
 // resultCursor is a results cursor position to come back to after a reload.
 type resultCursor struct {
@@ -81,7 +70,7 @@ func (l *resultList) set(issues []jira.Issue) {
 			colAssignee: assignee, colSummary: iss.Summary,
 		})
 	}
-	l.table = table.New(l.columns()).WithKeyMap(tableKeys).WithRows(rows)
+	l.table = table.New(l.columns()).WithKeyMap(keys.Get().Table).WithRows(rows)
 	l.restyle()
 	l.fit()
 }

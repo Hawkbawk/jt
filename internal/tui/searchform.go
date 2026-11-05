@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
@@ -28,14 +27,6 @@ const (
 	fieldCreated = "created"
 	fieldUpdated = "updated"
 	fieldJQL     = "jql"
-)
-
-var (
-	modeKey        = key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "basic/advanced"))
-	focusKey       = key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "results"))
-	formSearchHelp = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "search"))
-	jqlSearchHelp  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "search"))
-	resultViewHelp = key.NewBinding(key.WithKeys("enter", "v"), key.WithHelp("enter/v", "view"))
 )
 
 // maxFormHeight is the form height the columns need, with a blank line between

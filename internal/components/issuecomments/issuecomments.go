@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -46,28 +47,45 @@ func (s Sent) IssueKey() string { return s.Key }
 // Status implements tuimsg.Finished.
 func (s Sent) Status() string { return "Commented on " + s.Key }
 
-var (
-	keyClose  = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close"))
-	keyWrite  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "write"))
-	keySend   = key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "send"))
-	keyBlur   = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop writing"))
-	keyScroll = key.NewBinding(key.WithKeys("up", "down", "left", "right"), key.WithHelp("↑↓←→", "scroll"))
-	keyTop    = key.NewBinding(key.WithKeys("g", "G"), key.WithHelp("g/G", "top/bottom"))
+// keyMap is the popup's key bindings. Its help depends on whether the input
+// has focus.
+type keyMap struct {
+	scroll, topBottom, write, close key.Binding
+	send, blur                      key.Binding
 
-	readingHelp = helpKeys{keyScroll, keyTop, keyWrite, keyClose}
-	writingHelp = helpKeys{keySend, keyBlur}
-)
+	writing bool
+}
 
-// helpKeys is a help footer made of a fixed list of bindings.
-type helpKeys []key.Binding
+func newKeyMap() keyMap {
+	k := keys.Get()
+	return keyMap{
+		scroll:    k.Scroll,
+		topBottom: k.TopBottom,
+		write:     keys.Describe(k.Accept, "write"),
+		close:     k.Close,
+		send:      k.Send,
+		blur:      keys.Describe(k.Dismiss, "stop writing"),
+	}
+}
+
+// inWriting returns k with the help for when the input has focus.
+func (k keyMap) inWriting() keyMap {
+	k.writing = true
+	return k
+}
 
 // ShortHelp implements help.KeyMap.
-func (k helpKeys) ShortHelp() []key.Binding { return k }
+func (k keyMap) ShortHelp() []key.Binding {
+	if k.writing {
+		return []key.Binding{k.send, k.blur}
+	}
+	return []key.Binding{k.scroll, k.topBottom, k.write, k.close}
+}
 
 // FullHelp implements help.KeyMap.
-func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
+func (k keyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
-func helpView(km helpKeys, width int) string {
+func helpView(km keyMap, width int) string {
 	h := styles.Help()
 	h.SetWidth(max(0, width))
 	return h.View(km)
@@ -81,6 +99,7 @@ type sentMsg struct {
 
 // Model shows an issue's comments above a box for writing a new one.
 type Model struct {
+	keys     keyMap
 	id       int64
 	backend  Backend
 	issueKey string
@@ -101,7 +120,7 @@ func New(b Backend, issueKey string, md issueview.Markdown) *Model {
 	ta.SetHeight(inputHeight)
 
 	return &Model{
-		id: pane.NewID(), backend: b, issueKey: issueKey,
+		id: pane.NewID(), backend: b, issueKey: issueKey, keys: newKeyMap(),
 		issue: issueview.Comments(b, issueKey, md), input: ta,
 	}
 }
@@ -133,10 +152,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.input.Focused() {
 			return m, m.updateInput(msg)
 		}
-		if key.Matches(msg, keyClose) {
+		if key.Matches(msg, m.keys.close) {
 			return m, func() tea.Msg { return Closed{} }
 		}
-		if key.Matches(msg, keyWrite) && !m.issue.Loading() {
+		if key.Matches(msg, m.keys.write) && !m.issue.Loading() {
 			m.sendErr = nil
 			return m, m.input.Focus()
 		}
@@ -147,10 +166,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateInput(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, keyBlur):
+	case key.Matches(msg, m.keys.blur):
 		m.input.Blur()
 		return nil
-	case key.Matches(msg, keySend):
+	case key.Matches(msg, m.keys.send):
 		body := m.input.Value()
 		if m.sending || strings.TrimSpace(body) == "" {
 			return nil
@@ -169,10 +188,10 @@ func (m *Model) updateInput(msg tea.KeyPressMsg) tea.Cmd {
 // View implements tea.Model.
 func (m *Model) View() tea.View {
 	border := styles.Input()
-	hint := helpView(readingHelp, m.issue.Width())
+	hint := helpView(m.keys, m.issue.Width())
 	if m.input.Focused() {
 		border = border.BorderForeground(styles.Highlight())
-		hint = helpView(writingHelp, m.issue.Width())
+		hint = helpView(m.keys.inWriting(), m.issue.Width())
 	}
 	switch {
 	case m.sending:
@@ -183,9 +202,9 @@ func (m *Model) View() tea.View {
 	if l := m.issue.CommentList(); l != nil && l.Total > len(l.Items) && !m.sending && m.sendErr == nil {
 		prefix := styles.Dim().Render(fmt.Sprintf("Newest %d of %d · ", len(l.Items), l.Total))
 		rest := m.issue.Width() - lipgloss.Width(prefix)
-		hint = prefix + helpView(readingHelp, rest)
+		hint = prefix + helpView(m.keys, rest)
 		if m.input.Focused() {
-			hint = prefix + helpView(writingHelp, rest)
+			hint = prefix + helpView(m.keys.inWriting(), rest)
 		}
 	}
 	if !m.issue.Ready() {

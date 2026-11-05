@@ -11,6 +11,7 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -21,26 +22,22 @@ type SelectedMsg struct {
 	Filter *jira.Filter
 }
 
-var (
-	nextTab  = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next"))
-	prevTab  = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev"))
-	left     = key.NewBinding(key.WithKeys("h", "left"))
-	right    = key.NewBinding(key.WithKeys("l", "right"))
-	blur     = key.NewBinding(key.WithKeys("esc"))
-	closeKey = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close"))
-)
+// keyMap is the picker's key bindings.
+type keyMap struct {
+	popup.KeyMap
+	nextTab, prevTab, left, right, blur key.Binding
+}
 
-// helpKeys is a help footer made of a fixed list of bindings.
-type helpKeys []key.Binding
-
-// ShortHelp implements help.KeyMap.
-func (k helpKeys) ShortHelp() []key.Binding { return k }
-
-// FullHelp implements help.KeyMap.
-func (k helpKeys) FullHelp() [][]key.Binding { return [][]key.Binding{k} }
+func newKeyMap() keyMap {
+	k := keys.Get()
+	return keyMap{
+		KeyMap:  popup.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
+		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right, blur: k.Dismiss,
+	}
+}
 
 // helpView renders a help footer in the given width.
-func helpView(km helpKeys, width int) string {
+func helpView(km popup.KeyMap, width int) string {
 	h := styles.Help()
 	h.SetWidth(max(0, width))
 	return h.View(km)
@@ -55,6 +52,7 @@ type tab struct {
 // Picker lists the board's quick filters and assignees on separate tabs. Each
 // tab starts with an entry that clears the filter.
 type Picker struct {
+	keys          keyMap
 	cursor        int
 	selectField   *huh.Select[int]
 	form          *huh.Form
@@ -67,6 +65,7 @@ type Picker struct {
 // New builds a picker that opens on the tab and row of the active filter.
 func New(quick, assignees []jira.Filter, active *jira.Filter) *Picker {
 	p := &Picker{
+		keys: newKeyMap(),
 		tabs: []tab{
 			{name: "Quick filters", empty: "This board has no quick filters.", filters: quick},
 			{name: "Assignees", empty: "No assignees on this board.", filters: assignees},
@@ -141,15 +140,15 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(km, blur) && p.consumesEsc():
+		case key.Matches(km, p.keys.blur) && p.consumesEsc():
 			_, cmd := p.form.Update(msg)
 			return p, cmd
-		case !p.Filtering() && key.Matches(km, closeKey):
+		case !p.Filtering() && key.Matches(km, p.keys.Close()):
 			return p, popup.Close()
-		case key.Matches(km, nextTab) || (!p.Filtering() && key.Matches(km, right)):
+		case key.Matches(km, p.keys.nextTab) || (!p.Filtering() && key.Matches(km, p.keys.right)):
 			p.switchTab(1)
 			return p, p.form.Init()
-		case key.Matches(km, prevTab) || (!p.Filtering() && key.Matches(km, left)):
+		case key.Matches(km, p.keys.prevTab) || (!p.Filtering() && key.Matches(km, p.keys.left)):
 			p.switchTab(-1)
 			return p, p.form.Init()
 		}
@@ -182,9 +181,6 @@ func (p *Picker) View() tea.View {
 	header := []string{strings.Join(tabs, ""), ""}
 	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
 	body := strings.Split(p.form.View(), "\n")
-	bindings := append(helpKeys{nextTab, prevTab}, p.selectField.KeyBinds()...)
-	if !p.consumesEsc() {
-		bindings = append(bindings, closeKey)
-	}
-	return tea.NewView(popup.Stack(p.height, header, body, helpView(bindings, p.width)))
+	km := p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
+	return tea.NewView(popup.Stack(p.height, header, body, helpView(km, p.width)))
 }

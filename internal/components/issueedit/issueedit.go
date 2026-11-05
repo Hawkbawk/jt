@@ -20,6 +20,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -260,19 +261,83 @@ func listHeight(n int) int {
 	return min(n, 6) + 1
 }
 
-var (
-	keyClose   = key.NewBinding(key.WithKeys("esc", "q"))
-	keyBlur    = key.NewBinding(key.WithKeys("esc"))
-	keyConfirm = key.NewBinding(key.WithKeys("y", "Y"))
-	keyDeny    = key.NewBinding(key.WithKeys("n", "N", "esc"))
-	keyAccept  = key.NewBinding(key.WithKeys("enter"))
-	keySend    = key.NewBinding(key.WithKeys("ctrl+s"))
-	keyUndo    = key.NewBinding(key.WithKeys("u"))
+// helpMode picks which of the popup's help footers keyMap shows.
+type helpMode int
+
+const (
+	helpList helpMode = iota
+	helpFilter
+	helpField
+	helpUserField
+	helpDiscard
+	helpSave
 )
+
+// keyMap is the popup's key bindings. mode picks the help it shows.
+type keyMap struct {
+	close, blur, confirm, deny, accept, send, undo key.Binding
+	choose, apply, cancel                          key.Binding
+	filter, next, back, toggle, newLine            key.Binding
+
+	mode helpMode
+}
+
+func newKeyMap() keyMap {
+	k := keys.Get()
+	return keyMap{
+		close:   k.Close,
+		blur:    k.Dismiss,
+		confirm: k.Confirm,
+		deny:    k.Deny,
+		accept:  k.Accept,
+		send:    k.Send,
+		undo:    keys.Describe(k.Undo, "undo"),
+		choose:  keys.Describe(k.ListNavigate, "select"),
+		apply:   keys.Describe(k.Accept, "apply"),
+		cancel:  keys.Describe(k.Dismiss, "cancel"),
+		filter:  keys.Describe(k.ListFilter, "filter"),
+		next:    keys.Describe(k.Accept, "next"),
+		back:    keys.Describe(k.PrevTab, "back to search"),
+		toggle:  keys.Describe(k.Toggle, "toggles"),
+		newLine: k.NewLine,
+	}
+}
+
+// helpPane is the mode of the footer under the popup's list and forms.
+const helpPane helpMode = -1
+
+func (k keyMap) withMode(m helpMode) keyMap {
+	k.mode = m
+	return k
+}
+
+// ShortHelp implements help.KeyMap.
+func (k keyMap) ShortHelp() []key.Binding {
+	save := keys.Describe(k.send, "save")
+	switch k.mode {
+	case helpSave:
+		return []key.Binding{save}
+	case helpDiscard:
+		return []key.Binding{keys.Describe(k.confirm, "discard"), keys.Describe(k.deny, "keep editing"), save}
+	case helpUserField:
+		return []key.Binding{k.next, k.back, k.toggle, keys.Describe(k.blur, "back")}
+	case helpField:
+		return []key.Binding{keys.Describe(k.accept, "done"), keys.Describe(k.blur, "back"), k.newLine}
+	case helpFilter:
+		return []key.Binding{keys.Describe(k.accept, "apply filter"), keys.Describe(k.blur, "clear"), save}
+	case helpList:
+		return []key.Binding{keys.Describe(k.accept, "edit"), k.undo, k.filter, keys.Describe(k.blur, "close"), save}
+	}
+	return []key.Binding{k.choose, k.apply, k.cancel}
+}
+
+// FullHelp implements help.KeyMap.
+func (k keyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
 // Model lists an issue's editable fields and edits one at a time in a
 // form. Changes are kept until they're all saved together.
 type Model struct {
+	keys    keyMap
 	id      int64
 	key     string
 	issue   jira.Issue
@@ -297,7 +362,7 @@ type Model struct {
 
 // New returns the popup that edits iss, which loads the fields when it opens.
 func New(b Backend, iss jira.Issue) *Model {
-	return &Model{id: pane.NewID(), key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help()}
+	return &Model{id: pane.NewID(), key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
 }
 
 // Init implements tea.Model.
@@ -382,12 +447,12 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 	if p.confirmClose {
 		return p.updateConfirm(km)
 	}
-	if p.consumesEsc() && key.Matches(km, keyBlur) {
+	if p.consumesEsc() && key.Matches(km, p.keys.blur) {
 		return p.update(km)
 	}
-	closes := keyClose
+	closes := p.keys.close
 	if p.capturing() {
-		closes = keyBlur
+		closes = p.keys.blur
 	}
 	if key.Matches(km, closes) {
 		if p.unsaved() > 0 {
@@ -401,11 +466,11 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 
 func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(km, keyConfirm):
+	case key.Matches(km, p.keys.confirm):
 		return popup.Close()
-	case key.Matches(km, keyDeny):
+	case key.Matches(km, p.keys.deny):
 		p.confirmClose = false
-	case key.Matches(km, keySend):
+	case key.Matches(km, p.keys.send):
 		p.confirmClose = false
 		return p.update(km)
 	}
@@ -438,17 +503,17 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	km, isKey := msg.(tea.KeyMsg)
-	if isKey && p.form == nil && key.Matches(km, keySend) {
+	if isKey && p.form == nil && key.Matches(km, p.keys.send) {
 		return p.save()
 	}
 	if p.form == nil {
-		if isKey && key.Matches(km, keyAccept) && !p.list.SettingFilter() {
+		if isKey && key.Matches(km, p.keys.accept) && !p.list.SettingFilter() {
 			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
 				return p.edit(v)
 			}
 			return nil
 		}
-		if isKey && key.Matches(km, keyUndo) && !p.list.SettingFilter() {
+		if isKey && key.Matches(km, p.keys.undo) && !p.list.SettingFilter() {
 			if v, ok := p.list.SelectedItem().(*fieldValue); ok {
 				v.reset()
 			}
@@ -458,7 +523,7 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		p.list, cmd = p.list.Update(msg)
 		return cmd
 	}
-	if isKey && key.Matches(km, keyBlur) {
+	if isKey && key.Matches(km, p.keys.blur) {
 		p.editing.revert()
 		p.closeForm()
 		return nil
@@ -507,16 +572,16 @@ func (p *Model) holding() bool { return p.form != nil }
 func (p *Model) View() tea.View {
 	p.help.SetWidth(p.width)
 	title := styles.Title().Render("Edit · " + p.key)
-	footer := p.help.View(pane.HelpKeys)
+	footer := p.help.View(p.keys.withMode(helpPane))
 	if n := p.unsaved(); n > 0 {
 		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
-		warn := "● " + changes
+		warn := styles.Warn().Render("● " + changes)
 		if !p.holding() {
-			warn += " · ctrl+s to save"
+			warn += styles.Dim().Render(" · ") + p.help.View(p.keys.withMode(helpSave))
 		}
-		title += "  " + styles.Warn().Render(warn)
+		title += "  " + warn
 		if p.confirmClose {
-			footer = styles.Warn().Render("Discard " + changes + "? y discard · n keep editing · ctrl+s save")
+			footer = styles.Warn().Render("Discard "+changes+"? ") + p.help.View(p.keys.withMode(helpDiscard))
 		}
 	}
 	spin := p.spin.View()
@@ -555,15 +620,16 @@ func (p *Model) growText() {
 }
 
 func (p *Model) hint() string {
+	mode := helpList
 	switch {
 	case p.form != nil && p.editing.isUser():
-		return styles.Dim().Render("enter next · shift+tab back to search · space toggles · esc back")
+		mode = helpUserField
 	case p.form != nil:
-		return styles.Dim().Render("enter done · esc back · ctrl+j new line")
+		mode = helpField
 	case p.list.SettingFilter():
-		return styles.Dim().Render("enter apply filter · esc clear · ctrl+s save")
+		mode = helpFilter
 	}
-	return styles.Dim().Render("enter edit · u undo · / filter · esc close · ctrl+s save")
+	return p.help.View(p.keys.withMode(mode))
 }
 
 // sameSet reports whether a and b hold the same options, by id.

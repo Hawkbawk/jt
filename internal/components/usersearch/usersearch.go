@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 )
 
 // Func finds the people that match query.
@@ -48,6 +49,7 @@ type List struct {
 // Field is a search box above the list of people it finds. Its rows only
 // change when the query does, so toggling people keeps the list in place.
 type Field struct {
+	keys   keyMap
 	title  string
 	search Func
 	delay  time.Duration
@@ -91,7 +93,7 @@ type foundMsg struct {
 func New(title string, search Func, l List) *Field {
 	in := textinput.New()
 	in.Placeholder = "Search by name or email"
-	f := &Field{title: title, search: search, delay: Delay, list: l, input: in}
+	f := &Field{title: title, search: search, delay: Delay, list: l, input: in, keys: newKeyMap()}
 	f.refresh()
 	for i, o := range f.rows {
 		if o.ID == l.Start {
@@ -185,14 +187,40 @@ func (f *Field) status() string {
 	return ""
 }
 
-var (
-	toList   = key.NewBinding(key.WithKeys("enter", "tab", "down"), key.WithHelp("enter", "pick"))
-	toSearch = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "search"))
-	up       = key.NewBinding(key.WithKeys("up", "k", "ctrl+p"), key.WithHelp("↑", "up"))
-	down     = key.NewBinding(key.WithKeys("down", "j", "ctrl+n"), key.WithHelp("↓", "down"))
-	toggle   = key.NewBinding(key.WithKeys("space", "x"), key.WithHelp("space", "toggle"))
-	choose   = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "done"))
-)
+// keyMap is the field's key bindings. Its help depends on whether the field
+// is searching or listing, and on whether the list allows several picks.
+type keyMap struct {
+	toList, toSearch, up, down, toggle, choose key.Binding
+
+	listing, multiple bool
+}
+
+func newKeyMap() keyMap {
+	k := keys.Get()
+	return keyMap{
+		toList:   k.ToList,
+		toSearch: k.ToSearch,
+		up:       k.ListUp,
+		down:     k.ListDown,
+		toggle:   k.ToggleUser,
+		choose:   keys.Describe(k.Accept, "done"),
+	}
+}
+
+// ShortHelp implements help.KeyMap.
+func (k keyMap) ShortHelp() []key.Binding {
+	if !k.listing {
+		return []key.Binding{k.toList, k.toSearch}
+	}
+	binds := []key.Binding{k.up, k.down}
+	if k.multiple {
+		binds = append(binds, k.toggle)
+	}
+	return append(binds, k.toSearch, k.choose)
+}
+
+// FullHelp implements help.KeyMap.
+func (k keyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
 // Init implements huh.Field.
 func (f *Field) Init() tea.Cmd { return nil }
@@ -225,13 +253,13 @@ func (f *Field) Update(msg tea.Msg) (huh.Model, tea.Cmd) {
 
 func (f *Field) updateSearch(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, toList):
+	case key.Matches(msg, f.keys.toList):
 		if len(f.rows) > 0 {
 			f.listing = true
 			f.input.Blur()
 		}
 		return nil
-	case key.Matches(msg, toSearch):
+	case key.Matches(msg, f.keys.toSearch):
 		return huh.PrevField
 	}
 	return f.edit(msg)
@@ -250,16 +278,16 @@ func (f *Field) edit(msg tea.Msg) tea.Cmd {
 
 func (f *Field) updateList(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case key.Matches(msg, toSearch) || len(f.rows) == 0:
+	case key.Matches(msg, f.keys.toSearch) || len(f.rows) == 0:
 		f.listing = false
 		return f.input.Focus()
-	case key.Matches(msg, up):
+	case key.Matches(msg, f.keys.up):
 		f.cursor = max(0, f.cursor-1)
-	case key.Matches(msg, down):
+	case key.Matches(msg, f.keys.down):
 		f.cursor = min(len(f.rows)-1, f.cursor+1)
-	case key.Matches(msg, toggle) && f.list.Toggle != nil:
+	case key.Matches(msg, f.keys.toggle) && f.list.Toggle != nil:
 		f.list.Toggle(f.rows[f.cursor])
-	case key.Matches(msg, choose):
+	case key.Matches(msg, f.keys.choose):
 		if f.list.Choose != nil {
 			f.list.Choose(f.rows[f.cursor])
 		}
@@ -348,14 +376,9 @@ func (f *Field) Blur() tea.Cmd {
 
 // KeyBinds implements huh.Field.
 func (f *Field) KeyBinds() []key.Binding {
-	if !f.listing {
-		return []key.Binding{toList, toSearch}
-	}
-	binds := []key.Binding{up, down}
-	if f.list.Toggle != nil {
-		binds = append(binds, toggle)
-	}
-	return append(binds, toSearch, choose)
+	km := f.keys
+	km.listing, km.multiple = f.listing, f.list.Toggle != nil
+	return km.ShortHelp()
 }
 
 // WithTheme implements huh.Field.

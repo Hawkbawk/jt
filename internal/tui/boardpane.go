@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
@@ -112,17 +113,17 @@ func (b *boardPane) move(msg tea.KeyPressMsg) bool {
 		return false
 	}
 	switch {
-	case key.Matches(msg, keys.left):
+	case key.Matches(msg, keys.Get().Left):
 		b.nav.left()
-	case key.Matches(msg, keys.right):
+	case key.Matches(msg, keys.Get().Right):
 		b.nav.right()
-	case key.Matches(msg, keys.up):
+	case key.Matches(msg, keys.Get().Up):
 		b.nav.up()
-	case key.Matches(msg, keys.down):
+	case key.Matches(msg, keys.Get().Down):
 		b.nav.down()
-	case key.Matches(msg, keys.top):
+	case key.Matches(msg, keys.Get().Top):
 		b.nav.top()
-	case key.Matches(msg, keys.bottom):
+	case key.Matches(msg, keys.Get().Bottom):
 		b.nav.bottom()
 	default:
 		return false

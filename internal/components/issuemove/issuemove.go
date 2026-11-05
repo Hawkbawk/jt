@@ -12,6 +12,7 @@ import (
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -38,7 +39,9 @@ func (m Moved) IssueKey() string { return m.Key }
 // Status implements tuimsg.Finished.
 func (m Moved) Status() string { return "Moved " + m.Key + " to " + m.To }
 
-var keyClose = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "cancel"))
+func newKeyMap() popup.KeyMap {
+	return popup.NewKeyMap(keys.Describe(keys.Get().Close, "cancel"))
+}
 
 type transitionsLoadedMsg struct {
 	id          int64
@@ -63,6 +66,7 @@ func loadTransitions(b Backend, id int64, iss jira.Issue) tea.Cmd {
 
 // Model lists the transitions available for an issue.
 type Model struct {
+	keys    popup.KeyMap
 	id      int64
 	issue   jira.Issue
 	backend Backend
@@ -80,7 +84,7 @@ type Model struct {
 
 // New returns a popup that moves iss.
 func New(b Backend, iss jira.Issue) *Model {
-	return &Model{id: pane.NewID(), issue: iss, backend: b, spin: pane.NewSpinner()}
+	return &Model{id: pane.NewID(), issue: iss, backend: b, spin: pane.NewSpinner(), keys: newKeyMap()}
 }
 
 // Init implements tea.Model.
@@ -144,8 +148,8 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		p.buildForm()
 		return p.form.Init()
 	case tea.KeyPressMsg:
-		if p.form == nil || (!p.consumesEsc() && key.Matches(msg, keyClose)) {
-			if key.Matches(msg, keyClose) {
+		if p.form == nil || (!p.consumesEsc() && key.Matches(msg, p.keys.Close())) {
+			if key.Matches(msg, p.keys.Close()) {
 				return popup.Close()
 			}
 			return nil
@@ -173,7 +177,7 @@ func (p *Model) consumesEsc() bool {
 // View implements tea.Model.
 func (p *Model) View() tea.View {
 	var body []string
-	bindings := []key.Binding{keyClose}
+	km := p.keys
 	switch {
 	case !p.loaded && p.err == nil:
 		body = append(body, p.spin.View()+" Loading transitions…")
@@ -182,25 +186,14 @@ func (p *Model) View() tea.View {
 	case p.form != nil:
 		p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.ChromeLines-2))
 		body = strings.Split(p.form.View(), "\n")
-		bindings = p.selectField.KeyBinds()
-		if !p.consumesEsc() {
-			bindings = append(bindings, keyClose)
-		}
+		km = km.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
 	}
 	body = append(body, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
-	return tea.NewView(popup.Stack(p.height, pane.Header("Move", p.issue.Key), body, p.footer(bindings)))
+	return tea.NewView(popup.Stack(p.height, pane.Header("Move", p.issue.Key), body, p.footer(km)))
 }
 
-func (p *Model) footer(bindings []key.Binding) string {
+func (p *Model) footer(km popup.KeyMap) string {
 	h := styles.Help()
 	h.SetWidth(max(0, p.width))
-	return h.View(bindingList(bindings))
+	return h.View(km)
 }
-
-type bindingList []key.Binding
-
-// ShortHelp implements help.KeyMap.
-func (b bindingList) ShortHelp() []key.Binding { return b }
-
-// FullHelp implements help.KeyMap.
-func (b bindingList) FullHelp() [][]key.Binding { return [][]key.Binding{b} }
