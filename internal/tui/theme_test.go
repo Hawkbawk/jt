@@ -21,24 +21,23 @@ func useTint(t *testing.T, tt *tint.Tint) {
 	tint.SetTint(tt)
 }
 
-func openThemePopup(t *testing.T, fs *fakeSettings) (BoardModel, *themepicker.Picker) {
+func openThemePopup(t *testing.T, fs *fakeSettings) BoardModel {
 	t.Helper()
 	m := newTestModel(t, "TEST", &fakeBackend{})
 	m.settings = fs
 	m = drain(t, m, m.Init())
 	m = pressDrain(t, m, "t")
-	p, ok := m.popup.Content().(*themepicker.Picker)
-	if !ok {
+	if _, ok := m.popup.Content().(*themepicker.Picker); !ok {
 		t.Fatalf("t should open the theme popup, got %T", m.popup.Content())
 	}
-	return m, p
+	return m
 }
 
 func TestThemePopupFiltersAppliesAndSaves(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &fakeSettings{}
-	m, _ := openThemePopup(t, fs)
+	m := openThemePopup(t, fs)
 	m = pressDrain(t, m, append(append([]string{"/"}, strings.Split("catppuccin_mocha", "")...), "enter", "enter")...)
 
 	if m.popup.IsOpen() || styles.Current() != tint.TintCatppuccinMocha {
@@ -53,7 +52,7 @@ func TestThemePopupEscClearsFilterBeforeClosing(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &fakeSettings{}
-	m, _ := openThemePopup(t, fs)
+	m := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "x", "enter", "esc")
 	p, ok := m.popup.Content().(*themepicker.Picker)
 	if !ok || p.Filtered() {
@@ -69,7 +68,7 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &fakeSettings{}
-	m, _ := openThemePopup(t, fs)
+	m := openThemePopup(t, fs)
 	m = pressDrain(t, m, "/", "r")
 	if p, ok := m.popup.Content().(*themepicker.Picker); !ok || !p.Filtering() {
 		t.Fatalf("r while filtering should type into the filter, popup=%T", m.popup.Content())
@@ -95,7 +94,7 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 func TestThemeSaveErrorShowsInStatus(t *testing.T) {
 	useTint(t, tint.TintNord)
 
-	m, _ := openThemePopup(t, &fakeSettings{err: errors.New("read-only")})
+	m := openThemePopup(t, &fakeSettings{err: errors.New("read-only")})
 	m = pressDrain(t, m, "j", "enter")
 	if m.status == "" {
 		t.Fatal("expected the save error in the status line")
