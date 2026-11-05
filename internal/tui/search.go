@@ -10,6 +10,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -136,6 +137,9 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case issuecomments.Closed:
+		return m, popup.Close()
 
 	case popup.OpenMsg, popup.CloseMsg:
 		return m, m.updatePopup(msg)

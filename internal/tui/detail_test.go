@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -13,7 +14,9 @@ func plainMarkdown(md string, _ int) string { return md }
 
 func detailBackend() *fakeBackend {
 	return &fakeBackend{detail: &jira.IssueDetail{
-		Issue:       jira.Issue{Key: "T-1", Summary: "one", Status: "Open"},
+		Key:         "T-1",
+		Summary:     "one",
+		Status:      "Open",
 		Description: strings.Repeat("line\n", 100) + strings.Repeat("wide", 100),
 	}, commentList: &jira.CommentList{Total: 2, Items: []jira.Comment{
 		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
@@ -108,7 +111,7 @@ func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 func TestCommentsPopupShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = pressDrain(t, m, "c")
-	_, ok := m.popup.Content().(*commentsPopup)
+	_, ok := m.popup.Content().(*issuecomments.Model)
 	if !ok {
 		t.Fatal("c should open the comments popup")
 	}

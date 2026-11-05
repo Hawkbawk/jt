@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
+	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -106,6 +107,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case spinner.TickMsg:
 		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+
+	case issuecomments.Closed:
+		return m, popup.Close()
 
 	case popup.OpenMsg, popup.CloseMsg:
 		return m, m.updatePopup(msg)
