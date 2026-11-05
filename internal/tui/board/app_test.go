@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func newTestModel(t *testing.T, defaultProject string, fb *tuitest.Backend) BoardModel {
+func newTestModel(t *testing.T, defaultProject string, fb *tuitest.Backend) Model {
 	t.Helper()
 	fb.Project = defaultProject
 	if fb.BoardData == nil {
@@ -19,17 +19,17 @@ func newTestModel(t *testing.T, defaultProject string, fb *tuitest.Backend) Boar
 	}
 	m := New(fb, &tuitest.Settings{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	return next.(BoardModel)
+	return next.(Model)
 }
 
 // press sends keys in order and returns the final model and last command.
-func press(t *testing.T, m BoardModel, keys ...string) (BoardModel, tea.Cmd) {
+func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
 	t.Helper()
 	var cmd tea.Cmd
 	for _, k := range keys {
 		var next tea.Model
 		next, cmd = m.Update(tuitest.Key(k))
-		m = next.(BoardModel)
+		m = next.(Model)
 	}
 	return m, cmd
 }
@@ -37,17 +37,17 @@ func press(t *testing.T, m BoardModel, keys ...string) (BoardModel, tea.Cmd) {
 // pressOpen presses k, which opens a popup, and applies the message that opens
 // it. It returns the model with the popup showing and the popup's own commands,
 // which haven't run yet.
-func pressOpen(t *testing.T, m BoardModel, k string) (BoardModel, tea.Cmd) {
+func pressOpen(t *testing.T, m Model, k string) (Model, tea.Cmd) {
 	t.Helper()
 	m, cmd := press(t, m, k)
 	if cmd == nil {
 		t.Fatalf("%s should open a popup", k)
 	}
 	next, cmd := m.Update(cmd())
-	return next.(BoardModel), cmd
+	return next.(Model), cmd
 }
 
-func loadedModel(t *testing.T) (BoardModel, *tuitest.Backend) {
+func loadedModel(t *testing.T) (Model, *tuitest.Backend) {
 	t.Helper()
 	fb := &tuitest.Backend{}
 	m := newTestModel(t, "TEST", fb)
@@ -185,7 +185,7 @@ func TestBoardErrorIsShown(t *testing.T) {
 func TestStaleBoardIsIgnored(t *testing.T) {
 	m, _ := loadedModel(t)
 	next, _ := m.Update(boardLoadedMsg{project: "OTHER", board: &jira.Board{Name: "stale"}})
-	if next.(BoardModel).board.nav.board.Name == "stale" {
+	if next.(Model).board.nav.board.Name == "stale" {
 		t.Fatal("board for a different project replaced the current one")
 	}
 }
@@ -204,7 +204,7 @@ func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
 	fb := &tuitest.Backend{}
 	m := newTestModel(t, "TEST", fb)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
-	m = tuitest.Drain(t, next.(BoardModel), m.Init())
+	m = tuitest.Drain(t, next.(Model), m.Init())
 
 	v := m.View().Content
 	if strings.Contains(v, "Closed") || !strings.Contains(v, "▶") || strings.Contains(v, "◀") {

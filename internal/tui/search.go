@@ -1,3 +1,4 @@
+// Package tui implements jt's search screen. The board lives in its own package.
 package tui
 
 import (
@@ -13,12 +14,22 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
+	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/screen"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
+
+// Backend is the Jira functionality the search screen depends on.
+type Backend interface {
+	screen.IssueBackend
+	DefaultProject() string
+	Projects() ([]jira.Project, error)
+	IssueTypes() ([]string, error)
+	Search(jql string) ([]jira.Issue, error)
+}
 
 type issueTypesLoadedMsg struct {
 	types []string

@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"os"
@@ -19,7 +19,7 @@ func testFields() []jira.EditField {
 	return []jira.EditField{{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true, Text: "Fix it"}}
 }
 
-func typeText(t *testing.T, m BoardModel, s string) BoardModel {
+func typeText(t *testing.T, m Model, s string) Model {
 	t.Helper()
 	for _, r := range s {
 		m = tuitest.PressDrain(t, m, string(r))
