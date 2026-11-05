@@ -42,6 +42,8 @@ In a flake, use `inputs.jt.url = "github:Hawkbawk/jt/v0.1.0";`.
 
 The flake is configured with a Cachix cache, so prebuilt binaries are available for x86_64-linux, aarch64-linux, and aarch64-darwin.
 
+Nix only applies a flake's cache settings for trusted users. If you see a warning about an untrusted substituter, Nix is building from source instead. To use the cache, either add your user to `trusted-users` in your Nix config and accept the flake's settings when prompted (or pass `--accept-flake-config`), or run `cachix use hawkbawk-jt` as root to add the cache system-wide.
+
 ### From a release tarball
 
 Each [release](https://github.com/Hawkbawk/jt/releases) has tarballs for linux-amd64, linux-arm64, and darwin-arm64, plus a `checksums.txt`. Download the one for your platform, verify it, and put `jt` on your `PATH`:
