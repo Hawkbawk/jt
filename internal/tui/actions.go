@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/components/issueassign"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -58,7 +59,7 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	case key.Matches(msg, keys.move):
 		return popup.Open(issuemove.New(b, iss))
 	case key.Matches(msg, keys.assign):
-		return popup.Open(newAssignPopup(b, iss))
+		return popup.Open(issueassign.New(b, iss))
 	case key.Matches(msg, keys.edit):
 		return popup.Open(issueedit.New(b, iss))
 	case key.Matches(msg, keys.yank):
