@@ -1,4 +1,4 @@
-package tui
+package screen
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/issueassign"
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
+	"github.com/hawkbawk/jt/internal/components/issuedetail"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -15,49 +16,51 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/system"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
 )
 
-// actionDoneMsg reports the result of a yank or open.
-type actionDoneMsg struct {
+// ActionDoneMsg reports the result of a yank or open.
+type ActionDoneMsg struct {
 	status string
 	err    error
 }
 
-// display returns the status line text for the result.
-func (m actionDoneMsg) display() string {
+// Display returns the status line text for the result.
+func (m ActionDoneMsg) Display() string {
 	if m.err != nil {
 		return styles.Error().Render(m.err.Error())
 	}
 	return m.status
 }
 
-// issueActions maps keys to actions on a focused issue. Both the board and the
+// IssueActions maps keys to actions on a focused issue. Both the board and the
 // search results use it.
-type issueActions struct {
-	backend  Backend
-	md       markdownRenderer
-	copyText func(string) error
-	openURL  func(string) error
+type IssueActions struct {
+	backend  IssueBackend
+	MD       issueview.Markdown
+	CopyText func(string) error
+	OpenURL  func(string) error
 }
 
-func newIssueActions(b Backend) issueActions {
-	return issueActions{
+// NewIssueActions returns the actions for issues in b.
+func NewIssueActions(b IssueBackend) IssueActions {
+	return IssueActions{
 		backend:  b,
-		md:       styles.Markdown,
-		copyText: system.CopyToClipboard,
-		openURL:  system.OpenInBrowser,
+		MD:       styles.Markdown,
+		CopyText: system.CopyToClipboard,
+		OpenURL:  system.OpenInBrowser,
 	}
 }
 
-// handle returns the command for msg on the given issue, which for some keys
+// Handle returns the command for msg on the given issue, which for some keys
 // opens a popup. It returns nil for keys that aren't actions.
-func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
+func (a IssueActions) Handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.Get().View):
-		return popup.Open(newDetailPopup(b, iss.Key, a.md))
+		return popup.Open(issuedetail.New(b, iss.Key, a.MD))
 	case key.Matches(msg, keys.Get().Comments):
-		return popup.Open(issuecomments.New(b, iss.Key, a.md))
+		return popup.Open(issuecomments.New(b, iss.Key, a.MD))
 	case key.Matches(msg, keys.Get().Move):
 		return popup.Open(issuemove.New(b, iss))
 	case key.Matches(msg, keys.Get().Assign):
@@ -65,9 +68,9 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	case key.Matches(msg, keys.Get().Edit):
 		return popup.Open(issueedit.New(b, iss))
 	case key.Matches(msg, keys.Get().Yank):
-		return runAction(a.copyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
+		return runAction(a.CopyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
 	case key.Matches(msg, keys.Get().Open):
-		return runAction(a.openURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
+		return runAction(a.OpenURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
 	}
 	return nil
 }
@@ -76,8 +79,8 @@ func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 func runAction(fn func(string) error, url, status, doing string) tea.Cmd {
 	return func() tea.Msg {
 		if err := fn(url); err != nil {
-			return actionDoneMsg{err: fmt.Errorf("%s: %w", doing, err)}
+			return ActionDoneMsg{err: fmt.Errorf("%s: %w", doing, err)}
 		}
-		return actionDoneMsg{status: status}
+		return ActionDoneMsg{status: status}
 	}
 }

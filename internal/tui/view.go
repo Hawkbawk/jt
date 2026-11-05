@@ -7,14 +7,14 @@ import (
 
 // View implements tea.Model.
 func (m BoardModel) View() tea.View {
-	return m.withView(m.render())
+	return m.WithView(m.render())
 }
 
 func (m BoardModel) render() string {
-	if m.width == 0 {
+	if m.Width == 0 {
 		return ""
 	}
-	body := m.board.view(m.width, m.bodyHeight(), m.spinner.View())
-	body = m.popup.Overlay(body)
-	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(m.board.headerParts(m.spinner.View())), body, m.footerView(newBoardKeys()))
+	body := m.board.view(m.Width, m.BodyHeight(), m.Spinner.View())
+	body = m.Popup.Overlay(body)
+	return lipgloss.JoinVertical(lipgloss.Left, m.HeaderView(m.board.headerParts(m.Spinner.View())), body, m.FooterView(newBoardKeys()))
 }

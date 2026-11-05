@@ -9,70 +9,71 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func boardsBackend() *fakeBackend {
+func boardsBackend() *tuitest.Backend {
 	fb := pickerBackend()
-	fb.boards = []jira.BoardSummary{{ID: 1, Name: "Test Board", Type: "kanban"}, {ID: 7, Name: "Team", Type: "scrum"}}
+	fb.BoardList = []jira.BoardSummary{{ID: 1, Name: "Test Board", Type: "kanban"}, {ID: 7, Name: "Team", Type: "scrum"}}
 	return fb
 }
 
-func newSettingsModel(t *testing.T, project string, fb *fakeBackend, fs *fakeSettings) BoardModel {
+func newSettingsModel(t *testing.T, project string, fb *tuitest.Backend, fs *tuitest.Settings) BoardModel {
 	t.Helper()
-	fb.defaultProject = project
-	if fb.board == nil {
-		fb.board = testBoard()
+	fb.Project = project
+	if fb.BoardData == nil {
+		fb.BoardData = testBoard()
 	}
 	next, _ := New(fb, fs).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	return drain(t, next.(BoardModel), next.(BoardModel).Init())
+	return tuitest.Drain(t, next.(BoardModel), next.(BoardModel).Init())
 }
 
 func TestPickingABoardOpensItWithoutSaving(t *testing.T) {
-	fb, fs := boardsBackend(), &fakeSettings{}
+	fb, fs := boardsBackend(), &tuitest.Settings{}
 	m := newSettingsModel(t, "TEST", fb, fs)
 
-	m = pressDrain(t, m, "ctrl+b")
-	if _, ok := m.popup.Content().(*boardpicker.Picker); !ok {
-		t.Fatalf("board popup not open, got %T", m.popup.Content())
+	m = tuitest.PressDrain(t, m, "ctrl+b")
+	if _, ok := m.Popup.Content().(*boardpicker.Picker); !ok {
+		t.Fatalf("board popup not open, got %T", m.Popup.Content())
 	}
-	m = pressDrain(t, m, "j", "enter")
+	m = tuitest.PressDrain(t, m, "j", "enter")
 
-	if got := fb.boardIDCalls[len(fb.boardIDCalls)-1]; got != 7 {
+	if got := fb.BoardIDCalls[len(fb.BoardIDCalls)-1]; got != 7 {
 		t.Fatalf("loaded board %d, want 7", got)
 	}
-	if len(fs.boards) != 0 {
-		t.Fatalf("saved boards = %v, want none", fs.boards)
+	if len(fs.Boards) != 0 {
+		t.Fatalf("saved boards = %v, want none", fs.Boards)
 	}
-	if m.popup.IsOpen() || m.board.nav == nil {
+	if m.Popup.IsOpen() || m.board.nav == nil {
 		t.Fatal("the board should show once it loads")
 	}
 }
 
 func TestFavoritingTheBoardSavesIt(t *testing.T) {
-	fb, fs := boardsBackend(), &fakeSettings{}
-	fb.board = testBoard()
-	fb.board.ID = 7
+	fb, fs := boardsBackend(), &tuitest.Settings{}
+	fb.BoardData = testBoard()
+	fb.BoardData.ID = 7
 	m := newSettingsModel(t, "TEST", fb, fs)
 
-	pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
-	if !slices.Equal(fs.boards, []int{7}) {
-		t.Fatalf("saved boards = %v, want [7]", fs.boards)
+	tuitest.PressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
+	if !slices.Equal(fs.Boards, []int{7}) {
+		t.Fatalf("saved boards = %v, want [7]", fs.Boards)
 	}
 }
 
 func TestFavoritingABoardIgnoresOtherProjects(t *testing.T) {
-	fb, fs := boardsBackend(), &fakeSettings{}
+	fb, fs := boardsBackend(), &tuitest.Settings{}
 	m := newSettingsModel(t, "OTHER", fb, fs)
-	m = pressDrain(t, m, "ctrl+p", "j", "enter")
+	m = tuitest.PressDrain(t, m, "ctrl+p", "j", "enter")
 	if m.board.project != "BETA" {
 		t.Fatalf("project = %s", m.board.project)
 	}
 
-	m = pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
-	if len(fs.boards) != 0 {
-		t.Fatalf("saved boards = %v, want none", fs.boards)
+	m = tuitest.PressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
+	if len(fs.Boards) != 0 {
+		t.Fatalf("saved boards = %v, want none", fs.Boards)
 	}
-	if m.status == "" {
+	if m.Status == "" {
 		t.Fatal("expected a status explaining why nothing was saved")
 	}
 	if m.board.boardID != 7 {
@@ -82,34 +83,34 @@ func TestFavoritingABoardIgnoresOtherProjects(t *testing.T) {
 
 func TestSwitchingBoardClearsFilterAndProjectKeepsItsBoard(t *testing.T) {
 	fb := boardsBackend()
-	m := newSettingsModel(t, "ALPHA", fb, &fakeSettings{})
+	m := newSettingsModel(t, "ALPHA", fb, &tuitest.Settings{})
 	m.board.filter = &jira.Filter{Name: "Bugs", JQL: "issuetype = Bug"}
 
-	m = pressDrain(t, m, "ctrl+b", "j", "enter")
+	m = tuitest.PressDrain(t, m, "ctrl+b", "j", "enter")
 	if m.board.filter != nil {
 		t.Fatal("a filter from the old board should be dropped")
 	}
 
-	m = pressDrain(t, m, "ctrl+p", "j", "enter")
+	m = tuitest.PressDrain(t, m, "ctrl+p", "j", "enter")
 	if m.board.boardID != 0 {
 		t.Fatalf("a new project should start on its own board, got %d", m.board.boardID)
 	}
-	m = pressDrain(t, m, "ctrl+p", "enter")
+	m = tuitest.PressDrain(t, m, "ctrl+p", "enter")
 	if m.board.project != "ALPHA" || m.board.boardID != 7 {
 		t.Fatalf("returning to ALPHA opened board %d, want 7", m.board.boardID)
 	}
 }
 
 func TestBoardSaveErrorShowsInStatus(t *testing.T) {
-	m := newSettingsModel(t, "TEST", boardsBackend(), &fakeSettings{err: errors.New("read-only")})
-	m = pressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
-	if m.status == "" {
+	m := newSettingsModel(t, "TEST", boardsBackend(), &tuitest.Settings{Err: errors.New("read-only")})
+	m = tuitest.PressDrain(t, m, "ctrl+b", "j", "enter", "ctrl+b", "f")
+	if m.Status == "" {
 		t.Fatal("expected the save error in the status line")
 	}
 }
 
 func TestLateBoardForAnotherBoardIsIgnored(t *testing.T) {
-	m := newSettingsModel(t, "TEST", boardsBackend(), &fakeSettings{})
+	m := newSettingsModel(t, "TEST", boardsBackend(), &tuitest.Settings{})
 	m.board.boardID = 7
 	nav := m.board.nav
 	m.board.update(boardLoadedMsg{project: "TEST", boardID: 1, board: testBoard()})
@@ -119,25 +120,25 @@ func TestLateBoardForAnotherBoardIsIgnored(t *testing.T) {
 }
 
 func TestFavoritingAProjectSavesItAndKeepsThePickerOpen(t *testing.T) {
-	fb, fs := boardsBackend(), &fakeSettings{}
+	fb, fs := boardsBackend(), &tuitest.Settings{}
 	m := newSettingsModel(t, "ALPHA", fb, fs)
 
-	m = pressDrain(t, m, "ctrl+p", "j", "f")
-	if !slices.Equal(fs.projects, []string{"BETA"}) {
-		t.Fatalf("saved projects = %v, want [BETA]", fs.projects)
+	m = tuitest.PressDrain(t, m, "ctrl+p", "j", "f")
+	if !slices.Equal(fs.Projects, []string{"BETA"}) {
+		t.Fatalf("saved projects = %v, want [BETA]", fs.Projects)
 	}
-	if fb.defaultProject != "BETA" {
-		t.Fatalf("default project = %q, want BETA", fb.defaultProject)
+	if fb.Project != "BETA" {
+		t.Fatalf("default project = %q, want BETA", fb.Project)
 	}
 	projects(t, m)
 }
 
 func TestFavoriteProjectSaveErrorLeavesDefaultAlone(t *testing.T) {
 	fb := boardsBackend()
-	m := newSettingsModel(t, "ALPHA", fb, &fakeSettings{err: errors.New("read-only")})
+	m := newSettingsModel(t, "ALPHA", fb, &tuitest.Settings{Err: errors.New("read-only")})
 
-	m = pressDrain(t, m, "ctrl+p", "j", "f")
-	if fb.defaultProject != "ALPHA" || m.status == "" {
-		t.Fatalf("default = %q, status = %q", fb.defaultProject, m.status)
+	m = tuitest.PressDrain(t, m, "ctrl+p", "j", "f")
+	if fb.Project != "ALPHA" || m.Status == "" {
+		t.Fatalf("default = %q, status = %q", fb.Project, m.Status)
 	}
 }

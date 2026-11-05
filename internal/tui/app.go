@@ -15,11 +15,13 @@ import (
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/screen"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // Backend is the Jira functionality the TUI depends on.
 type Backend interface {
+	screen.IssueBackend
 	DefaultProject() string
 	SetDefaultProject(project string)
 	SetDefaultBoard(id int)
@@ -28,25 +30,17 @@ type Backend interface {
 	Search(jql string) ([]jira.Issue, error)
 	Boards(project string) ([]jira.BoardSummary, error)
 	Board(project string, boardID int, filterJQL string) (*jira.Board, error)
-	Issue(key string) (*jira.IssueDetail, error)
-	Comments(key string) (*jira.CommentList, error)
-	Transitions(iss jira.Issue) ([]jira.Transition, error)
-	Transition(key, transitionID string) error
-	Assign(key, assigneeID string) error
-	AddComment(key, body string) error
-	EditFields(iss jira.Issue) ([]jira.EditField, error)
-	Edit(key string, fields []jira.EditField) error
-	SearchUsers(issueKey, query string) ([]jira.Option, error)
-	IssueURL(key string) string
 }
 
 // BoardModel is the board's root bubbletea model. It routes input and messages to the
 // board and at most one popup, and controls high-level or broadly used state.
 type BoardModel struct {
-	layout
+	screen.Layout
 
-	board   boardPane
-	actions issueActions
+	// settings is the full settings, which also saves the board and project.
+	settings Settings
+	board    boardPane
+	actions  screen.IssueActions
 
 	// projects is the list the project popup loaded, kept for the session.
 	projects []jira.Project
@@ -56,16 +50,17 @@ type BoardModel struct {
 // opened on start.
 func New(backend Backend, settings Settings) BoardModel {
 	m := BoardModel{
-		layout:  newLayout(settings),
-		board:   newBoardPane(backend),
-		actions: newIssueActions(backend),
+		Layout:   screen.NewLayout(settings),
+		settings: settings,
+		board:    newBoardPane(backend),
+		actions:  screen.NewIssueActions(backend),
 	}
 	return m
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
 func (m BoardModel) WithWarning(text string) BoardModel {
-	m.status = styles.Warn().Render(text)
+	m.Status = styles.Warn().Render(text)
 	return m
 }
 
@@ -74,7 +69,7 @@ func (m BoardModel) Init() tea.Cmd {
 	if m.board.project == "" {
 		return popup.Open(m.newProjectPopup(false))
 	}
-	return m.runWithSpinner(m.board.fetch(m.board.project, ""))
+	return m.RunWithSpinner(m.board.fetch(m.board.project, ""))
 }
 
 // busy reports whether anything is waiting on the network.
@@ -86,61 +81,61 @@ func (m BoardModel) busy() bool {
 func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
-		m.status = msg.Status()
-		return m, m.runWithSpinner(m.board.reload(msg.IssueKey()))
+		m.Status = msg.Status()
+		return m, m.RunWithSpinner(m.board.reload(msg.IssueKey()))
 
 	case tea.WindowSizeMsg:
-		return m, m.resize(msg)
+		return m, m.Resize(msg)
 
 	case tuimsg.ThemeChanged:
-		m.restyle()
-		return m, m.updatePopup(msg)
+		m.Restyle()
+		return m, m.UpdatePopup(msg)
 
 	case themepicker.SelectedMsg:
-		return m, m.selectTheme(msg)
+		return m, m.SelectTheme(msg)
 
-	case themeSavedMsg:
-		m.onThemeSaved(msg)
+	case screen.ThemeSavedMsg:
+		m.OnThemeSaved(msg)
 		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
 
 	case issuecomments.Closed:
 		return m, popup.Close()
 
 	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.updatePopup(msg)
+		return m, m.UpdatePopup(msg)
 
 	case projectpicker.SelectedMsg:
-		m.status = ""
-		return m, m.runWithSpinner(m.board.open(msg.Key))
+		m.Status = ""
+		return m, m.RunWithSpinner(m.board.open(msg.Key))
 
 	case projectpicker.LoadedMsg:
 		if msg.Err == nil {
 			m.projects = msg.Projects
 		}
-		return m, m.updatePopup(msg)
+		return m, m.UpdatePopup(msg)
 
 	case boardpicker.SelectedMsg:
 		return m.selectBoard(msg)
 
 	case boardpicker.FavoriteMsg:
 		if m.board.project != m.board.backend.DefaultProject() {
-			m.status = styles.Warn().Render("Only the default project's board can be the default")
+			m.Status = styles.Warn().Render("Only the default project's board can be the default")
 			return m, nil
 		}
 		return m, saveBoard(m.settings, msg.ID)
 
 	case boardSavedMsg:
 		if msg.err != nil {
-			m.status = styles.Error().Render("saving board: " + msg.err.Error())
+			m.Status = styles.Error().Render("saving board: " + msg.err.Error())
 		} else {
 			m.board.backend.SetDefaultBoard(msg.id)
-			m.status = styles.Dim().Render("Saved as the default board")
+			m.Status = styles.Dim().Render("Saved as the default board")
 		}
 		return m, nil
 
@@ -149,12 +144,12 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectSavedMsg:
 		if msg.err != nil {
-			m.status = styles.Error().Render("saving project: " + msg.err.Error())
+			m.Status = styles.Error().Render("saving project: " + msg.err.Error())
 			return m, nil
 		}
 		m.board.backend.SetDefaultProject(msg.key)
-		m.status = styles.Dim().Render("Saved " + msg.key + " as the default project")
-		if p, ok := m.popup.Content().(*projectpicker.Picker); ok {
+		m.Status = styles.Dim().Render("Saved " + msg.key + " as the default project")
+		if p, ok := m.Popup.Content().(*projectpicker.Picker); ok {
 			return m, p.Refresh()
 		}
 		return m, nil
@@ -164,16 +159,16 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case filterpicker.SelectedMsg:
-		m.status = ""
-		return m, m.runWithSpinner(m.board.setFilter(msg.Filter))
+		m.Status = ""
+		return m, m.RunWithSpinner(m.board.setFilter(msg.Filter))
 
-	case actionDoneMsg:
-		m.status = msg.display()
+	case screen.ActionDoneMsg:
+		m.Status = msg.Display()
 		return m, nil
 	}
 	// A popup's responses and form run on their own messages, so it gets
 	// what's left.
-	return m, m.updatePopup(msg)
+	return m, m.UpdatePopup(msg)
 }
 
 // selectBoard opens the picked board.
@@ -181,8 +176,8 @@ func (m BoardModel) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd
 	if msg.Project != m.board.project {
 		return m, nil
 	}
-	m.status = ""
-	return m, m.runWithSpinner(m.board.openBoard(msg.Board.ID))
+	m.Status = ""
+	return m, m.RunWithSpinner(m.board.openBoard(msg.Board.ID))
 }
 
 func (m BoardModel) newProjectPopup(cancellable bool) *projectpicker.Picker {
@@ -190,7 +185,7 @@ func (m BoardModel) newProjectPopup(cancellable bool) *projectpicker.Picker {
 }
 
 func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if consumed, quit := m.quit.handle(msg); consumed {
+	if consumed, quit := m.Quit.Handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
 		}
@@ -200,12 +195,12 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Get().Projects):
 		// A popup may hold unsaved work, so it has to be closed first.
-		if m.popup.IsOpen() {
+		if m.Popup.IsOpen() {
 			return m, nil
 		}
 		return m, popup.Open(m.newProjectPopup(m.board.nav != nil))
-	case m.popup.Captures(msg):
-		return m, m.updatePopup(msg)
+	case m.Popup.Captures(msg):
+		return m, m.UpdatePopup(msg)
 	}
 	return m.handleBoardKey(msg)
 }
@@ -223,8 +218,8 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if sel != nil {
 			focusKey = sel.Key
 		}
-		m.status = ""
-		return m, m.runWithSpinner(m.board.reload(focusKey))
+		m.Status = ""
+		return m, m.RunWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.Get().Theme) {
 		return m, popup.Open(themepicker.New())
@@ -238,5 +233,5 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if sel == nil {
 		return m, nil
 	}
-	return m, m.actions.handle(msg, *sel)
+	return m, m.actions.Handle(msg, *sel)
 }

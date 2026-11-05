@@ -2,27 +2,18 @@ package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/hawkbawk/jt/internal/tui/screen"
 )
 
 // Settings persists the user's choices.
 type Settings interface {
-	SaveTheme(id string) error
+	screen.Settings
 	// SaveBoard sets the board to open for the default project.
 	SaveBoard(id int) error
 	// SaveProject sets the default project, forgetting the default board when
 	// the project changes.
 	SaveProject(key string) error
-}
-
-// themeSavedMsg reports whether the picked tint was written to the settings.
-type themeSavedMsg struct {
-	err error
-}
-
-func saveTheme(s Settings, id string) tea.Cmd {
-	return func() tea.Msg {
-		return themeSavedMsg{err: s.SaveTheme(id)}
-	}
 }
 
 // boardSavedMsg reports whether the favorite board was written to the settings.

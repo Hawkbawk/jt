@@ -16,6 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/screen"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -34,10 +35,10 @@ func loadIssueTypes(b Backend) tea.Cmd {
 // SearchModel is the search screen: a huh form, the results table and the
 // board's issue popups. Only one search runs at a time.
 type SearchModel struct {
-	layout
+	screen.Layout
 	backend Backend
 	form    *searchForm
-	actions issueActions
+	actions screen.IssueActions
 	results resultList
 
 	// inResults is whether the table rather than the form has focus.
@@ -54,10 +55,10 @@ type SearchModel struct {
 // NewSearch builds the search screen with the backend's default project selected.
 func NewSearch(backend Backend, settings Settings) SearchModel {
 	m := SearchModel{
-		layout:  newLayout(settings),
+		Layout:  screen.NewLayout(settings),
 		backend: backend,
 		form:    newSearchForm(backend.DefaultProject()),
-		actions: newIssueActions(backend),
+		actions: screen.NewIssueActions(backend),
 	}
 	m.results.set(nil)
 	return m
@@ -65,7 +66,7 @@ func NewSearch(backend Backend, settings Settings) SearchModel {
 
 // WithWarning shows text in the status line until the next action replaces it.
 func (m SearchModel) WithWarning(text string) SearchModel {
-	m.status = styles.Warn().Render(text)
+	m.Status = styles.Warn().Render(text)
 	return m
 }
 
@@ -77,7 +78,7 @@ func (m SearchModel) Init() tea.Cmd {
 func (m SearchModel) busy() bool { return m.searching }
 
 func (m *SearchModel) restyle() tea.Cmd {
-	m.layout.restyle()
+	m.Restyle()
 	m.form.restyle()
 	m.results.restyle()
 	return m.form.update(nil)
@@ -88,7 +89,7 @@ func (m SearchModel) resultsFocused() bool { return m.inResults && m.searched }
 // mainHeight is the height left for the form and the results table with its
 // title, after the message under them.
 func (m SearchModel) mainHeight() int {
-	h := m.bodyHeight()
+	h := m.BodyHeight()
 	if m.resultsMessage() != "" {
 		h--
 	}
@@ -105,7 +106,7 @@ func (m SearchModel) formHeight() int {
 
 // fit sizes the form and the table to the body.
 func (m *SearchModel) fit() {
-	w, formH := max(0, m.width-2), m.formHeight()
+	w, formH := max(0, m.Width-2), m.formHeight()
 	m.form.resize(w, formH)
 	m.results.resize(w, m.mainHeight()-formH-1)
 }
@@ -114,12 +115,12 @@ func (m *SearchModel) fit() {
 func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
-		m.status = msg.Status()
+		m.Status = msg.Status()
 		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
 		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:
-		popupCmd := m.resize(msg)
+		popupCmd := m.Resize(msg)
 		m.fit()
 		return m, tea.Batch(popupCmd, m.form.update(msg))
 
@@ -128,29 +129,29 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case themepicker.SelectedMsg:
-		cmd := m.selectTheme(msg)
+		cmd := m.SelectTheme(msg)
 		cmd = tea.Batch(cmd, m.restyle())
 		return m, cmd
 
-	case themeSavedMsg:
-		m.onThemeSaved(msg)
+	case screen.ThemeSavedMsg:
+		m.OnThemeSaved(msg)
 		return m, nil
 
 	case spinner.TickMsg:
-		return m, tea.Batch(m.tick(msg, m.busy()), m.updatePopup(msg))
+		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
 
 	case issuecomments.Closed:
 		return m, popup.Close()
 
 	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.updatePopup(msg)
+		return m, m.UpdatePopup(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case issueTypesLoadedMsg:
 		if msg.err != nil {
-			m.status = styles.Error().Render("loading issue types: " + msg.err.Error())
+			m.Status = styles.Error().Render("loading issue types: " + msg.err.Error())
 			return m, nil
 		}
 		m.form.setIssueTypes(msg.types)
@@ -159,7 +160,7 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectpicker.LoadedMsg:
 		if msg.Err != nil {
-			m.status = styles.Error().Render("loading projects: " + msg.Err.Error())
+			m.Status = styles.Error().Render("loading projects: " + msg.Err.Error())
 			return m, nil
 		}
 		m.form.setProjects(msg.Projects)
@@ -170,8 +171,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyResults(msg)
 		return m, nil
 
-	case actionDoneMsg:
-		m.status = msg.display()
+	case screen.ActionDoneMsg:
+		m.Status = msg.Display()
 		return m, nil
 	}
 	cmd := m.forwardMsg(msg)
@@ -179,8 +180,8 @@ func (m SearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *SearchModel) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.popup.IsOpen() {
-		return m.updatePopup(msg)
+	if m.Popup.IsOpen() {
+		return m.UpdatePopup(msg)
 	}
 	return m.updateForm(msg)
 }
@@ -221,16 +222,16 @@ func (m *SearchModel) submit() tea.Cmd {
 	}
 	jql, err := m.currentJQL()
 	if err != nil {
-		m.status = styles.Error().Render(err.Error())
+		m.Status = styles.Error().Render(err.Error())
 		return nil
 	}
-	m.status = ""
+	m.Status = ""
 	return m.search(jql)
 }
 
 func (m *SearchModel) search(jql string) tea.Cmd {
 	m.searching, m.searchErr, m.lastJQL = true, nil, jql
-	return m.runWithSpinner(runSearch(m.backend, jql))
+	return m.RunWithSpinner(runSearch(m.backend, jql))
 }
 
 func (m *SearchModel) applyResults(msg searchLoadedMsg) {
@@ -282,14 +283,14 @@ func (m *SearchModel) toggleMode() tea.Cmd {
 }
 
 func (m SearchModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if consumed, quit := m.quit.handle(msg); consumed {
+	if consumed, quit := m.Quit.Handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
 		}
 		return m, nil
 	}
-	if m.popup.Captures(msg) {
-		return m, m.updatePopup(msg)
+	if m.Popup.Captures(msg) {
+		return m, m.UpdatePopup(msg)
 	}
 	switch {
 	case key.Matches(msg, keys.Get().SwitchMode):
@@ -342,7 +343,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if m.lastJQL == "" || m.searching {
 			return m, nil
 		}
-		m.status = ""
+		m.Status = ""
 		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.Get().Theme):
@@ -353,7 +354,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if key.Matches(msg, keys.Get().Accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}
-		if cmd := m.actions.handle(msg, *sel); cmd != nil {
+		if cmd := m.actions.Handle(msg, *sel); cmd != nil {
 			return m, cmd
 		}
 	}
@@ -362,7 +363,7 @@ func (m SearchModel) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 }
 
 // View implements tea.Model.
-func (m SearchModel) View() tea.View { return m.withView(m.render()) }
+func (m SearchModel) View() tea.View { return m.WithView(m.render()) }
 
 func (m SearchModel) bodyView() string {
 	h := m.formHeight()
@@ -375,8 +376,8 @@ func (m SearchModel) bodyView() string {
 	if msg := m.resultsMessage(); msg != "" {
 		parts = append(parts, styles.Dim().Render(msg))
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Width(m.width).MaxWidth(m.width).
-		Height(m.bodyHeight()).MaxHeight(m.bodyHeight()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+	return lipgloss.NewStyle().Padding(0, 1).Width(m.Width).MaxWidth(m.Width).
+		Height(m.BodyHeight()).MaxHeight(m.BodyHeight()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 func (m SearchModel) helpView() searchKeyMap {
@@ -390,19 +391,19 @@ func (m SearchModel) helpView() searchKeyMap {
 }
 
 func (m SearchModel) render() string {
-	if m.width == 0 {
+	if m.Width == 0 {
 		return ""
 	}
 	body := m.bodyView()
-	body = m.popup.Overlay(body)
+	body = m.Popup.Overlay(body)
 	mode := "basic"
 	if m.form.advanced {
 		mode = "advanced"
 	}
 	parts := []string{"search", styles.Dim().Render(mode)}
 	if m.searching {
-		parts = append(parts, m.spinner.View()+" Searching…")
+		parts = append(parts, m.Spinner.View()+" Searching…")
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left, m.headerView(parts), body, m.footerView(m.helpView()))
-	return lipgloss.NewStyle().MaxWidth(m.width).MaxHeight(m.height).Render(content)
+	content := lipgloss.JoinVertical(lipgloss.Left, m.HeaderView(parts), body, m.FooterView(m.helpView()))
+	return lipgloss.NewStyle().MaxWidth(m.Width).MaxHeight(m.Height).Render(content)
 }

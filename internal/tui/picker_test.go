@@ -5,10 +5,11 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func pickerBackend() *fakeBackend {
-	return &fakeBackend{projects: []jira.Project{
+func pickerBackend() *tuitest.Backend {
+	return &tuitest.Backend{ProjectList: []jira.Project{
 		{Key: "ALPHA", Name: "Alpha Project"},
 		{Key: "BETA", Name: "Beta Project"},
 	}}
@@ -16,9 +17,9 @@ func pickerBackend() *fakeBackend {
 
 func projects(t *testing.T, m BoardModel) *projectpicker.Picker {
 	t.Helper()
-	p, ok := m.popup.Content().(*projectpicker.Picker)
+	p, ok := m.Popup.Content().(*projectpicker.Picker)
 	if !ok {
-		t.Fatalf("project popup not open, got %T", m.popup.Content())
+		t.Fatalf("project popup not open, got %T", m.Popup.Content())
 	}
 	return p
 }
@@ -26,42 +27,42 @@ func projects(t *testing.T, m BoardModel) *projectpicker.Picker {
 func TestStartupWithoutDefaultOpensPicker(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "", fb)
-	m = drain(t, m, m.Init())
+	m = tuitest.Drain(t, m, m.Init())
 	if p := projects(t, m); p.Cancellable() || p.Len() != 2 {
 		t.Fatalf("picker not shown: cancellable=%v items=%d", p.Cancellable(), p.Len())
 	}
-	if len(fb.boardCalls) != 0 {
+	if len(fb.BoardCalls) != 0 {
 		t.Fatal("board loaded without a project")
 	}
 
-	m = pressDrain(t, m, "esc")
+	m = tuitest.PressDrain(t, m, "esc")
 	projects(t, m)
 }
 
 func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 	fb := pickerBackend()
 	m := newTestModel(t, "", fb)
-	m = drain(t, m, m.Init())
+	m = tuitest.Drain(t, m, m.Init())
 
 	m, cmd := press(t, m, "j", "enter")
-	m = drain(t, m, cmd)
-	if m.popup.IsOpen() || m.board.project != "BETA" || m.board.nav == nil {
-		t.Fatalf("project not opened: open=%v project=%s", m.popup.IsOpen(), m.board.project)
+	m = tuitest.Drain(t, m, cmd)
+	if m.Popup.IsOpen() || m.board.project != "BETA" || m.board.nav == nil {
+		t.Fatalf("project not opened: open=%v project=%s", m.Popup.IsOpen(), m.board.project)
 	}
 }
 
 func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	fb := pickerBackend()
-	fb.board = testBoard()
+	fb.BoardData = testBoard()
 	m := newTestModel(t, "TEST", fb)
-	m = drain(t, m, m.Init())
+	m = tuitest.Drain(t, m, m.Init())
 
-	m = pressDrain(t, m, "ctrl+p")
+	m = tuitest.PressDrain(t, m, "ctrl+p")
 	if !projects(t, m).Cancellable() {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
-	m = pressDrain(t, m, "esc")
-	if m.popup.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
+	m = tuitest.PressDrain(t, m, "esc")
+	if m.Popup.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
@@ -73,18 +74,18 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 
 func TestQDoesNotQuitFromPicker(t *testing.T) {
 	m := newTestModel(t, "", pickerBackend())
-	m = drain(t, m, m.Init())
-	if _, cmd := press(t, m, "q"); isQuit(cmd) {
+	m = tuitest.Drain(t, m, m.Init())
+	if _, cmd := press(t, m, "q"); tuitest.IsQuit(cmd) {
 		t.Fatal("q quit the app from the picker")
 	}
 }
 
 func TestFilterThenOpen(t *testing.T) {
 	m := newTestModel(t, "", pickerBackend())
-	m = drain(t, m, m.Init())
+	m = tuitest.Drain(t, m, m.Init())
 
-	m = pressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
-	if m.popup.IsOpen() || m.board.project != "BETA" {
+	m = tuitest.PressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
+	if m.Popup.IsOpen() || m.board.project != "BETA" {
 		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.board.project)
 	}
 }
