@@ -223,7 +223,7 @@ func TestHelpFollowsSearchState(t *testing.T) {
 	quick, assignees := testFilters()
 	p := newPicker(quick, assignees, nil)
 	v := view(p)
-	for _, want := range []string{"tab/shift+tab switch", "/ search", "enter apply", "esc close"} {
+	for _, want := range []string{"tab next", "shift+tab prev", "/ search", "enter apply", "esc close"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("help missing %q", want)
 		}

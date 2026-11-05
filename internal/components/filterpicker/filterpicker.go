@@ -22,13 +22,12 @@ type SelectedMsg struct {
 }
 
 var (
-	nextTab = key.NewBinding(key.WithKeys("tab"))
-	prevTab = key.NewBinding(key.WithKeys("shift+tab"))
+	nextTab = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next"))
+	prevTab = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev"))
 	left    = key.NewBinding(key.WithKeys("h", "left"))
 	right   = key.NewBinding(key.WithKeys("l", "right"))
 	blur    = key.NewBinding(key.WithKeys("esc"))
 	close   = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close"))
-	tabHelp = key.NewBinding(key.WithKeys("tab", "shift+tab"), key.WithHelp("tab/shift+tab", "switch"))
 )
 
 // helpKeys is a help footer made of a fixed list of bindings.
@@ -183,7 +182,7 @@ func (p *Picker) View() tea.View {
 	header := []string{strings.Join(tabs, ""), ""}
 	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
 	body := strings.Split(p.form.View(), "\n")
-	bindings := append(helpKeys{tabHelp}, p.selectField.KeyBinds()...)
+	bindings := append(helpKeys{nextTab, prevTab}, p.selectField.KeyBinds()...)
 	if !p.consumesEsc() {
 		bindings = append(bindings, close)
 	}
