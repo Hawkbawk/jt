@@ -16,8 +16,8 @@ import (
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui"
 	"github.com/hawkbawk/jt/internal/tui/board"
+	"github.com/hawkbawk/jt/internal/tui/search"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -127,7 +127,7 @@ func runBoard(*cobra.Command, []string) error {
 // screenBackend is the Jira backend the board and search screens run on.
 type screenBackend interface {
 	board.Backend
-	tui.Backend
+	search.Backend
 }
 
 // openBackend returns the Jira backend and settings the screens run on: demo

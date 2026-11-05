@@ -6,13 +6,13 @@ import (
 
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui"
 	"github.com/hawkbawk/jt/internal/tui/board"
+	"github.com/hawkbawk/jt/internal/tui/search"
 )
 
 var (
-	_ board.Backend = (*fakejira.Backend)(nil)
-	_ tui.Backend   = (*fakejira.Backend)(nil)
+	_ board.Backend  = (*fakejira.Backend)(nil)
+	_ search.Backend = (*fakejira.Backend)(nil)
 )
 
 func TestBoardLoadsAndMovesPersist(t *testing.T) {
