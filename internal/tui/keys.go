@@ -11,7 +11,7 @@ type boardKeys struct {
 	view, comments, edit, yank, open   key.Binding
 	move, assign                       key.Binding
 	refresh, projects, quit, close     key.Binding
-	filter, nextTab, prevTab           key.Binding
+	filter, nextTab                    key.Binding
 	forceQuit, interrupt, confirm      key.Binding
 	deny, accept, send, blur           key.Binding
 	toggle, undo, theme, back          key.Binding
@@ -55,7 +55,6 @@ var keys = boardKeys{
 	undo:      key.NewBinding(key.WithKeys("u")),
 	back:      key.NewBinding(key.WithKeys("esc", "/", "shift+tab"), key.WithHelp("esc", "edit search")),
 	nextTab:   key.NewBinding(key.WithKeys("tab")),
-	prevTab:   key.NewBinding(key.WithKeys("shift+tab")),
 
 	// help hides bindings without keys, so the help-only ones list theirs.
 	navigate:  key.NewBinding(key.WithKeys("h", "j", "k", "l"), key.WithHelp("hjkl", "navigate")),
