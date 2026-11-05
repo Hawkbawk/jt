@@ -22,12 +22,12 @@ type SelectedMsg struct {
 }
 
 var (
-	nextTab = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next"))
-	prevTab = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev"))
-	left    = key.NewBinding(key.WithKeys("h", "left"))
-	right   = key.NewBinding(key.WithKeys("l", "right"))
-	blur    = key.NewBinding(key.WithKeys("esc"))
-	close   = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close"))
+	nextTab  = key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next"))
+	prevTab  = key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "prev"))
+	left     = key.NewBinding(key.WithKeys("h", "left"))
+	right    = key.NewBinding(key.WithKeys("l", "right"))
+	blur     = key.NewBinding(key.WithKeys("esc"))
+	closeKey = key.NewBinding(key.WithKeys("esc", "q"), key.WithHelp("esc", "close"))
 )
 
 // helpKeys is a help footer made of a fixed list of bindings.
@@ -144,7 +144,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(km, blur) && p.consumesEsc():
 			_, cmd := p.form.Update(msg)
 			return p, cmd
-		case !p.Filtering() && key.Matches(km, close):
+		case !p.Filtering() && key.Matches(km, closeKey):
 			return p, popup.Close()
 		case key.Matches(km, nextTab) || (!p.Filtering() && key.Matches(km, right)):
 			p.switchTab(1)
@@ -184,7 +184,7 @@ func (p *Picker) View() tea.View {
 	body := strings.Split(p.form.View(), "\n")
 	bindings := append(helpKeys{nextTab, prevTab}, p.selectField.KeyBinds()...)
 	if !p.consumesEsc() {
-		bindings = append(bindings, close)
+		bindings = append(bindings, closeKey)
 	}
 	return tea.NewView(popup.Stack(p.height, header, body, helpView(bindings, p.width)))
 }
