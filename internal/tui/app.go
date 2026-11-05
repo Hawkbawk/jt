@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
+	"github.com/hawkbawk/jt/internal/components/filterpicker"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -157,9 +158,9 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.board.update(msg)
 		return m, nil
 
-	case filterSelectedMsg:
+	case filterpicker.SelectedMsg:
 		m.status = ""
-		return m, m.runWithSpinner(m.board.setFilter(msg.filter))
+		return m, m.runWithSpinner(m.board.setFilter(msg.Filter))
 
 	case actionDoneMsg:
 		m.status = msg.display()
@@ -227,7 +228,7 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
 	}
 	if key.Matches(msg, keys.filter) && m.board.nav != nil {
-		return m, popup.Open(newFilterPopup(m.board.quick, m.board.assignees, m.board.filter))
+		return m, popup.Open(filterpicker.New(m.board.quick, m.board.assignees, m.board.filter))
 	}
 	if sel == nil {
 		return m, nil
