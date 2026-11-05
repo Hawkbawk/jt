@@ -23,12 +23,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-)
-
-var (
-	top    = key.NewBinding(key.WithKeys("g"))
-	bottom = key.NewBinding(key.WithKeys("G"))
 )
 
 // Backend loads issues and their comments.
@@ -54,6 +50,7 @@ var lastID atomic.Int64
 // Model shows part of an issue as scrollable text under a title. Build one with
 // Details or Comments.
 type Model struct {
+	top, bottom key.Binding
 	// id tags the model's loads, so a late response that reaches a newer model
 	// for the same issue is ignored.
 	id      int64
@@ -99,6 +96,7 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 	vp.SetHorizontalStep(4)
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title()))
 	return &Model{
+		top: keys.Get().Top, bottom: keys.Get().Bottom,
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
 		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
 	}
@@ -190,10 +188,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case tea.KeyPressMsg:
 		switch {
-		case key.Matches(msg, top):
+		case key.Matches(msg, m.top):
 			m.vp.GotoTop()
 			return m, nil
-		case key.Matches(msg, bottom):
+		case key.Matches(msg, m.bottom):
 			m.vp.GotoBottom()
 			return m, nil
 		}

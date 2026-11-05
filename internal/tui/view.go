@@ -16,5 +16,5 @@ func (m BoardModel) render() string {
 	}
 	body := m.board.view(m.width, m.bodyHeight(), m.spinner.View())
 	body = m.popup.Overlay(body)
-	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(m.board.headerParts(m.spinner.View())), body, m.footerView(keys))
+	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(m.board.headerParts(m.spinner.View())), body, m.footerView(newBoardKeys()))
 }

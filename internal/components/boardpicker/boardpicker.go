@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -41,11 +42,17 @@ type FavoriteMsg struct {
 	ID int
 }
 
-var (
-	openKey  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
-	closeKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
-	favKey   = key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite"))
-)
+// keyMap is the picker's key bindings.
+type keyMap struct {
+	popup.KeyMap
+	open, favorite key.Binding
+}
+
+func newKeyMap() keyMap {
+	k := keys.Get()
+	open := keys.Describe(k.Accept, "open")
+	return keyMap{KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite), open: open, favorite: k.Favorite}
+}
 
 var lastID atomic.Int64
 
@@ -76,6 +83,7 @@ func Load(src Source, project string, id int64) tea.Cmd {
 // Picker lists a project's boards and closes its popup with a SelectedMsg when
 // one is picked.
 type Picker struct {
+	keys    keyMap
 	id      int64
 	src     Source
 	project string
@@ -90,13 +98,14 @@ type Picker struct {
 // New builds a picker for project's boards, marking the board with the
 // current ID.
 func New(src Source, project string, current int) *Picker {
+	km := newKeyMap()
 	l := list.New(nil, styles.ListDelegate(), 0, 0)
 	l.Title = "Select a board"
 	l.Styles.Title = styles.Title()
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{openKey, favKey, closeKey}
+		return km.ShortHelp()
 	}
 	return &Picker{
 		id:      lastID.Add(1),
@@ -105,6 +114,7 @@ func New(src Source, project string, current int) *Picker {
 		current: current,
 		spin:    spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
 		list:    l,
+		keys:    km,
 	}
 }
 
@@ -176,7 +186,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
-		if key.Matches(msg, closeKey) {
+		if key.Matches(msg, p.keys.Close()) {
 			return popup.Close()
 		}
 		return nil
@@ -185,17 +195,17 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return p.forward(msg)
 	}
 	switch {
-	case key.Matches(msg, closeKey):
+	case key.Matches(msg, p.keys.Close()):
 		if !p.list.IsFiltered() {
 			return popup.Close()
 		}
-	case key.Matches(msg, favKey):
+	case key.Matches(msg, p.keys.favorite):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil
 		}
 		return func() tea.Msg { return FavoriteMsg{ID: sel.ID} }
-	case key.Matches(msg, openKey):
+	case key.Matches(msg, p.keys.open):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil

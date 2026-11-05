@@ -12,6 +12,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -197,7 +198,7 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(msg, keys.projects):
+	case key.Matches(msg, keys.Get().Projects):
 		// A popup may hold unsaved work, so it has to be closed first.
 		if m.popup.IsOpen() {
 			return m, nil
@@ -210,14 +211,14 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, keys.quit) {
+	if key.Matches(msg, keys.Get().Quit) {
 		return m, tea.Quit
 	}
 	if m.board.move(msg) {
 		return m, nil
 	}
 	sel := m.board.selected()
-	if key.Matches(msg, keys.refresh) && m.board.project != "" && !m.board.loading {
+	if key.Matches(msg, keys.Get().Refresh) && m.board.project != "" && !m.board.loading {
 		focusKey := ""
 		if sel != nil {
 			focusKey = sel.Key
@@ -225,13 +226,13 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
-	if key.Matches(msg, keys.theme) {
+	if key.Matches(msg, keys.Get().Theme) {
 		return m, popup.Open(themepicker.New())
 	}
-	if key.Matches(msg, keys.boards) && m.board.nav != nil {
+	if key.Matches(msg, keys.Get().Boards) && m.board.nav != nil {
 		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
 	}
-	if key.Matches(msg, keys.filter) && m.board.nav != nil {
+	if key.Matches(msg, keys.Get().Filter) && m.board.nav != nil {
 		return m, popup.Open(filterpicker.New(m.board.quick, m.board.assignees, m.board.filter))
 	}
 	if sel == nil {

@@ -3,7 +3,9 @@ package tui
 import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
@@ -16,9 +18,9 @@ type quitGuard struct {
 // handle reports whether msg was consumed and whether the app should exit.
 func (q *quitGuard) handle(msg tea.KeyPressMsg) (consumed, quit bool) {
 	switch {
-	case key.Matches(msg, keys.forceQuit):
+	case key.Matches(msg, keys.Get().ForceQuit):
 		return true, true
-	case key.Matches(msg, keys.interrupt):
+	case key.Matches(msg, keys.Get().Interrupt):
 		if q.confirming {
 			return true, true
 		}
@@ -29,14 +31,16 @@ func (q *quitGuard) handle(msg tea.KeyPressMsg) (consumed, quit bool) {
 		return false, false
 	}
 	switch {
-	case key.Matches(msg, keys.confirm):
+	case key.Matches(msg, keys.Get().Confirm):
 		return true, true
-	case key.Matches(msg, keys.deny):
+	case key.Matches(msg, keys.Get().Deny):
 		q.confirming = false
 	}
 	return true, false
 }
 
 func (q quitGuard) view() string {
-	return styles.Error().Bold(true).Padding(0, 1).Render("Quit jt? (y/n, ctrl+c again to quit)")
+	h := styles.Help()
+	prompt := styles.Error().Bold(true).Render("Quit jt?")
+	return lipgloss.NewStyle().Padding(0, 1).Render(prompt + " " + h.View(newQuitKeys()))
 }

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
@@ -47,7 +48,7 @@ func (p *detailPopup) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd := p.issue.Update(msg)
 		return p, cmd
 	case tea.KeyPressMsg:
-		if key.Matches(msg, keys.close) {
+		if key.Matches(msg, keys.Get().Close) {
 			return p, popup.Close()
 		}
 	}
@@ -60,7 +61,7 @@ func (p *detailPopup) View() tea.View {
 	var hint string
 	if p.issue.Ready() {
 		prefix := styles.Dim().Render(fmt.Sprintf("%3.f%% · ", p.issue.ScrollPercent()*100))
-		hint = prefix + helpView(viewHelpKeys, p.issue.Width()-lipgloss.Width(prefix))
+		hint = prefix + helpView(newViewKeys(), p.issue.Width()-lipgloss.Width(prefix))
 	}
 	return tea.NewView(strings.Join([]string{p.issue.View().Content, hint}, "\n"))
 }

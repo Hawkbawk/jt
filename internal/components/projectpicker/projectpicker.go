@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -42,11 +43,21 @@ type SelectedMsg struct {
 	Key string
 }
 
-var (
-	openKey  = key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open"))
-	closeKey = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
-	favKey   = key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite"))
-)
+// keyMap is the picker's key bindings. The close binding only shows when the
+// picker can be cancelled.
+type keyMap struct {
+	popup.KeyMap
+	open, favorite key.Binding
+}
+
+func newKeyMap(cancellable bool) keyMap {
+	k := keys.Get()
+	open := keys.Describe(k.Accept, "open")
+	return keyMap{
+		KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite).WithCloseShown(cancellable),
+		open:   open, favorite: k.Favorite,
+	}
+}
 
 var lastID atomic.Int64
 
@@ -77,6 +88,7 @@ func Load(src Source, id int64) tea.Cmd {
 // is picked. The caller can keep the projects from the LoadedMsg and give them
 // to later pickers.
 type Picker struct {
+	keys        keyMap
 	id          int64
 	src         Source
 	spin        spinner.Model
@@ -91,17 +103,19 @@ type Picker struct {
 // New builds a picker. It loads the projects unless it's given them. A picker
 // that isn't cancellable can only be closed by picking a project.
 func New(src Source, projects []jira.Project, cancellable bool) *Picker {
+	km := newKeyMap(cancellable)
 	return &Picker{
+		keys:        km,
 		id:          lastID.Add(1),
 		src:         src,
 		spin:        spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
 		cancellable: cancellable,
-		list:        newList(cancellable),
+		list:        newList(km),
 		projects:    projects,
 	}
 }
 
-func newList(cancellable bool) list.Model {
+func newList(km keyMap) list.Model {
 	l := list.New(nil, styles.ListDelegate(), 0, 0)
 	l.Title = "Select a project"
 	l.Styles.Title = styles.Title()
@@ -110,11 +124,7 @@ func newList(cancellable bool) list.Model {
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		keys := []key.Binding{openKey, favKey}
-		if cancellable {
-			keys = append(keys, closeKey)
-		}
-		return keys
+		return km.ShortHelp()
 	}
 	return l
 }
@@ -194,7 +204,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
-		if key.Matches(msg, closeKey) && p.cancellable {
+		if key.Matches(msg, p.keys.Close()) && p.cancellable {
 			return popup.Close()
 		}
 		return nil
@@ -203,7 +213,7 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return p.forward(msg)
 	}
 	switch {
-	case key.Matches(msg, closeKey):
+	case key.Matches(msg, p.keys.Close()):
 		if p.list.IsFiltered() {
 			break
 		}
@@ -211,13 +221,13 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return popup.Close()
 		}
 		return nil
-	case key.Matches(msg, favKey):
+	case key.Matches(msg, p.keys.favorite):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil
 		}
 		return func() tea.Msg { return FavoriteMsg{Key: sel.Key} }
-	case key.Matches(msg, openKey):
+	case key.Matches(msg, p.keys.open):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil

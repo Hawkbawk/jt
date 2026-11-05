@@ -404,7 +404,7 @@ func TestFieldsCloseWithChangesAsksFirst(t *testing.T) {
 		t.Fatal("what is still being entered shouldn't count or offer saving")
 	}
 	h.press("enter")
-	if !strings.Contains(h.view(), "1 unsaved change · ctrl+s to save") {
+	if v := h.view(); !strings.Contains(v, "1 unsaved change") || !strings.Contains(v, "ctrl+s") {
 		t.Fatal("kept changes should be called out")
 	}
 	h.press("esc")

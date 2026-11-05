@@ -13,6 +13,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/components/userselect"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -47,7 +48,9 @@ func (a Assigned) Status() string {
 	return "Assigned " + a.Key + " to " + a.To
 }
 
-var keyClose = key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel"))
+func newKeyMap() popup.KeyMap {
+	return popup.NewKeyMap(keys.Describe(keys.Get().Dismiss, "cancel"))
+}
 
 type assignDoneMsg struct {
 	id       int64
@@ -60,6 +63,7 @@ type assignDoneMsg struct {
 
 // Model searches for the person to assign an issue to.
 type Model struct {
+	keys     popup.KeyMap
 	id       int64
 	issueKey string
 	backend  Backend
@@ -75,7 +79,7 @@ type Model struct {
 
 // New starts on the issue's current assignee.
 func New(b Backend, iss jira.Issue) *Model {
-	p := &Model{id: pane.NewID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: pane.NewSpinner()}
+	p := &Model{id: pane.NewID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: pane.NewSpinner(), keys: newKeyMap()}
 	p.picker = userselect.New("Assignee", searchUsers(b, iss.Key)).Value(&p.assignee)
 	p.form = pane.NewForm(p.picker.Field())
 	return p
@@ -105,7 +109,7 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, p.form.Init()
 	case tea.KeyPressMsg:
 		// Typed text always goes to the form, so only esc closes.
-		if key.Matches(msg, keyClose) {
+		if key.Matches(msg, p.keys.Close()) {
 			return p, popup.Close()
 		}
 	}
@@ -135,18 +139,11 @@ func (p *Model) View() tea.View {
 func (p *Model) footer() string {
 	h := styles.Help()
 	h.SetWidth(max(0, p.width))
-	return h.View(bindingList(append(p.form.KeyBinds(), keyClose)))
+	km := p.keys.WithForm(p.form.KeyBinds(), false)
+	return h.View(km)
 }
 
 // searchUsers looks up people who can be put on the issue.
 func searchUsers(b Backend, issueKey string) usersearch.Func {
 	return func(query string) ([]jira.Option, error) { return b.SearchUsers(issueKey, query) }
 }
-
-type bindingList []key.Binding
-
-// ShortHelp implements help.KeyMap.
-func (b bindingList) ShortHelp() []key.Binding { return b }
-
-// FullHelp implements help.KeyMap.
-func (b bindingList) FullHelp() [][]key.Binding { return [][]key.Binding{b} }

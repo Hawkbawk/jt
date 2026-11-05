@@ -11,6 +11,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/system"
 	"github.com/hawkbawk/jt/internal/tui/popup"
@@ -53,19 +54,19 @@ func newIssueActions(b Backend) issueActions {
 func (a issueActions) handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	b := a.backend
 	switch {
-	case key.Matches(msg, keys.view):
+	case key.Matches(msg, keys.Get().View):
 		return popup.Open(newDetailPopup(b, iss.Key, a.md))
-	case key.Matches(msg, keys.comments):
+	case key.Matches(msg, keys.Get().Comments):
 		return popup.Open(issuecomments.New(b, iss.Key, a.md))
-	case key.Matches(msg, keys.move):
+	case key.Matches(msg, keys.Get().Move):
 		return popup.Open(issuemove.New(b, iss))
-	case key.Matches(msg, keys.assign):
+	case key.Matches(msg, keys.Get().Assign):
 		return popup.Open(issueassign.New(b, iss))
-	case key.Matches(msg, keys.edit):
+	case key.Matches(msg, keys.Get().Edit):
 		return popup.Open(issueedit.New(b, iss))
-	case key.Matches(msg, keys.yank):
+	case key.Matches(msg, keys.Get().Yank):
 		return runAction(a.copyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
-	case key.Matches(msg, keys.open):
+	case key.Matches(msg, keys.Get().Open):
 		return runAction(a.openURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
 	}
 	return nil

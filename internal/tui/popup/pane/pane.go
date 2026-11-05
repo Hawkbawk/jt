@@ -22,29 +22,6 @@ func Header(title, issueKey string) []string {
 	return []string{styles.Title().Render(title + " · " + issueKey), ""}
 }
 
-// Keys is the help footer for the move, assign and edit panes. The bindings
-// only carry help text; the matching happens against each pane's own keys.
-type Keys struct {
-	choose, apply, cancel key.Binding
-}
-
-// HelpKeys is the footer the panes share.
-var HelpKeys = Keys{
-	choose: key.NewBinding(key.WithHelp("j/k", "select")),
-	apply:  key.NewBinding(key.WithHelp("enter", "apply")),
-	cancel: key.NewBinding(key.WithHelp("esc", "cancel")),
-}
-
-// ShortHelp implements help.KeyMap.
-func (k Keys) ShortHelp() []key.Binding {
-	return []key.Binding{k.choose, k.apply, k.cancel}
-}
-
-// FullHelp implements help.KeyMap.
-func (k Keys) FullHelp() [][]key.Binding {
-	return [][]key.Binding{k.ShortHelp()}
-}
-
 // NewSpinner returns a themed spinner.
 func NewSpinner() spinner.Model {
 	return spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title()))
