@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"errors"
@@ -18,14 +18,14 @@ func boardsBackend() *tuitest.Backend {
 	return fb
 }
 
-func newSettingsModel(t *testing.T, project string, fb *tuitest.Backend, fs *tuitest.Settings) BoardModel {
+func newSettingsModel(t *testing.T, project string, fb *tuitest.Backend, fs *tuitest.Settings) Model {
 	t.Helper()
 	fb.Project = project
 	if fb.BoardData == nil {
 		fb.BoardData = testBoard()
 	}
 	next, _ := New(fb, fs).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	return tuitest.Drain(t, next.(BoardModel), next.(BoardModel).Init())
+	return tuitest.Drain(t, next.(Model), next.(Model).Init())
 }
 
 func TestPickingABoardOpensItWithoutSaving(t *testing.T) {

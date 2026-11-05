@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"testing"
@@ -15,7 +15,7 @@ func pickerBackend() *tuitest.Backend {
 	}}
 }
 
-func projects(t *testing.T, m BoardModel) *projectpicker.Picker {
+func projects(t *testing.T, m Model) *projectpicker.Picker {
 	t.Helper()
 	p, ok := m.Popup.Content().(*projectpicker.Picker)
 	if !ok {

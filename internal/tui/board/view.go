@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -6,11 +6,11 @@ import (
 )
 
 // View implements tea.Model.
-func (m BoardModel) View() tea.View {
+func (m Model) View() tea.View {
 	return m.WithView(m.render())
 }
 
-func (m BoardModel) render() string {
+func (m Model) render() string {
 	if m.Width == 0 {
 		return ""
 	}

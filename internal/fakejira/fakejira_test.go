@@ -7,9 +7,13 @@ import (
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui"
+	"github.com/hawkbawk/jt/internal/tui/board"
 )
 
-var _ tui.Backend = (*fakejira.Backend)(nil)
+var (
+	_ board.Backend = (*fakejira.Backend)(nil)
+	_ tui.Backend   = (*fakejira.Backend)(nil)
+)
 
 func TestBoardLoadsAndMovesPersist(t *testing.T) {
 	f := fakejira.New()
