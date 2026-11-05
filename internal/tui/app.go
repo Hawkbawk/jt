@@ -8,6 +8,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
+	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
@@ -92,7 +93,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.restyle()
 		return m, m.updatePopup(msg)
 
-	case themeSelectedMsg:
+	case themepicker.SelectedMsg:
 		return m, m.selectTheme(msg)
 
 	case themeSavedMsg:
@@ -220,7 +221,7 @@ func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.runWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.theme) {
-		return m, popup.Open(newThemePopup())
+		return m, popup.Open(themepicker.New())
 	}
 	if key.Matches(msg, keys.boards) && m.board.nav != nil {
 		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
