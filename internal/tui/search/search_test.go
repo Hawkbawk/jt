@@ -1,4 +1,4 @@
-package tui
+package search
 
 import (
 	"errors"
@@ -17,29 +17,29 @@ import (
 
 var searchNow = time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC)
 
-func newTestSearch(t *testing.T, fb *tuitest.Backend) SearchModel {
+func newTestSearch(t *testing.T, fb *tuitest.Backend) Model {
 	t.Helper()
-	m := NewSearch(fb, &tuitest.Settings{})
+	m := New(fb, &tuitest.Settings{})
 	m.form.now = func() time.Time { return searchNow }
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	m = tuitest.Drain(t, next.(SearchModel), cmd)
+	m = tuitest.Drain(t, next.(Model), cmd)
 	return tuitest.Drain(t, m, m.Init())
 }
 
 // searchSend feeds msgs to the model one at a time, then returns it and the
 // last command.
-func searchSend(m SearchModel, msgs ...tea.Msg) (SearchModel, tea.Cmd) {
+func searchSend(m Model, msgs ...tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, msg := range msgs {
 		var next tea.Model
 		next, cmd = m.Update(msg)
-		m = next.(SearchModel)
+		m = next.(Model)
 	}
 	return m, cmd
 }
 
 // focusField presses tab until the field has focus.
-func focusField(t *testing.T, m SearchModel, field string) SearchModel {
+func focusField(t *testing.T, m Model, field string) Model {
 	t.Helper()
 	for i := 0; m.form.focused() != field; i++ {
 		if i >= len(m.form.fields) {
@@ -50,22 +50,22 @@ func focusField(t *testing.T, m SearchModel, field string) SearchModel {
 	return m
 }
 
-func typeInto(t *testing.T, m SearchModel, field, text string) SearchModel {
+func typeInto(t *testing.T, m Model, field, text string) Model {
 	t.Helper()
 	return searchType(t, focusField(t, m, field), text)
 }
 
-func searchType(t *testing.T, m SearchModel, text string) SearchModel {
+func searchType(t *testing.T, m Model, text string) Model {
 	t.Helper()
 	if m.Popup.IsOpen() {
 		for _, r := range text {
 			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
-			m = tuitest.Drain(t, next.(SearchModel), cmd)
+			m = tuitest.Drain(t, next.(Model), cmd)
 		}
 		return m
 	}
 	next, cmd := m.Update(tea.PasteMsg{Content: text})
-	return tuitest.Drain(t, next.(SearchModel), cmd)
+	return tuitest.Drain(t, next.(Model), cmd)
 }
 
 func TestSearchStartsOnDefaultProject(t *testing.T) {
@@ -290,7 +290,7 @@ func foundIssues() []jira.Issue {
 	}
 }
 
-func searched(t *testing.T) (SearchModel, *tuitest.Backend) {
+func searched(t *testing.T) (Model, *tuitest.Backend) {
 	t.Helper()
 	fb := &tuitest.Backend{Project: "DEMO", Found: foundIssues()}
 	m := newTestSearch(t, fb)
@@ -500,7 +500,7 @@ func TestSearchOpenUsesHoveredIssueAfterResize(t *testing.T) {
 	m.actions.OpenURL = func(s string) error { opened = s; return nil }
 	m = tuitest.PressDrain(t, m, "G")
 	next, cmd := m.Update(tea.WindowSizeMsg{Width: 50, Height: 20})
-	m = tuitest.Drain(t, next.(SearchModel), cmd)
+	m = tuitest.Drain(t, next.(Model), cmd)
 	m = tuitest.PressDrain(t, m, "o")
 	if opened != "https://jira.example.com/browse/DEMO-3" {
 		t.Fatalf("opened = %q", opened)
@@ -529,7 +529,7 @@ func TestSearchResizesWithinWindow(t *testing.T) {
 		{Width: 50, Height: 20}, {Width: 24, Height: 10}, {Width: 8, Height: 4}, {Width: 120, Height: 40},
 	} {
 		next, cmd := m.Update(size)
-		m = tuitest.Drain(t, next.(SearchModel), cmd)
+		m = tuitest.Drain(t, next.(Model), cmd)
 		content := m.View().Content
 		if lipgloss.Width(content) > size.Width || lipgloss.Height(content) > size.Height {
 			t.Errorf("view %dx%d exceeds window %dx%d", lipgloss.Width(content), lipgloss.Height(content), size.Width, size.Height)
