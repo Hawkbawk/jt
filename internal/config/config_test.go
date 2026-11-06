@@ -109,13 +109,11 @@ func TestSaveThemeIsSafeConcurrently(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for _, th := range []string{"dracula", "nord", "gruvbox_dark_hard", "catppuccin_mocha"} {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err := cfg.SaveTheme(th); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

@@ -87,7 +87,7 @@ func TestSearchStartsOnDefaultProject(t *testing.T) {
 func TestSearchFormHasTwoColumns(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &tuitest.Backend{})
-	for _, line := range strings.Split(ansi.Strip(m.render()), "\n") {
+	for line := range strings.SplitSeq(ansi.Strip(m.render()), "\n") {
 		if strings.Contains(line, "Issue key") && strings.Contains(line, "Order") {
 			return
 		}

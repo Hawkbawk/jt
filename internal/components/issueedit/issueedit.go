@@ -139,7 +139,7 @@ func (v *fieldValue) with(e entered) jira.EditField {
 	switch f.Kind {
 	case jira.FieldLabels:
 		f.Chosen = nil
-		for _, l := range strings.Fields(e.text) {
+		for l := range strings.FieldsSeq(e.text) {
 			f.Chosen = append(f.Chosen, jira.Option{ID: l, Name: l})
 		}
 	case jira.FieldSelect, jira.FieldUser:

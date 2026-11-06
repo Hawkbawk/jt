@@ -311,14 +311,12 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 	}
 	f := iss.Fields
 	d := &IssueDetail{
-		Issue: Issue{
-			Key:      iss.Key,
-			Summary:  f.Summary,
-			Status:   f.Status.Name,
-			Assignee: Option{Name: f.Assignee.Name},
-			Type:     f.IssueType.Name,
-			Priority: f.Priority.Name,
-		},
+		Key:         iss.Key,
+		Summary:     f.Summary,
+		Status:      f.Status.Name,
+		Assignee:    Option{Name: f.Assignee.Name},
+		Type:        f.IssueType.Name,
+		Priority:    f.Priority.Name,
 		Description: toMarkdown(f.Description),
 		Reporter:    f.Reporter.Name,
 		Labels:      f.Labels,

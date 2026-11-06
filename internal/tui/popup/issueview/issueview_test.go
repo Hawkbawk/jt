@@ -26,7 +26,7 @@ func plain(md string, _ int) string { return md }
 
 func detail() *jira.IssueDetail {
 	return &jira.IssueDetail{
-		Issue:       jira.Issue{Key: "T-1", Summary: "one", Status: "Open"},
+		Key: "T-1", Summary: "one", Status: "Open",
 		Description: strings.Repeat("line\n", 100),
 	}
 }

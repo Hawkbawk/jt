@@ -7,6 +7,7 @@ package fakejira
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"regexp"
 	"slices"
@@ -329,9 +330,7 @@ func (b *Backend) Edit(key string, fields []jira.EditField) error {
 		}
 		updates[f.ID] = v
 	}
-	for id, v := range updates {
-		iss.Values[id] = v
-	}
+	maps.Copy(iss.Values, updates)
 	iss.Updated = b.now()
 	return nil
 }
