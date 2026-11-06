@@ -1,5 +1,6 @@
-// Package tui implements jt's bubbletea interface.
-package tui
+// Package board is the board screen: the kanban view of a project's board, its
+// pickers and the issue popups opened from it.
+package board
 
 import (
 	"charm.land/bubbles/v2/key"
@@ -19,22 +20,20 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
-// Backend is the Jira functionality the TUI depends on.
+// Backend is the Jira functionality the board depends on.
 type Backend interface {
 	screen.IssueBackend
 	DefaultProject() string
 	SetDefaultProject(project string)
 	SetDefaultBoard(id int)
 	Projects() ([]jira.Project, error)
-	IssueTypes() ([]string, error)
-	Search(jql string) ([]jira.Issue, error)
 	Boards(project string) ([]jira.BoardSummary, error)
 	Board(project string, boardID int, filterJQL string) (*jira.Board, error)
 }
 
-// BoardModel is the board's root bubbletea model. It routes input and messages to the
+// Model is the board's root bubbletea model. It routes input and messages to the
 // board and at most one popup, and controls high-level or broadly used state.
-type BoardModel struct {
+type Model struct {
 	screen.Layout
 
 	// settings is the full settings, which also saves the board and project.
@@ -48,8 +47,8 @@ type BoardModel struct {
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend, settings Settings) BoardModel {
-	m := BoardModel{
+func New(backend Backend, settings Settings) Model {
+	m := Model{
 		Layout:   screen.NewLayout(settings),
 		settings: settings,
 		board:    newBoardPane(backend),
@@ -59,13 +58,13 @@ func New(backend Backend, settings Settings) BoardModel {
 }
 
 // WithWarning shows text in the status line until the next action replaces it.
-func (m BoardModel) WithWarning(text string) BoardModel {
+func (m Model) WithWarning(text string) Model {
 	m.Status = styles.Warn().Render(text)
 	return m
 }
 
 // Init implements tea.Model.
-func (m BoardModel) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	if m.board.project == "" {
 		return popup.Open(m.newProjectPopup(false))
 	}
@@ -73,12 +72,12 @@ func (m BoardModel) Init() tea.Cmd {
 }
 
 // busy reports whether anything is waiting on the network.
-func (m BoardModel) busy() bool {
+func (m Model) busy() bool {
 	return m.board.loading
 }
 
 // Update implements tea.Model.
-func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -172,7 +171,7 @@ func (m BoardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // selectBoard opens the picked board.
-func (m BoardModel) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd) {
+func (m Model) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd) {
 	if msg.Project != m.board.project {
 		return m, nil
 	}
@@ -180,11 +179,11 @@ func (m BoardModel) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd
 	return m, m.RunWithSpinner(m.board.openBoard(msg.Board.ID))
 }
 
-func (m BoardModel) newProjectPopup(cancellable bool) *projectpicker.Picker {
+func (m Model) newProjectPopup(cancellable bool) *projectpicker.Picker {
 	return projectpicker.New(m.board.backend, m.projects, cancellable)
 }
 
-func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.Quit.Handle(msg); consumed {
 		if quit {
 			return m, tea.Quit
@@ -205,7 +204,7 @@ func (m BoardModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleBoardKey(msg)
 }
 
-func (m BoardModel) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.Get().Quit) {
 		return m, tea.Quit
 	}

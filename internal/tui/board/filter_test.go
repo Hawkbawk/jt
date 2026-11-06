@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"strings"
@@ -11,7 +11,7 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func filterModel(t *testing.T) (BoardModel, *tuitest.Backend) {
+func filterModel(t *testing.T) (Model, *tuitest.Backend) {
 	t.Helper()
 	fb := &tuitest.Backend{BoardData: testBoard()}
 	fb.BoardData.QuickFilters = []jira.Filter{{Name: "Only Bugs", JQL: "type = Bug"}, {Name: "Recent", JQL: "updated >= -7d"}}

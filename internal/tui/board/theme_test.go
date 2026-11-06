@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"context"
@@ -22,7 +22,7 @@ func useTint(t *testing.T, tt *tint.Tint) {
 	tint.SetTint(tt)
 }
 
-func openThemePopup(t *testing.T, fs *tuitest.Settings) BoardModel {
+func openThemePopup(t *testing.T, fs *tuitest.Settings) Model {
 	t.Helper()
 	m := newTestModel(t, "TEST", &tuitest.Backend{})
 	m.Settings = fs
@@ -109,7 +109,7 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 	m = tuitest.Drain(t, m, m.Init())
 
 	next, _ := m.Update(themepicker.SelectedMsg{Tint: tint.TintGruvboxLightHard})
-	m = next.(BoardModel)
+	m = next.(Model)
 	if m.Spinner.Style.GetForeground() != tint.TintGruvboxLightHard.Blue {
 		t.Error("picking a tint should restyle the spinner")
 	}
@@ -117,7 +117,7 @@ func TestThemeChangesRestyleEverything(t *testing.T) {
 	// The terminal's theme changing arrives as a tuimsg.ThemeChanged.
 	tint.SetTint(tint.TintCatppuccinMocha)
 	next, _ = m.Update(tuimsg.ThemeChanged{})
-	m = next.(BoardModel)
+	m = next.(Model)
 	if m.Spinner.Style.GetForeground() != tint.TintCatppuccinMocha.Blue {
 		t.Error("a tint change from outside jt should restyle the spinner")
 	}

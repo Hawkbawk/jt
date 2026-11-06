@@ -17,6 +17,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui"
+	"github.com/hawkbawk/jt/internal/tui/board"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -116,16 +117,22 @@ func runBoard(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	m := tui.New(backend, settings)
+	m := board.New(backend, settings)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
 	return run(m)
 }
 
+// screenBackend is the Jira backend the board and search screens run on.
+type screenBackend interface {
+	board.Backend
+	tui.Backend
+}
+
 // openBackend returns the Jira backend and settings the screens run on: demo
 // data with --fake, otherwise the connection from the settings file.
-func openBackend() (tui.Backend, tui.Settings, error) {
+func openBackend() (screenBackend, board.Settings, error) {
 	if fake {
 		if version != "" {
 			return nil, nil, errors.New("the --fake flag is only available in development builds")
