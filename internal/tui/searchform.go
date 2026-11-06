@@ -251,11 +251,11 @@ func (f *searchForm) query(now time.Time) (jira.SearchQuery, error) {
 		return q, fmt.Errorf("project %q isn't a project you can see", v.project)
 	}
 	if q.IssueType, ok = f.resolveType(v.issueType); !ok {
-		return q, fmt.Errorf("Issue type: %q isn't an issue type you can use", v.issueType)
+		return q, fmt.Errorf("Issue type: %q isn't an issue type you can use", v.issueType) //nolint:staticcheck // ST1005: "Issue" starts the message as shown in the UI.
 	}
 	var err error
 	if q.Keys, err = jira.ParseKeys(v.keys); err != nil {
-		return q, fmt.Errorf("Issue key: %w", err)
+		return q, fmt.Errorf("Issue key: %w", err) //nolint:staticcheck // ST1005: "Issue" starts the message as shown in the UI.
 	}
 	if q.Created, err = parseTimeRange(v.created, now); err != nil {
 		return q, fmt.Errorf("created range: %w", err)

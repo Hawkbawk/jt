@@ -4,158 +4,20 @@ import (
 	"errors"
 	"strings"
 	"testing"
-	"time"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-type fakeBackend struct {
-	defaultProject string
-	defaultBoard   int
-	projects       []jira.Project
-	board          *jira.Board
-	boardErr       error
-	detail         *jira.IssueDetail
-	commentList    *jira.CommentList
-	transitions    []jira.Transition
-	moveErr        error
-	moved          []string
-	assignErr      error
-	assigned       []string
-	comments       []string
-	commentErr     error
-	boardCalls     []string
-	boardIDCalls   []int
-	boards         []jira.BoardSummary
-	filterCalls    []string
-	editFields     []jira.EditField
-	editErr        error
-	edited         [][]jira.EditField
-	issueTypes     []string
-	found          []jira.Issue
-	findErr        error
-	findCalls      []string
-	users          []jira.Option
-	searches       []string
-	searchErr      error
-}
-
-func (f *fakeBackend) DefaultProject() string { return f.defaultProject }
-
-func (f *fakeBackend) SetDefaultProject(project string) { f.defaultProject = project }
-
-func (f *fakeBackend) SetDefaultBoard(id int) { f.defaultBoard = id }
-
-func (f *fakeBackend) Projects() ([]jira.Project, error) { return f.projects, nil }
-
-func (f *fakeBackend) IssueTypes() ([]string, error) { return f.issueTypes, nil }
-
-func (f *fakeBackend) Search(jql string) ([]jira.Issue, error) {
-	f.findCalls = append(f.findCalls, jql)
-	return f.found, f.findErr
-}
-
-func (f *fakeBackend) Boards(string) ([]jira.BoardSummary, error) { return f.boards, nil }
-
-func (f *fakeBackend) Board(project string, boardID int, filterJQL string) (*jira.Board, error) {
-	f.boardCalls = append(f.boardCalls, project)
-	f.boardIDCalls = append(f.boardIDCalls, boardID)
-	f.filterCalls = append(f.filterCalls, filterJQL)
-	if f.boardErr != nil {
-		return nil, f.boardErr
-	}
-	b := *f.board
-	b.Project = project
-	return &b, nil
-}
-
-func (f *fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, nil }
-
-func (f *fakeBackend) Comments(string) (*jira.CommentList, error) { return f.commentList, nil }
-
-func (f *fakeBackend) Transitions(jira.Issue) ([]jira.Transition, error) { return f.transitions, nil }
-
-func (f *fakeBackend) Transition(key, id string) error {
-	if f.moveErr != nil {
-		return f.moveErr
-	}
-	f.moved = append(f.moved, key+":"+id)
-	return nil
-}
-
-func (f *fakeBackend) Assign(key, id string) error {
-	if f.assignErr != nil {
-		return f.assignErr
-	}
-	f.assigned = append(f.assigned, key+":"+id)
-	return nil
-}
-
-func (f *fakeBackend) AddComment(key, body string) error {
-	if f.commentErr != nil {
-		return f.commentErr
-	}
-	f.comments = append(f.comments, key+":"+body)
-	return nil
-}
-
-func (f *fakeBackend) EditFields(jira.Issue) ([]jira.EditField, error) { return f.editFields, nil }
-
-func (f *fakeBackend) Edit(_ string, fields []jira.EditField) error {
-	if f.editErr != nil {
-		return f.editErr
-	}
-	f.edited = append(f.edited, fields)
-	return nil
-}
-
-func (f *fakeBackend) SearchUsers(_, query string) ([]jira.Option, error) {
-	f.searches = append(f.searches, query)
-	return f.users, f.searchErr
-}
-
-func (f *fakeBackend) IssueURL(key string) string { return "https://jira.example.com/browse/" + key }
-
-func keyMsg(s string) tea.KeyPressMsg {
-	if strings.HasPrefix(s, "ctrl+") && len(s) == len("ctrl+x") {
-		return tea.KeyPressMsg{Code: rune(s[len(s)-1]), Mod: tea.ModCtrl}
-	}
-	switch s {
-	case "esc":
-		return tea.KeyPressMsg{Code: tea.KeyEsc}
-	case "tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab}
-	case "shift+tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
-	case "enter":
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case " ":
-		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
-	case "up":
-		return tea.KeyPressMsg{Code: tea.KeyUp}
-	case "down":
-		return tea.KeyPressMsg{Code: tea.KeyDown}
-	case "left":
-		return tea.KeyPressMsg{Code: tea.KeyLeft}
-	case "right":
-		return tea.KeyPressMsg{Code: tea.KeyRight}
-	case "backspace":
-		return tea.KeyPressMsg{Code: tea.KeyBackspace}
-	default:
-		return tea.KeyPressMsg{Code: []rune(s)[0], Text: s}
-	}
-}
-
-func newTestModel(t *testing.T, defaultProject string, fb *fakeBackend) BoardModel {
+func newTestModel(t *testing.T, defaultProject string, fb *tuitest.Backend) BoardModel {
 	t.Helper()
-	fb.defaultProject = defaultProject
-	if fb.board == nil {
-		fb.board = testBoard()
+	fb.Project = defaultProject
+	if fb.BoardData == nil {
+		fb.BoardData = testBoard()
 	}
-	m := New(fb, &fakeSettings{})
+	m := New(fb, &tuitest.Settings{})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return next.(BoardModel)
 }
@@ -166,7 +28,7 @@ func press(t *testing.T, m BoardModel, keys ...string) (BoardModel, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, k := range keys {
 		var next tea.Model
-		next, cmd = m.Update(keyMsg(k))
+		next, cmd = m.Update(tuitest.Key(k))
 		m = next.(BoardModel)
 	}
 	return m, cmd
@@ -185,107 +47,38 @@ func pressOpen(t *testing.T, m BoardModel, k string) (BoardModel, tea.Cmd) {
 	return next.(BoardModel), cmd
 }
 
-// pressDrain sends keys in order, running each resulting command to completion.
-func pressDrain(t *testing.T, m BoardModel, keys ...string) BoardModel {
+func loadedModel(t *testing.T) (BoardModel, *tuitest.Backend) {
 	t.Helper()
-	for _, k := range keys {
-		next, cmd := m.Update(keyMsg(k))
-		m = drain(t, next.(BoardModel), cmd)
-	}
-	return m
-}
-
-// cmdDeadline bounds how long drain waits on a single command. Timers such as
-// spinner ticks and cursor blinks take longer than this and are dropped, which
-// keeps self-rescheduling commands from looping forever.
-const (
-	cmdDeadline = 50 * time.Millisecond
-	maxSteps    = 1000
-)
-
-func runCmd(c tea.Cmd) (tea.Msg, bool) {
-	done := make(chan tea.Msg, 1)
-	go func() { done <- c() }()
-	select {
-	case msg := <-done:
-		return msg, true
-	case <-time.After(cmdDeadline):
-		return nil, false
-	}
-}
-
-// drain runs cmd and feeds resulting messages back into the model until
-// no more immediate work is produced.
-func drain(t *testing.T, m BoardModel, cmd tea.Cmd) BoardModel {
-	t.Helper()
-	queue := []tea.Cmd{cmd}
-	for steps := 0; len(queue) > 0; steps++ {
-		if steps > maxSteps {
-			t.Fatal("drain: too many commands, likely a message loop")
-		}
-		c := queue[0]
-		queue = queue[1:]
-		if c == nil {
-			continue
-		}
-		msg, ok := runCmd(c)
-		if !ok {
-			continue
-		}
-		switch msg := msg.(type) {
-		case tea.BatchMsg:
-			queue = append(queue, msg...)
-			continue
-		case spinner.TickMsg:
-			continue
-		}
-		next, nc := m.Update(msg)
-		m = next.(BoardModel)
-		queue = append(queue, nc)
-	}
-	return m
-}
-
-func isQuit(cmd tea.Cmd) bool {
-	if cmd == nil {
-		return false
-	}
-	_, ok := cmd().(tea.QuitMsg)
-	return ok
-}
-
-func loadedModel(t *testing.T) (BoardModel, *fakeBackend) {
-	t.Helper()
-	fb := &fakeBackend{}
+	fb := &tuitest.Backend{}
 	m := newTestModel(t, "TEST", fb)
-	return drain(t, m, m.Init()), fb
+	return tuitest.Drain(t, m, m.Init()), fb
 }
 
 func TestCtrlDQuitsImmediately(t *testing.T) {
 	m, _ := loadedModel(t)
-	if _, cmd := press(t, m, "ctrl+d"); !isQuit(cmd) {
+	if _, cmd := press(t, m, "ctrl+d"); !tuitest.IsQuit(cmd) {
 		t.Fatal("ctrl+d did not quit")
 	}
 }
 
 func TestQQuitsFromBoard(t *testing.T) {
 	m, _ := loadedModel(t)
-	if _, cmd := press(t, m, "q"); !isQuit(cmd) {
+	if _, cmd := press(t, m, "q"); !tuitest.IsQuit(cmd) {
 		t.Fatal("q did not quit from the board")
 	}
 }
 
 func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 	m, _ := loadedModel(t)
-	m = pressDrain(t, m, "v")
-	if !m.popup.IsOpen() {
+	m = tuitest.PressDrain(t, m, "v")
+	if !m.Popup.IsOpen() {
 		t.Fatal("v should open a popup")
 	}
 	m, cmd := press(t, m, "q")
-	if isQuit(cmd) {
+	if tuitest.IsQuit(cmd) {
 		t.Fatal("q in a popup should not quit")
 	}
-	if m = drain(t, m, cmd); m.popup.IsOpen() {
+	if m = tuitest.Drain(t, m, cmd); m.Popup.IsOpen() {
 		t.Fatal("q in a popup should close it")
 	}
 }
@@ -293,23 +86,23 @@ func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
 func TestYankCopiesIssueURL(t *testing.T) {
 	m, _ := loadedModel(t)
 	var copied string
-	m.actions.copyText = func(s string) error { copied = s; return nil }
+	m.actions.CopyText = func(s string) error { copied = s; return nil }
 	m, cmd := press(t, m, "j", "y")
-	m = drain(t, m, cmd)
+	m = tuitest.Drain(t, m, cmd)
 	if copied != "https://jira.example.com/browse/T-2" {
 		t.Fatalf("copied %q", copied)
 	}
-	if !strings.Contains(m.status, "T-2") {
-		t.Fatalf("status %q", m.status)
+	if !strings.Contains(m.Status, "T-2") {
+		t.Fatalf("status %q", m.Status)
 	}
 }
 
 func TestOpenOpensIssueURL(t *testing.T) {
 	m, _ := loadedModel(t)
 	var opened string
-	m.actions.openURL = func(s string) error { opened = s; return nil }
+	m.actions.OpenURL = func(s string) error { opened = s; return nil }
 	_, cmd := press(t, m, "o")
-	drain(t, m, cmd)
+	tuitest.Drain(t, m, cmd)
 	if opened != "https://jira.example.com/browse/T-1" {
 		t.Fatalf("opened %q", opened)
 	}
@@ -317,18 +110,18 @@ func TestOpenOpensIssueURL(t *testing.T) {
 
 func TestActionErrorShowsInStatus(t *testing.T) {
 	m, _ := loadedModel(t)
-	m.actions.copyText = func(string) error { return errors.New("no clipboard") }
+	m.actions.CopyText = func(string) error { return errors.New("no clipboard") }
 	m, cmd := press(t, m, "y")
-	m = drain(t, m, cmd)
-	if !strings.Contains(m.status, "no clipboard") {
-		t.Fatalf("status %q", m.status)
+	m = tuitest.Drain(t, m, cmd)
+	if !strings.Contains(m.Status, "no clipboard") {
+		t.Fatalf("status %q", m.Status)
 	}
 }
 
 func TestYankAndOpenIgnoreEmptyColumn(t *testing.T) {
 	m, _ := loadedModel(t)
-	m.actions.copyText = func(string) error { t.Fatal("copy called"); return nil }
-	m.actions.openURL = func(string) error { t.Fatal("open called"); return nil }
+	m.actions.CopyText = func(string) error { t.Fatal("copy called"); return nil }
+	m.actions.OpenURL = func(string) error { t.Fatal("open called"); return nil }
 	if _, cmd := press(t, m, "l", "y", "o"); cmd != nil {
 		t.Fatal("expected no command in an empty column")
 	}
@@ -337,10 +130,10 @@ func TestYankAndOpenIgnoreEmptyColumn(t *testing.T) {
 func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, cmd := press(t, m, "ctrl+c")
-	if isQuit(cmd) || !m.quit.confirming {
+	if tuitest.IsQuit(cmd) || !m.Quit.Confirming {
 		t.Fatal("first ctrl+c should prompt, not quit")
 	}
-	if _, cmd = press(t, m, "ctrl+c"); !isQuit(cmd) {
+	if _, cmd = press(t, m, "ctrl+c"); !tuitest.IsQuit(cmd) {
 		t.Fatal("second ctrl+c should quit")
 	}
 }
@@ -348,23 +141,23 @@ func TestCtrlCPromptsThenQuitsOnSecondPress(t *testing.T) {
 func TestQuitPromptAnswers(t *testing.T) {
 	m, _ := loadedModel(t)
 	m, _ = press(t, m, "ctrl+c", "j")
-	if !m.quit.confirming || m.board.nav.row != 0 {
+	if !m.Quit.Confirming || m.board.nav.row != 0 {
 		t.Fatal("keys other than y/n should be ignored while prompting")
 	}
 	m, _ = press(t, m, "n")
-	if m.quit.confirming {
+	if m.Quit.Confirming {
 		t.Fatal("n should dismiss the prompt")
 	}
 	m, _ = press(t, m, "ctrl+c")
-	if _, cmd := press(t, m, "y"); !isQuit(cmd) {
+	if _, cmd := press(t, m, "y"); !tuitest.IsQuit(cmd) {
 		t.Fatal("y should quit")
 	}
 }
 
 func TestStartupLoadsDefaultProjectBoard(t *testing.T) {
 	m, fb := loadedModel(t)
-	if m.board.nav == nil || m.board.loading || len(fb.boardCalls) != 1 || fb.boardCalls[0] != "TEST" {
-		t.Fatalf("board not loaded: board=%v calls=%v", m.board.nav != nil, fb.boardCalls)
+	if m.board.nav == nil || m.board.loading || len(fb.BoardCalls) != 1 || fb.BoardCalls[0] != "TEST" {
+		t.Fatalf("board not loaded: board=%v calls=%v", m.board.nav != nil, fb.BoardCalls)
 	}
 }
 
@@ -381,9 +174,9 @@ func TestBoardKeysMoveFocus(t *testing.T) {
 }
 
 func TestBoardErrorIsShown(t *testing.T) {
-	fb := &fakeBackend{boardErr: errors.New("boom")}
+	fb := &tuitest.Backend{BoardErr: errors.New("boom")}
 	m := newTestModel(t, "TEST", fb)
-	m = drain(t, m, m.Init())
+	m = tuitest.Drain(t, m, m.Init())
 	if m.board.err == nil || m.board.nav != nil {
 		t.Fatal("expected error state")
 	}
@@ -408,10 +201,10 @@ func TestViewRendersColumnsAndCards(t *testing.T) {
 }
 
 func TestNarrowTerminalShowsScrollArrowsAsFocusMoves(t *testing.T) {
-	fb := &fakeBackend{}
+	fb := &tuitest.Backend{}
 	m := newTestModel(t, "TEST", fb)
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
-	m = drain(t, next.(BoardModel), m.Init())
+	m = tuitest.Drain(t, next.(BoardModel), m.Init())
 
 	v := m.View().Content
 	if strings.Contains(v, "Closed") || !strings.Contains(v, "▶") || strings.Contains(v, "◀") {
@@ -431,10 +224,10 @@ func TestRefreshReloadsBoardAndKeepsFocus(t *testing.T) {
 	if !m.board.loading || m.board.nav == nil {
 		t.Fatal("r should reload while keeping the current board visible")
 	}
-	fb.board.Columns[0].Issues = append([]jira.Issue{{Key: "T-0", Summary: "new"}}, fb.board.Columns[0].Issues...)
-	m = drain(t, m, cmd)
-	if len(fb.boardCalls) != 2 {
-		t.Fatalf("expected 2 board fetches, got %v", fb.boardCalls)
+	fb.BoardData.Columns[0].Issues = append([]jira.Issue{{Key: "T-0", Summary: "new"}}, fb.BoardData.Columns[0].Issues...)
+	m = tuitest.Drain(t, m, cmd)
+	if len(fb.BoardCalls) != 2 {
+		t.Fatalf("expected 2 board fetches, got %v", fb.BoardCalls)
 	}
 	if got := m.board.nav.selected().Key; got != "T-2" {
 		t.Fatalf("focus should stay on T-2 after refresh, got %s", got)
@@ -442,30 +235,8 @@ func TestRefreshReloadsBoardAndKeepsFocus(t *testing.T) {
 }
 
 func TestRefreshIgnoredWithoutProject(t *testing.T) {
-	m := newTestModel(t, "", &fakeBackend{})
+	m := newTestModel(t, "", &tuitest.Backend{})
 	if _, cmd := press(t, m, "r"); cmd != nil {
 		t.Fatal("r without a project should do nothing")
 	}
-}
-
-type fakeSettings struct {
-	saved    []string
-	boards   []int
-	projects []string
-	err      error
-}
-
-func (f *fakeSettings) SaveProject(key string) error {
-	f.projects = append(f.projects, key)
-	return f.err
-}
-
-func (f *fakeSettings) SaveBoard(id int) error {
-	f.boards = append(f.boards, id)
-	return f.err
-}
-
-func (f *fakeSettings) SaveTheme(id string) error {
-	f.saved = append(f.saved, id)
-	return f.err
 }

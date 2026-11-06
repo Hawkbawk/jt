@@ -33,46 +33,6 @@ func (k boardKeyMap) ShortHelp() []key.Binding {
 // FullHelp implements help.KeyMap.
 func (k boardKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
-// viewKeyMap is the help footer under an issue's details.
-type viewKeyMap struct {
-	scroll, topBottom, close key.Binding
-}
-
-func newViewKeys() viewKeyMap {
-	k := keys.Get()
-	return viewKeyMap{scroll: k.Scroll, topBottom: k.TopBottom, close: k.Close}
-}
-
-// ShortHelp implements help.KeyMap.
-func (k viewKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.scroll, k.topBottom, k.close}
-}
-
-// FullHelp implements help.KeyMap.
-func (k viewKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
-// quitKeyMap is the help shown beside the quit prompt.
-type quitKeyMap struct {
-	confirm, deny, interrupt key.Binding
-}
-
-func newQuitKeys() quitKeyMap {
-	k := keys.Get()
-	return quitKeyMap{
-		confirm:   keys.Describe(k.Confirm, "quit"),
-		deny:      keys.Describe(k.Deny, "stay"),
-		interrupt: keys.Describe(k.Interrupt, "quit"),
-	}
-}
-
-// ShortHelp implements help.KeyMap.
-func (k quitKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.confirm, k.deny, k.interrupt}
-}
-
-// FullHelp implements help.KeyMap.
-func (k quitKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
-
 // searchKeyMap is the search screen's help footer. form holds the focused
 // form field's own bindings; the other fields say which footer to show.
 type searchKeyMap struct {
