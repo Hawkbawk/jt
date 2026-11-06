@@ -171,7 +171,7 @@ func fakeOptions() []fakejira.Option {
 
 // run shows m until it quits, following changes to the terminal's theme.
 func run(m tea.Model) error {
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(graphicsProbe{m})
 	// Send blocks until the program reads the message, and a tint can change
 	// from inside Update, so it runs on its own goroutine.
 	defer tint.Subscribe(func(ev tint.Event) {

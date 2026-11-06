@@ -21,8 +21,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/ansi/kitty"
+
+	"github.com/hawkbawk/jt/internal/system"
 )
 
 const (
@@ -45,19 +48,93 @@ const (
 	quiet = 2
 )
 
-// Supported reports whether the terminal draws kitty graphics with Unicode
-// placeholders. It looks at the environment, so it's a variable tests can
-// replace. tmux is left out because it needs passthrough set up.
-var Supported = sync.OnceValue(func() bool { return detect(os.Getenv) })
+// mode is how the program reaches the terminal's graphics.
+type mode int32
 
-func detect(getenv func(string) string) bool {
-	if getenv("TMUX") != "" {
-		return false
+const (
+	unsupported mode = iota
+	direct
+	// viaTmux sends every graphics command through tmux's passthrough.
+	viaTmux
+)
+
+var (
+	// current is unsupported until Setup or Observe learn better.
+	current atomic.Int32
+
+	// graphicsSeen is set when the terminal has said it draws graphics. It
+	// counts once the device attributes reply shows nothing else is coming.
+	graphicsSeen atomic.Bool
+)
+
+func currentMode() mode { return mode(current.Load()) }
+
+// Supported reports whether the terminal draws kitty graphics with Unicode
+// placeholders. It's false until Setup and Observe have found out. It's a
+// variable so tests can replace it.
+var Supported = func() bool { return currentMode() != unsupported }
+
+// Setup starts finding out whether the terminal supports graphics. Write what
+// it returns to the terminal and pass the terminal's replies to Observe. It
+// returns nothing when the answer is already known.
+//
+// tmux swallows the terminal's replies, so inside it Setup asks tmux for the
+// outer terminal's name instead. The commands only reach that terminal if
+// allow-passthrough is on.
+func Setup() string {
+	if os.Getenv("TMUX") == "" {
+		return probeQuery
 	}
-	return getenv("TERM") == "xterm-kitty" ||
-		getenv("TERM") == "xterm-ghostty" ||
-		getenv("TERM_PROGRAM") == "ghostty" ||
-		getenv("KITTY_WINDOW_ID") != ""
+	current.Store(int32(detectTmux(system.TmuxDisplay)))
+	return ""
+}
+
+func detectTmux(tmux func(format string) (string, error)) mode {
+	out, err := tmux("#{allow-passthrough} #{client_termname}")
+	if err != nil {
+		return unsupported
+	}
+	pass, term, _ := strings.Cut(out, " ")
+	if (pass == "on" || pass == "all") && (term == "xterm-kitty" || term == "xterm-ghostty") {
+		return viaTmux
+	}
+	return unsupported
+}
+
+// Observe takes a message from the terminal's input. It enables Supported when
+// the reply to Setup's query shows graphics, and ignores any other message.
+func Observe(msg any) {
+	switch msg := msg.(type) {
+	case uv.KittyGraphicsEvent:
+		if msg.Options.ID == probeID && string(msg.Payload) == "OK" {
+			graphicsSeen.Store(true)
+		}
+	case uv.PrimaryDeviceAttributesEvent:
+		if graphicsSeen.Load() {
+			current.CompareAndSwap(int32(unsupported), int32(direct))
+		}
+	}
+}
+
+const st = "\x1b\\"
+
+// wrap makes seq reach the outer terminal when the program runs in tmux. Each
+// command goes in a passthrough of its own, so an upload isn't one huge
+// sequence for tmux to buffer.
+func wrap(seq string) string {
+	if currentMode() != viaTmux {
+		return seq
+	}
+	var b strings.Builder
+	for seq != "" {
+		end := len(seq)
+		if i := strings.Index(seq, st); i >= 0 {
+			end = i + len(st)
+		}
+		b.WriteString(ansi.TmuxPassthrough(seq[:end]))
+		seq = seq[end:]
+	}
+	return b.String()
 }
 
 var lastID atomic.Uint32
@@ -142,7 +219,7 @@ func (im *Image) TakeUpload() string {
 	defer im.mu.Unlock()
 	up := im.upload
 	im.upload = ""
-	return up
+	return wrap(up)
 }
 
 // Placement is an image shown at a size, under an ID of its own. Showing the
@@ -165,10 +242,10 @@ func (im *Image) Fit(owner uint64, maxCols, maxRows int) Placement {
 
 // Sequence is what the terminal needs before it can draw the lines for p.
 func (im *Image) Sequence(p Placement) string {
-	return command(&kitty.Options{
+	return wrap(command(&kitty.Options{
 		Action: kitty.Put, ID: int(im.id), PlacementID: p.ID,
 		VirtualPlacement: true, Columns: p.Cols, Rows: p.Rows,
-	})
+	}))
 }
 
 // Lines is the rows of placeholder text that show the image placed as p.
@@ -198,7 +275,7 @@ func (im *Image) Lines(p Placement) []string {
 
 // DeleteAll is the sequence that frees every image the program sent.
 func DeleteAll() string {
-	return command(&kitty.Options{Action: kitty.Delete, Delete: kitty.DeleteAll, DeleteResources: true})
+	return wrap(command(&kitty.Options{Action: kitty.Delete, Delete: kitty.DeleteAll, DeleteResources: true}))
 }
 
 // cells is the size in cells of an image of w by h pixels, scaled up or down

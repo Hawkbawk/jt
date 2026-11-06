@@ -2,6 +2,7 @@ package termimage
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/gif"
@@ -9,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/kitty"
 )
 
 func pngBytes(t *testing.T, w, h int) []byte {
@@ -21,21 +24,65 @@ func pngBytes(t *testing.T, w, h int) []byte {
 	return buf.Bytes()
 }
 
-func TestDetect(t *testing.T) {
-	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+func TestDetectTmux(t *testing.T) {
 	for name, tc := range map[string]struct {
-		env  map[string]string
-		want bool
+		out  string
+		want mode
 	}{
-		"ghostty":      {map[string]string{"TERM": "xterm-ghostty"}, true},
-		"ghostty prog": {map[string]string{"TERM_PROGRAM": "ghostty"}, true},
-		"kitty":        {map[string]string{"KITTY_WINDOW_ID": "3"}, true},
-		"tmux":         {map[string]string{"TERM": "xterm-ghostty", "TMUX": "/tmp/x"}, false},
-		"xterm":        {map[string]string{"TERM": "xterm-256color"}, false},
+		"kitty":        {"on xterm-kitty", viaTmux},
+		"ghostty all":  {"all xterm-ghostty", viaTmux},
+		"no passthru":  {"off xterm-kitty", unsupported},
+		"plain client": {"on xterm-256color", unsupported},
 	} {
-		if got := detect(env(tc.env)); got != tc.want {
-			t.Errorf("%s: detect = %v, want %v", name, got, tc.want)
+		got := detectTmux(func(string) (string, error) { return tc.out, nil })
+		if got != tc.want {
+			t.Errorf("%s: detectTmux = %v, want %v", name, got, tc.want)
 		}
+	}
+	if got := detectTmux(func(string) (string, error) { return "", errors.New("no tmux") }); got != unsupported {
+		t.Errorf("tmux failing: detectTmux = %v, want unsupported", got)
+	}
+}
+
+func TestObserveEnablesGraphicsAfterTheReplies(t *testing.T) {
+	reset := func() { current.Store(0); graphicsSeen.Store(false) }
+	reset()
+	t.Cleanup(reset)
+
+	ok := uv.KittyGraphicsEvent{Options: kitty.Options{ID: probeID}, Payload: []byte("OK")}
+	da1 := uv.PrimaryDeviceAttributesEvent{62, 4}
+
+	Observe(da1)
+	if Supported() {
+		t.Fatal("supported with only the device attributes reply")
+	}
+	Observe(uv.KittyGraphicsEvent{Options: kitty.Options{ID: probeID}, Payload: []byte("ENOTSUPPORTED")})
+	Observe(da1)
+	if Supported() {
+		t.Fatal("supported after a graphics error")
+	}
+	Observe(ok)
+	if Supported() {
+		t.Fatal("supported before the device attributes reply")
+	}
+	Observe(da1)
+	if !Supported() {
+		t.Fatal("not supported after both replies")
+	}
+}
+
+func TestWrapSendsEachCommandThroughTmux(t *testing.T) {
+	t.Cleanup(func() { current.Store(0) })
+	two := "\x1b_Ga=q;AAAA\x1b\\\x1b_Ga=d\x1b\\"
+
+	current.Store(int32(direct))
+	if got := wrap(two); got != two {
+		t.Errorf("direct: wrap = %q, want it unchanged", got)
+	}
+	current.Store(int32(viaTmux))
+	want := ansi.TmuxPassthrough("\x1b_Ga=q;AAAA\x1b\\") + ansi.TmuxPassthrough("\x1b_Ga=d\x1b\\")
+	if got := wrap(two); got != want {
+		t.Errorf("tmux: wrap = %q, want %q", got, want)
 	}
 }
 
