@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 )
 
 // issueModel returns a loaded board with T-2 selected.
-func issueModel(t *testing.T) (BoardModel, *tuitest.Backend) {
+func issueModel(t *testing.T) (Model, *tuitest.Backend) {
 	t.Helper()
 	fb := &tuitest.Backend{
 		BoardData:      testBoard(),

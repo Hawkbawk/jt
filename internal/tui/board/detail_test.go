@@ -1,4 +1,4 @@
-package tui
+package board
 
 import (
 	"strings"
@@ -26,7 +26,7 @@ func detailBackend() *tuitest.Backend {
 	}}}
 }
 
-func loadedDetailModel(t *testing.T) BoardModel {
+func loadedDetailModel(t *testing.T) Model {
 	t.Helper()
 	fb := detailBackend()
 	m := newTestModel(t, "TEST", fb)

@@ -1,4 +1,4 @@
-package tui
+package board
 
 import "github.com/hawkbawk/jt/internal/jira"
 
