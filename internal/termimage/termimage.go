@@ -155,48 +155,61 @@ func Decode(data []byte) (*Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	var frames []image.Image
-	delays := []int{0}
+	var (
+		width, height, count int
+		walk                 func(yield func(image.Image, int) error) error
+	)
 	if format == "gif" {
-		frames, delays, err = decodeGIF(data)
+		g, err := gif.DecodeAll(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		width, height, count = g.Config.Width, g.Config.Height, min(len(g.Image), maxFrames)
+		walk = func(yield func(image.Image, int) error) error { return eachGIFFrame(g, yield) }
 	} else {
-		var img image.Image
-		img, _, err = image.Decode(bytes.NewReader(data))
-		frames = []image.Image{img}
+		img, _, err := image.Decode(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		b := img.Bounds()
+		width, height, count = b.Dx(), b.Dy(), 1
+		walk = func(yield func(image.Image, int) error) error { return yield(img, 0) }
 	}
-	if err != nil {
-		return nil, err
-	}
-	if len(frames) == 0 {
+	if count == 0 {
 		return nil, errors.New("image has no frames")
 	}
 
 	limit := maxStillPixels
-	if len(frames) > 1 {
+	if count > 1 {
 		limit = maxAnimatedPixels
 	}
-	b := frames[0].Bounds()
 	im := &Image{id: lastID.Add(1)}
-	im.width, im.height = fit(b.Dx(), b.Dy(), limit)
+	im.width, im.height = fit(width, height, limit)
 	if im.width < 1 || im.height < 1 {
 		return nil, errors.New("image is empty")
 	}
 
 	var up strings.Builder
-	for i, f := range frames {
+	firstDelay := 0
+	i := 0
+	err = walk(func(f image.Image, delay int) error {
 		opts := &kitty.Options{
 			Format: kitty.PNG, Transmission: kitty.Direct, Chunk: true,
 			ID: int(im.id), Quiet: quiet,
 		}
-		if i > 0 {
-			opts.Action, opts.Z = kitty.Frame, frameMS(delays[i])
+		if i == 0 {
+			firstDelay = delay
+		} else {
+			opts.Action, opts.Z = kitty.Frame, frameMS(delay)
 		}
-		if err := kitty.EncodeGraphics(&up, scale(f, im.width, im.height), opts); err != nil {
-			return nil, err
-		}
+		i++
+		return kitty.EncodeGraphics(&up, scale(f, im.width, im.height), opts)
+	})
+	if err != nil {
+		return nil, err
 	}
-	if len(frames) > 1 {
-		up.WriteString(command(&kitty.Options{Action: kitty.Animate, ID: int(im.id), Rows: 1, Z: frameMS(delays[0])}))
+	if count > 1 {
+		up.WriteString(command(&kitty.Options{Action: kitty.Animate, ID: int(im.id), Rows: 1, Z: frameMS(firstDelay)}))
 		// Run the animation, looping forever.
 		up.WriteString(command(&kitty.Options{Action: kitty.Animate, ID: int(im.id), ImageWidth: 3, ImageHeight: 1}))
 	}
@@ -319,16 +332,11 @@ func frameMS(delay int) int {
 	return max(delay*10, minFrameMS)
 }
 
-// decodeGIF returns each frame composited over the ones before it, with the
-// delays in hundredths of a second.
-func decodeGIF(data []byte) ([]image.Image, []int, error) {
-	g, err := gif.DecodeAll(bytes.NewReader(data))
-	if err != nil {
-		return nil, nil, err
-	}
+// eachGIFFrame calls yield with each frame composited over the ones before it,
+// and its delay in hundredths of a second. The image is the canvas itself, so
+// yield must be done with it before it returns.
+func eachGIFFrame(g *gif.GIF, yield func(image.Image, int) error) error {
 	canvas := image.NewRGBA(image.Rect(0, 0, g.Config.Width, g.Config.Height))
-	var frames []image.Image
-	var delays []int
 	for i, f := range g.Image {
 		if i >= maxFrames {
 			break
@@ -338,8 +346,9 @@ func decodeGIF(data []byte) ([]image.Image, []int, error) {
 			before = cloneRGBA(canvas)
 		}
 		draw.Draw(canvas, f.Bounds(), f, f.Bounds().Min, draw.Over)
-		frames = append(frames, cloneRGBA(canvas))
-		delays = append(delays, g.Delay[i])
+		if err := yield(canvas, g.Delay[i]); err != nil {
+			return err
+		}
 
 		switch {
 		case before != nil:
@@ -348,7 +357,7 @@ func decodeGIF(data []byte) ([]image.Image, []int, error) {
 			draw.Draw(canvas, f.Bounds(), image.Transparent, image.Point{}, draw.Src)
 		}
 	}
-	return frames, delays, nil
+	return nil
 }
 
 func cloneRGBA(src *image.RGBA) *image.RGBA {
