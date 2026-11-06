@@ -2,7 +2,6 @@ package fakejira
 
 import (
 	"fmt"
-	"hash/crc32"
 	"slices"
 	"strings"
 	"time"
@@ -198,7 +197,7 @@ func (g *issueGen) issue(key string, s issueSeed) *issue {
 	}
 	if len(s.Description) > 0 {
 		text := strings.Join(s.Description, "\n\n")
-		switch crc32.ChecksumIEEE([]byte(key)) % 6 {
+		switch g.f.IntN(6) {
 		case 0:
 			text += "\n\n" + imageLink("screenshot.png", pngAttachment)
 		case 1:

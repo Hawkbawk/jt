@@ -39,24 +39,72 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestPlaceFitsAndNeverEnlarges(t *testing.T) {
+func TestFitFillsTheSpaceKeepingAspect(t *testing.T) {
 	im, err := Decode(pngBytes(t, 80, 160))
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines, seq := im.Place(50, 50)
-	if len(lines) != 10 || ansi.StringWidth(lines[0]) != 10 {
-		t.Fatalf("native size: got %d rows, width %d", len(lines), ansi.StringWidth(lines[0]))
+	p := im.Fit(0, 50, 50)
+	lines := im.Lines(p)
+	if len(lines) != 50 || ansi.StringWidth(lines[0]) != 50 {
+		t.Fatalf("enlarged: got %d rows, width %d", len(lines), ansi.StringWidth(lines[0]))
 	}
-	if !strings.Contains(seq, "U=1") || !strings.Contains(seq, "c=10") || !strings.Contains(seq, "r=10") {
-		t.Errorf("placement = %q", seq)
+	seq := im.Sequence(p)
+	for _, want := range []string{"U=1", "c=50", "r=50", "p=1", "a=p"} {
+		if !strings.Contains(seq, want) {
+			t.Errorf("placement %q lacks %q", seq, want)
+		}
 	}
-	if _, seq := im.Place(50, 50); seq != "" {
-		t.Errorf("unchanged size placed again: %q", seq)
+	if !strings.Contains(lines[0], "\x1b[58;2;0;0;1m") {
+		t.Errorf("placeholders don't name the placement: %q", lines[0])
 	}
-	lines, seq = im.Place(4, 50)
-	if len(lines) != 4 || ansi.StringWidth(lines[0]) != 4 || seq == "" {
-		t.Errorf("narrow: %d rows, width %d, seq %q", len(lines), ansi.StringWidth(lines[0]), seq)
+	if p := im.Fit(0, 4, 50); p.Cols != 4 || p.Rows != 4 {
+		t.Errorf("narrow: %+v", p)
+	}
+	if p := im.Fit(0, 100, 10); p.Rows != 10 || p.Cols != 10 {
+		t.Errorf("short: %+v", p)
+	}
+}
+
+func TestPlacementsOfOneImageKeepSeparateIDs(t *testing.T) {
+	im, err := Decode(pngBytes(t, 80, 160))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := im.Fit(0, 50, 50), im.Fit(1, 20, 20)
+	if a == b || !strings.Contains(im.Sequence(b), "p=2") || !strings.Contains(im.Lines(b)[0], "\x1b[58;2;0;0;2m") {
+		t.Errorf("placements share an ID: %+v %+v", a, b)
+	}
+}
+
+func TestFitKeepsPlacementIDsInRange(t *testing.T) {
+	im, err := Decode(pngBytes(t, 8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, owner := range []uint64{0, 1, maxPlacementID - 1, maxPlacementID, maxPlacementID + 1, 1 << 40, ^uint64(0)} {
+		if id := im.Fit(owner, 10, 10).ID; id < 1 || id > maxPlacementID {
+			t.Errorf("owner %d got placement ID %d", owner, id)
+		}
+	}
+}
+
+func TestUploadIsTakenOnce(t *testing.T) {
+	im, err := Decode(pngBytes(t, 8, 8))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up := im.TakeUpload(); up == "" {
+		t.Fatal("first take is empty")
+	}
+	if up := im.TakeUpload(); up != "" {
+		t.Errorf("second take = %q", up)
+	}
+}
+
+func TestDeleteAllFreesImageData(t *testing.T) {
+	if got := DeleteAll(); !strings.Contains(got, "d=A") || !strings.Contains(got, "a=d") {
+		t.Errorf("DeleteAll = %q", got)
 	}
 }
 
@@ -73,8 +121,8 @@ func TestUploadChunksLargeImages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	up := im.Upload()
-	if !strings.Contains(up, "m=1") || strings.Count(up, "m=0") != 1 || !strings.HasPrefix(up, "\x1b_Ga=t,f=100,") {
+	up := im.TakeUpload()
+	if !strings.Contains(up, "m=1") || strings.Count(up, "m=0") != 1 || !strings.HasPrefix(up, "\x1b_Gf=100,") {
 		t.Errorf("upload not chunked: %.80q", up)
 	}
 }
@@ -95,8 +143,8 @@ func TestGIFAnimates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	up := im.Upload()
-	if strings.Count(up, "a=f,") != 2 || !strings.Contains(up, "s=3,v=1") {
+	up := im.TakeUpload()
+	if strings.Count(up, "a=f") != 2 || !strings.Contains(up, "s=3,v=1") {
 		t.Errorf("gif upload = %q", up)
 	}
 }

@@ -16,12 +16,19 @@ func Stack(height int, header, body []string, footer string) string {
 // doesn't measure or pad the width of each line, which is slow on a screen of
 // styled text. The frame around the content pads the width.
 func fitHeight(s string, height int) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) > height {
-		lines = lines[:height]
+	if height <= 0 {
+		return ""
 	}
-	for len(lines) < height {
-		lines = append(lines, "")
+	lines := strings.Count(s, "\n") + 1
+	switch {
+	case lines < height:
+		return s + strings.Repeat("\n", height-lines)
+	case lines == height:
+		return s
 	}
-	return strings.Join(lines, "\n")
+	end := -1
+	for range height {
+		end += 1 + strings.IndexByte(s[end+1:], '\n')
+	}
+	return s[:end]
 }

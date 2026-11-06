@@ -3,20 +3,19 @@
 // placeholders, so they're ordinary text cells that scroll, clip and wrap
 // with the text around them.
 //
-// Decode an image, write its Upload sequence to the terminal once, then put
-// the lines Place returns in the text.
+// Decode an image, write its TakeUpload sequence to the terminal, then put the
+// lines for a Fit placement in the text, after writing its Sequence.
 package termimage
 
 import (
 	"bytes"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
 	"image/draw"
 	"image/gif"
 	_ "image/jpeg" // registers the jpeg decoder for image.Decode
-	"image/png"
+	_ "image/png"  // registers the png decoder for image.Decode
 	"os"
 	"strings"
 	"sync"
@@ -35,9 +34,15 @@ const (
 	maxStillPixels    = 1600
 	maxAnimatedPixels = 640
 	maxFrames         = 100
-	chunkSize         = 4096
 	defaultFrameMS    = 100
 	minFrameMS        = 20
+
+	// maxPlacementID is the largest placement ID. The placeholder colors have
+	// room for two bytes of it.
+	maxPlacementID = 0xffff
+
+	// quiet stops the terminal from answering the commands jt sends.
+	quiet = 2
 )
 
 // Supported reports whether the terminal draws kitty graphics with Unicode
@@ -59,11 +64,12 @@ var lastID atomic.Uint32
 
 // Image is a decoded image, or the frames of a gif, ready to upload.
 type Image struct {
-	id         uint32
-	width      int
-	height     int
-	upload     string
-	cols, rows int
+	id     uint32
+	width  int
+	height int
+
+	mu     sync.Mutex
+	upload string
 }
 
 // Decode reads a png, jpeg or gif. A gif with several frames animates.
@@ -73,7 +79,7 @@ func Decode(data []byte) (*Image, error) {
 		return nil, err
 	}
 	var frames []image.Image
-	var delays []int
+	delays := []int{0}
 	if format == "gif" {
 		frames, delays, err = decodeGIF(data)
 	} else {
@@ -101,67 +107,104 @@ func Decode(data []byte) (*Image, error) {
 
 	var up strings.Builder
 	for i, f := range frames {
-		f = scale(f, im.width, im.height)
-		var buf bytes.Buffer
-		enc := png.Encoder{CompressionLevel: png.BestSpeed}
-		if err := enc.Encode(&buf, f); err != nil {
+		opts := &kitty.Options{
+			Format: kitty.PNG, Transmission: kitty.Direct, Chunk: true,
+			ID: int(im.id), Quiet: quiet,
+		}
+		if i > 0 {
+			opts.Action, opts.Z = kitty.Frame, frameMS(delays[i])
+		}
+		if err := kitty.EncodeGraphics(&up, scale(f, im.width, im.height), opts); err != nil {
 			return nil, err
 		}
-		opts := []string{"a=t", "f=100"}
-		if i > 0 {
-			opts = []string{"a=f", "f=100", fmt.Sprintf("z=%d", frameMS(delays[i]))}
-		}
-		opts = append(opts, fmt.Sprintf("i=%d", im.id), "q=2")
-		up.WriteString(chunks(buf.Bytes(), opts))
 	}
 	if len(frames) > 1 {
-		up.WriteString(ansi.KittyGraphics(nil, "a=a", fmt.Sprintf("i=%d", im.id), "r=1",
-			fmt.Sprintf("z=%d", frameMS(delays[0])), "q=2"))
-		up.WriteString(ansi.KittyGraphics(nil, "a=a", fmt.Sprintf("i=%d", im.id), "s=3", "v=1", "q=2"))
+		up.WriteString(command(&kitty.Options{Action: kitty.Animate, ID: int(im.id), Rows: 1, Z: frameMS(delays[0])}))
+		// Run the animation, looping forever.
+		up.WriteString(command(&kitty.Options{Action: kitty.Animate, ID: int(im.id), ImageWidth: 3, ImageHeight: 1}))
 	}
 	im.upload = up.String()
 	return im, nil
 }
 
-// Upload is the sequence that sends the image to the terminal. Write it once.
-func (im *Image) Upload() string { return im.upload }
+// command is the sequence for options that carry no image data.
+func command(o *kitty.Options) string {
+	o.Quiet = quiet
+	return ansi.KittyGraphics(nil, o.Options()...)
+}
 
-// Place sizes the image to fit maxCols by maxRows cells without enlarging it,
-// and returns the rows of placeholder text that show it. The sequence is what
-// the terminal needs before it can draw them, and is empty when the image is
-// already placed at that size.
-func (im *Image) Place(maxCols, maxRows int) (lines []string, seq string) {
+// TakeUpload returns the sequence that sends the image to the terminal the
+// first time it's called, and nothing after. Write what it returns to the
+// terminal before showing the image. The terminal keeps the image, so the
+// sequence, which can be large, is dropped once taken.
+func (im *Image) TakeUpload() string {
+	im.mu.Lock()
+	defer im.mu.Unlock()
+	up := im.upload
+	im.upload = ""
+	return up
+}
+
+// Placement is an image shown at a size, under an ID of its own. Showing the
+// same image at two sizes needs two IDs, since placing an ID again replaces the
+// placement it had. Build one with Fit.
+type Placement struct {
+	ID         int
+	Cols, Rows int
+}
+
+// Fit picks the largest size that keeps the image's shape within maxCols by
+// maxRows cells, enlarging it if need be. owner is any number that's the same
+// for everything that shows the image together, like a popup's ID. It's folded
+// into the range placement IDs allow, so owners far enough apart can share an
+// ID.
+func (im *Image) Fit(owner uint64, maxCols, maxRows int) Placement {
 	cols, rows := cells(im.width, im.height, max(1, maxCols), max(1, maxRows))
-	if cols != im.cols || rows != im.rows {
-		im.cols, im.rows = cols, rows
-		seq = ansi.KittyGraphics(nil, "a=p", fmt.Sprintf("i=%d", im.id), "U=1",
-			fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows), "q=2")
-	}
-	color := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", im.id>>16&0xff, im.id>>8&0xff, im.id&0xff)
-	lines = make([]string, rows)
+	return Placement{ID: int(owner%maxPlacementID) + 1, Cols: cols, Rows: rows}
+}
+
+// Sequence is what the terminal needs before it can draw the lines for p.
+func (im *Image) Sequence(p Placement) string {
+	return command(&kitty.Options{
+		Action: kitty.Put, ID: int(im.id), PlacementID: p.ID,
+		VirtualPlacement: true, Columns: p.Cols, Rows: p.Rows,
+	})
+}
+
+// Lines is the rows of placeholder text that show the image placed as p.
+func (im *Image) Lines(p Placement) []string {
+	// The foreground color names the image and the underline color names the
+	// placement, three bytes each.
+	color := fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[58;2;0;%d;%dm",
+		im.id>>16&0xff, im.id>>8&0xff, im.id&0xff, p.ID>>8&0xff, p.ID&0xff)
+	lines := make([]string, p.Rows)
 	for r := range lines {
 		var b strings.Builder
 		b.WriteString(color)
-		for c := range cols {
+		// Only the first cell of a row says where it is. The terminal takes
+		// a bare placeholder as the next column of the same row, which saves
+		// the redraw work of measuring two combining marks on every cell.
+		b.WriteRune(kitty.Placeholder)
+		b.WriteRune(kitty.Diacritic(r))
+		b.WriteRune(kitty.Diacritic(0))
+		for range p.Cols - 1 {
 			b.WriteRune(kitty.Placeholder)
-			b.WriteRune(kitty.Diacritic(r))
-			b.WriteRune(kitty.Diacritic(c))
 		}
-		b.WriteString("\x1b[39m")
+		b.WriteString("\x1b[39m\x1b[59m")
 		lines[r] = b.String()
 	}
-	return lines, seq
+	return lines
 }
 
 // DeleteAll is the sequence that frees every image the program sent.
 func DeleteAll() string {
-	return ansi.KittyGraphics(nil, "a=d", "d=A", "q=2")
+	return command(&kitty.Options{Action: kitty.Delete, Delete: kitty.DeleteAll, DeleteResources: true})
 }
 
-// cells is the size in cells of an image of w by h pixels, shrunk to fit
-// maxCols by maxRows and never enlarged.
+// cells is the size in cells of an image of w by h pixels, scaled up or down
+// to the largest size that fits maxCols by maxRows.
 func cells(w, h, maxCols, maxRows int) (cols, rows int) {
-	scale := min(1, float64(maxCols*cellW)/float64(w), float64(maxRows*cellH)/float64(h))
+	scale := min(float64(maxCols*cellW)/float64(w), float64(maxRows*cellH)/float64(h))
 	cols = max(1, min(maxCols, int(float64(w)*scale/cellW+0.5)))
 	rows = max(1, min(maxRows, int(float64(h)*scale/cellH+0.5)))
 	return cols, rows
@@ -235,26 +278,4 @@ func cloneRGBA(src *image.RGBA) *image.RGBA {
 	dst := image.NewRGBA(src.Bounds())
 	copy(dst.Pix, src.Pix)
 	return dst
-}
-
-// chunks splits a payload into the sequences the protocol allows, putting
-// opts on the first.
-func chunks(data []byte, opts []string) string {
-	enc := base64.StdEncoding.EncodeToString(data)
-	var b strings.Builder
-	for first := true; len(enc) > 0 || first; first = false {
-		n := min(len(enc), chunkSize)
-		part := enc[:n]
-		enc = enc[n:]
-		more := "m=0"
-		if len(enc) > 0 {
-			more = "m=1"
-		}
-		o := []string{more}
-		if first {
-			o = append(opts, more)
-		}
-		b.WriteString(ansi.KittyGraphics([]byte(part), o...))
-	}
-	return b.String()
 }

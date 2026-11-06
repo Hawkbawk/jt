@@ -3,7 +3,6 @@ package issueview
 import (
 	"bytes"
 	"strings"
-	"sync"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/yuin/goldmark"
@@ -13,11 +12,6 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/termimage"
-)
-
-const (
-	maxImageCols = 80
-	maxImageRows = 20
 )
 
 // segment is a run of markdown, or the attachment an image link points to.
@@ -55,70 +49,76 @@ func split(src string) []segment {
 	return append(segs, segment{text: src[last:]})
 }
 
-// imageCache keeps decoded images by attachment ID. An attachment's content
-// doesn't change, and the terminal already holds what was uploaded.
-var imageCache sync.Map
-
-type imageStatus int
-
+// Image blocks that haven't been asked for yet carry their attachment ID
+// between these marks, so the rendered text says where they are. They're
+// stripped before the text reaches the viewport.
 const (
-	imageLoading imageStatus = iota
-	imageReady
-	imageFailed
+	markOpen  = "\uE000"
+	markClose = "\uE001"
 )
 
+// imageRow is a line of the rendered text holding an image that hasn't been
+// asked for yet.
+type imageRow struct {
+	media string
+	line  int
+}
+
+// extractMarks removes the marks from rendered text and lists the lines they
+// were on.
+func extractMarks(s string) (string, []imageRow) {
+	if !strings.Contains(s, markOpen) {
+		return s, nil
+	}
+	var rows []imageRow
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		for {
+			start := strings.Index(l, markOpen)
+			if start < 0 {
+				break
+			}
+			end := strings.Index(l[start:], markClose)
+			if end < 0 {
+				break
+			}
+			rows = append(rows, imageRow{media: l[start+len(markOpen) : start+end], line: i})
+			l = l[:start] + l[start+end+len(markClose):]
+		}
+		lines[i] = l
+	}
+	return strings.Join(lines, "\n"), rows
+}
+
+// imageState is what a model knows about an image it asked for. With neither
+// field set, it's still loading.
 type imageState struct {
-	status imageStatus
 	img    *termimage.Image
+	failed bool
 }
 
 // imageMsg carries an attachment that was downloaded and decoded, or why it
-// wasn't. fresh is set when the image still has to be sent to the terminal.
+// wasn't.
 type imageMsg struct {
 	id    int64
 	media string
 	img   *termimage.Image
-	fresh bool
 	err   error
 }
 
-// mediaIDs lists the attachments the loaded text links to, once each.
-func (m *Model) mediaIDs() []string {
-	var texts []string
-	if m.issue != nil {
-		texts = append(texts, m.issue.Description)
-	}
-	if m.list != nil {
-		for _, c := range m.list.Items {
-			texts = append(texts, c.Body)
-		}
-	}
-	var ids []string
-	seen := map[string]bool{}
-	for _, t := range texts {
-		for _, s := range split(t) {
-			if s.media != "" && !seen[s.media] {
-				seen[s.media] = true
-				ids = append(ids, s.media)
-			}
-		}
-	}
-	return ids
-}
-
-// loadImages starts downloading the images in the loaded text that haven't
-// been asked for yet. It does nothing when the terminal can't show them.
-func (m *Model) loadImages() tea.Cmd {
-	if !termimage.Supported() {
-		return nil
-	}
+// loadVisible starts downloading the images within a screen of the visible
+// text that haven't been asked for yet, so scrolling toward an image loads it
+// without fetching every image in a long thread up front.
+func (m *Model) loadVisible() tea.Cmd {
+	top := m.vp.YOffset() - m.vp.Height()
+	bottom := m.vp.YOffset() + 2*m.vp.Height()
 	var cmds []tea.Cmd
-	for _, id := range m.mediaIDs() {
-		if m.images[id] != nil {
+	for _, r := range m.imageRows {
+		if r.line < top || r.line > bottom || m.images[r.media] != nil {
 			continue
 		}
-		m.images[id] = &imageState{}
-		cmds = append(cmds, m.loadImage(id))
+		m.images[r.media] = &imageState{}
+		cmds = append(cmds, m.loadImage(r.media))
 	}
 	return tea.Batch(cmds...)
 }
@@ -126,19 +126,14 @@ func (m *Model) loadImages() tea.Cmd {
 func (m *Model) loadImage(media string) tea.Cmd {
 	b, id := m.backend, m.id
 	return func() tea.Msg {
-		if v, ok := imageCache.Load(media); ok {
-			return imageMsg{id: id, media: media, img: v.(*termimage.Image)}
-		}
-		data, err := b.Attachment(media)
-		var img *termimage.Image
-		if err == nil {
-			img, err = termimage.Decode(data)
-		}
-		if err != nil {
-			return imageMsg{id: id, media: media, err: err}
-		}
-		imageCache.Store(media, img)
-		return imageMsg{id: id, media: media, img: img, fresh: true}
+		img, err := imageStore.get(media, func() (*termimage.Image, error) {
+			data, err := b.Attachment(media)
+			if err != nil {
+				return nil, err
+			}
+			return termimage.Decode(data)
+		})
+		return imageMsg{id: id, media: media, img: img, err: err}
 	}
 }
 
@@ -148,11 +143,13 @@ func (m *Model) imageLoaded(msg imageMsg) {
 		return
 	}
 	if msg.err != nil {
-		st.status = imageFailed
+		st.failed = true
 	} else {
-		st.status, st.img = imageReady, msg.img
-		if msg.fresh {
-			m.pending = append(m.pending, msg.img.Upload())
+		st.img = msg.img
+		// Whichever popup gets the image first sends it, even if the one that
+		// asked for it has closed since.
+		if up := msg.img.TakeUpload(); up != "" {
+			m.pending = append(m.pending, up)
 		}
 	}
 	m.refresh()
@@ -193,14 +190,24 @@ func (m *Model) withImages(md Markdown) Markdown {
 func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	st := m.images[media]
 	switch {
-	case st == nil || st.status == imageFailed:
+	case st == nil && termimage.Supported():
+		return markOpen + media + markClose + styles.Dim().Render("Loading image…")
+	case st == nil || st.failed:
 		return strings.TrimRight(md("[attachment]", width), "\n")
-	case st.status == imageLoading:
+	case st.img == nil:
 		return styles.Dim().Render("Loading image…")
 	}
-	lines, seq := st.img.Place(min(width, maxImageCols), maxImageRows)
-	if seq != "" {
-		m.pending = append(m.pending, seq)
+	// Each model places images under an ID of its own, so another popup
+	// showing the same image at another size doesn't change this one's.
+	p := st.img.Fit(uint64(m.id), width*4/5, m.vp.Height()*4/5)
+	if m.placed[media] != p {
+		m.placed[media] = p
+		m.pending = append(m.pending, st.img.Sequence(p))
+	}
+	lines := st.img.Lines(p)
+	pad := strings.Repeat(" ", max(0, (width-p.Cols)/2))
+	for i, l := range lines {
+		lines[i] = pad + l
 	}
 	return strings.Join(lines, "\n")
 }

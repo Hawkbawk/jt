@@ -209,19 +209,17 @@ func TestSplitOnlyCutsAtImageParagraphs(t *testing.T) {
 	}
 }
 
-func TestMediaIDsListsEachLinkedAttachmentOnce(t *testing.T) {
-	link := func(id string) string { return "![x.png](" + jira.MediaLinkPrefix + id + ")" }
-	m := &Model{
-		issue: &jira.IssueDetail{Description: "intro\n\n" + link("b") + "\n\n" + link("a")},
-		list: &jira.CommentList{Items: []jira.Comment{
-			{Body: link("a")},
-			{Body: "no images here"},
-			{Body: "intro\n\n" + link("b") + "\n\n" + link("a")},
-		}},
+func TestExtractMarksStripsThemAndFindsTheirLines(t *testing.T) {
+	src := "one\n" + markOpen + "a" + markClose + "Loading\nthree\n" + markOpen + "b" + markClose + "Loading"
+	got, rows := extractMarks(src)
+	if got != "one\nLoading\nthree\nLoading" {
+		t.Errorf("text = %q", got)
 	}
-	want := []string{"b", "a"}
-	if got := m.mediaIDs(); !slices.Equal(got, want) {
-		t.Errorf("expected %q, got mediaIDs = %q", want, got)
+	if want := []imageRow{{"a", 1}, {"b", 3}}; !slices.Equal(rows, want) {
+		t.Errorf("rows = %v, want %v", rows, want)
+	}
+	if got, rows := extractMarks("plain"); got != "plain" || rows != nil {
+		t.Errorf("plain text changed: %q %v", got, rows)
 	}
 }
 
@@ -238,7 +236,7 @@ func TestImageLinkFallsBackToTextWithoutSupport(t *testing.T) {
 
 func TestImageReplacesLinkOnceLoaded(t *testing.T) {
 	supported(t, true)
-	t.Cleanup(func() { imageCache.Delete("img-1") })
+	t.Cleanup(func() { imageStore.reset() })
 	m := loaded(sized(Details(withImage(map[string][]byte{"img-1": pngFile(t)}), "T-1", plain), 40, 20))
 	if got := view(m); !strings.Contains(got, "Loading image") {
 		t.Fatalf("expected a loading hint, got %q", got)
@@ -263,5 +261,57 @@ func TestImageThatFailsToLoadStaysText(t *testing.T) {
 	m.Update(m.loadImage("img-1")())
 	if got := view(m); !strings.Contains(got, "[attachment]") {
 		t.Errorf("view = %q", got)
+	}
+}
+
+func farImage(files map[string][]byte) fakeBackend {
+	b := withImage(files)
+	b.detail.Description = strings.Repeat("line\n\n", 100) + "![shot.png](" + jira.MediaLinkPrefix + "img-1)\n\nafter"
+	return b
+}
+
+func TestImagesLoadWhenScrolledNear(t *testing.T) {
+	supported(t, true)
+	t.Cleanup(func() { imageStore.reset() })
+	m := loaded(sized(Details(farImage(map[string][]byte{"img-1": pngFile(t)}), "T-1", plain), 40, 20))
+	if len(m.images) != 0 {
+		t.Fatalf("asked for an image far off screen: %v", m.images)
+	}
+	press(m, "G")
+	if len(m.images) != 1 {
+		t.Errorf("image near the visible text wasn't asked for: %v", m.images)
+	}
+}
+
+func TestPopupsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
+	supported(t, true)
+	t.Cleanup(func() { imageStore.reset() })
+	files := map[string][]byte{"img-1": pngFile(t)}
+	a := loaded(sized(Details(withImage(files), "T-1", plain), 40, 20))
+	b := loaded(sized(Details(withImage(files), "T-1", plain), 80, 40))
+	a.Update(a.loadImage("img-1")())
+	b.Update(b.loadImage("img-1")())
+	pa, pb := a.placed["img-1"], b.placed["img-1"]
+	if pa.ID == 0 || pa.ID == pb.ID || pa == pb {
+		t.Errorf("placements = %+v and %+v", pa, pb)
+	}
+	if h := strings.Count(a.View().Content, "\n") + 1; h != 20 {
+		t.Errorf("view with an image is %d lines, want 20", h)
+	}
+}
+
+func TestImageLoadedForAClosedPopupIsSentByTheNext(t *testing.T) {
+	supported(t, true)
+	t.Cleanup(func() { imageStore.reset() })
+	files := map[string][]byte{"img-1": pngFile(t)}
+	closed := loaded(sized(Details(withImage(files), "T-1", plain), 40, 20))
+	closed.loadImage("img-1")()
+
+	next := loaded(sized(Details(withImage(files), "T-1", plain), 40, 20))
+	next.pending = nil
+	next.images["img-1"] = &imageState{}
+	next.imageLoaded(next.loadImage("img-1")().(imageMsg))
+	if len(next.pending) != 2 || !strings.HasPrefix(next.pending[0], "\x1b_G") {
+		t.Errorf("image wasn't uploaded by the popup that showed it: %q", next.pending)
 	}
 }

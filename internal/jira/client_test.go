@@ -60,13 +60,13 @@ func TestToMarkdown(t *testing.T) {
 		{"type": "paragraph", "content": [{"type": "text", "text": "hello"}]}]}`), &doc); err != nil {
 		t.Fatal(err)
 	}
-	if got := toMarkdown(doc); !strings.Contains(got, "hello") {
+	if got := toMarkdown(doc, nil); !strings.Contains(got, "hello") {
 		t.Errorf("ADF: %q", got)
 	}
-	if got := toMarkdown("*bold*"); !strings.Contains(got, "**bold**") {
+	if got := toMarkdown("*bold*", nil); !strings.Contains(got, "**bold**") {
 		t.Errorf("wiki: %q", got)
 	}
-	if toMarkdown((*adf.ADF)(nil)) != "" || toMarkdown(nil) != "" {
+	if toMarkdown((*adf.ADF)(nil), nil) != "" || toMarkdown(nil, nil) != "" {
 		t.Error("expected empty output for missing description")
 	}
 }

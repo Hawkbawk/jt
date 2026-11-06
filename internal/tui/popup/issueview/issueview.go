@@ -25,6 +25,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/termimage"
 )
 
 // Backend loads issues, their comments and the images in them.
@@ -63,10 +64,14 @@ type Model struct {
 	md      Markdown
 	issue   *jira.IssueDetail
 	list    *jira.CommentList
-	// images is the state of each image the text links to, by attachment ID.
-	// pending is what the terminal still has to be sent for them.
-	images  map[string]*imageState
-	pending []string
+	// images is the state of each image asked for, by attachment ID. placed is
+	// the size each is placed at. imageRows is where the images not asked for
+	// yet are in the text. pending is what the terminal still has to be sent
+	// for them.
+	images    map[string]*imageState
+	placed    map[string]termimage.Placement
+	imageRows []imageRow
+	pending   []string
 
 	vp   viewport.Model
 	spin spinner.Model
@@ -104,7 +109,7 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 		top: keys.Get().Top, bottom: keys.Get().Bottom,
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
 		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
-		images: map[string]*imageState{},
+		images: map[string]*imageState{}, placed: map[string]termimage.Placement{},
 	}
 }
 
@@ -161,7 +166,9 @@ func (m *Model) ScrollPercent() float64 { return m.vp.ScrollPercent() }
 
 func (m *Model) refresh() {
 	if m.issue != nil || m.list != nil {
-		m.vp.SetContent(m.render(m, m.vp.Width(), m.withImages(m.md)))
+		content, rows := extractMarks(m.render(m, m.vp.Width(), m.withImages(m.md)))
+		m.imageRows = rows
+		m.vp.SetContent(content)
 	}
 }
 
@@ -171,23 +178,21 @@ func (m *Model) refresh() {
 // text load after it, and replace the text that stood in for them.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
-	return m, tea.Batch(cmd, m.flush())
+	return m, tea.Batch(cmd, m.loadVisible(), m.flush())
 }
 
 func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		var cmd tea.Cmd
 		switch {
 		case msg.id != m.id:
 		case msg.err != nil:
 			m.err, m.loading = msg.err, false
 		case msg.issue != nil || msg.comments != nil:
 			m.issue, m.list, m.err, m.loading = msg.issue, msg.comments, nil, false
-			cmd = m.loadImages()
 			m.refresh()
 		}
-		return m, cmd
+		return m, nil
 	case imageMsg:
 		m.imageLoaded(msg)
 		return m, nil
