@@ -15,11 +15,6 @@ import (
 	"github.com/hawkbawk/jt/internal/termimage"
 )
 
-const (
-	maxImageCols = 80
-	maxImageRows = 20
-)
-
 // segment is a run of markdown, or the attachment an image link points to.
 type segment struct {
 	text  string
@@ -198,7 +193,7 @@ func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	case st.status == imageLoading:
 		return styles.Dim().Render("Loading image…")
 	}
-	lines, seq := st.img.Place(min(width, maxImageCols), maxImageRows)
+	lines, seq := st.img.Place(width, m.vp.Height())
 	if seq != "" {
 		m.pending = append(m.pending, seq)
 	}

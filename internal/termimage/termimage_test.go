@@ -39,17 +39,20 @@ func TestDetect(t *testing.T) {
 	}
 }
 
-func TestPlaceFitsAndNeverEnlarges(t *testing.T) {
+func TestPlaceFillsTheSpaceKeepingAspect(t *testing.T) {
 	im, err := Decode(pngBytes(t, 80, 160))
 	if err != nil {
 		t.Fatal(err)
 	}
 	lines, seq := im.Place(50, 50)
-	if len(lines) != 10 || ansi.StringWidth(lines[0]) != 10 {
-		t.Fatalf("native size: got %d rows, width %d", len(lines), ansi.StringWidth(lines[0]))
+	if len(lines) != 50 || ansi.StringWidth(lines[0]) != 50 {
+		t.Fatalf("enlarged: got %d rows, width %d", len(lines), ansi.StringWidth(lines[0]))
 	}
-	if !strings.Contains(seq, "U=1") || !strings.Contains(seq, "c=10") || !strings.Contains(seq, "r=10") {
+	if !strings.Contains(seq, "U=1") || !strings.Contains(seq, "c=50") || !strings.Contains(seq, "r=50") || !strings.Contains(seq, "p=1,") {
 		t.Errorf("placement = %q", seq)
+	}
+	if !strings.Contains(lines[0], "\x1b[58;2;0;0;1m") {
+		t.Errorf("placeholders don't name the placement: %q", lines[0])
 	}
 	if _, seq := im.Place(50, 50); seq != "" {
 		t.Errorf("unchanged size placed again: %q", seq)
@@ -57,6 +60,10 @@ func TestPlaceFitsAndNeverEnlarges(t *testing.T) {
 	lines, seq = im.Place(4, 50)
 	if len(lines) != 4 || ansi.StringWidth(lines[0]) != 4 || seq == "" {
 		t.Errorf("narrow: %d rows, width %d, seq %q", len(lines), ansi.StringWidth(lines[0]), seq)
+	}
+	lines, _ = im.Place(100, 10)
+	if len(lines) != 10 || ansi.StringWidth(lines[0]) != 10 {
+		t.Errorf("short: %d rows, width %d", len(lines), ansi.StringWidth(lines[0]))
 	}
 }
 

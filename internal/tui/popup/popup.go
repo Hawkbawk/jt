@@ -187,7 +187,7 @@ func (m Model) View() string {
 	}
 	w, h := m.inner()
 	st := m.style()
-	body := lipgloss.NewStyle().Height(h).MaxHeight(h).Render(m.content.View().Content)
+	body := fitHeight(m.content.View().Content, h)
 	return st.Width(w + st.GetHorizontalFrameSize()).Render(body)
 }
 

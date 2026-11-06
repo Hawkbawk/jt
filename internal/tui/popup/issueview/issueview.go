@@ -221,15 +221,17 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View draws the title and the text, or the error or loading state in its place.
 func (m *Model) View() tea.View {
 	var body string
+	h := m.vp.Height()
 	switch {
 	case m.err != nil:
 		body = styles.Error().Render("Error: " + m.err.Error())
 	case m.loading:
 		body = m.spin.View() + " Loading…"
 	default:
-		body = m.vp.View()
+		// The viewport pads itself to its size, and measuring a screen of
+		// image placeholders a second time is slow.
+		return tea.NewView(styles.Title().Render(m.title) + "\n" + m.vp.View())
 	}
-	h := m.vp.Height()
 	return tea.NewView(strings.Join([]string{
 		styles.Title().Render(m.title),
 		lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body),
