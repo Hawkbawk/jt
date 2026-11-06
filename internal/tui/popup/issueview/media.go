@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -193,9 +194,15 @@ func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	case st.status == imageLoading:
 		return styles.Dim().Render("Loading image…")
 	}
-	lines, seq := st.img.Place(width, m.vp.Height())
+	lines, seq := st.img.Place(width*4/5, m.vp.Height()*4/5)
 	if seq != "" {
 		m.pending = append(m.pending, seq)
+	}
+	if len(lines) > 0 {
+		pad := strings.Repeat(" ", max(0, (width-lipgloss.Width(lines[0]))/2))
+		for i, l := range lines {
+			lines[i] = pad + l
+		}
 	}
 	return strings.Join(lines, "\n")
 }
