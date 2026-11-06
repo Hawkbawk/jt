@@ -25,12 +25,14 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/termimage"
 )
 
-// Backend loads issues and their comments.
+// Backend loads issues, their comments and the images in them.
 type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
 	Comments(key string) (*jira.CommentList, error)
+	Attachment(id string) ([]byte, error)
 }
 
 // Markdown renders markdown wrapped to width.
@@ -62,6 +64,14 @@ type Model struct {
 	md      Markdown
 	issue   *jira.IssueDetail
 	list    *jira.CommentList
+	// images is the state of each image asked for, by attachment ID. placed is
+	// the size each is placed at. imageRows is where the images not asked for
+	// yet are in the text. pending is what the terminal still has to be sent
+	// for them.
+	images    map[string]*imageState
+	placed    map[string]termimage.Placement
+	imageRows []imageRow
+	pending   []string
 
 	vp   viewport.Model
 	spin spinner.Model
@@ -99,6 +109,7 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 		top: keys.Get().Top, bottom: keys.Get().Bottom,
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
 		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
+		images: map[string]*imageState{}, placed: map[string]termimage.Placement{},
 	}
 }
 
@@ -155,14 +166,22 @@ func (m *Model) ScrollPercent() float64 { return m.vp.ScrollPercent() }
 
 func (m *Model) refresh() {
 	if m.issue != nil || m.list != nil {
-		m.vp.SetContent(m.render(m, m.vp.Width(), m.md))
+		content, rows := extractMarks(m.render(m, m.vp.Width(), m.withImages(m.md)))
+		m.imageRows = rows
+		m.vp.SetContent(content)
 	}
 }
 
 // Update shows the issue once it loads and handles sizing, the spinner and
 // scroll keys. It ignores everything else, including the keys that close the
-// popup. The title takes one line of the height it's sized for.
+// popup. The title takes one line of the height it's sized for. Images in the
+// text load after it, and replace the text that stood in for them.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.update(msg)
+	return m, tea.Batch(cmd, m.loadVisible(), m.flush())
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		switch {
@@ -173,6 +192,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.issue, m.list, m.err, m.loading = msg.issue, msg.comments, nil, false
 			m.refresh()
 		}
+		return m, nil
+	case imageMsg:
+		m.imageLoaded(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.SetWidth(msg.Width)
@@ -204,15 +226,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View draws the title and the text, or the error or loading state in its place.
 func (m *Model) View() tea.View {
 	var body string
+	h := m.vp.Height()
 	switch {
 	case m.err != nil:
 		body = styles.Error().Render("Error: " + m.err.Error())
 	case m.loading:
 		body = m.spin.View() + " Loading…"
 	default:
-		body = m.vp.View()
+		// The viewport pads itself to its size, and measuring a screen of
+		// image placeholders a second time is slow.
+		return tea.NewView(styles.Title().Render(m.title) + "\n" + m.vp.View())
 	}
-	h := m.vp.Height()
 	return tea.NewView(strings.Join([]string{
 		styles.Title().Render(m.title),
 		lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body),

@@ -196,7 +196,14 @@ func (g *issueGen) issue(key string, s issueSeed) *issue {
 		iss.Assignee = g.assignable()
 	}
 	if len(s.Description) > 0 {
-		set("description", value{Text: strings.Join(s.Description, "\n\n")})
+		text := strings.Join(s.Description, "\n\n")
+		switch g.f.IntN(6) {
+		case 0:
+			text += "\n\n" + imageLink("screenshot.png", pngAttachment)
+		case 1:
+			text += "\n\n" + imageLink("repro.gif", gifAttachment)
+		}
+		set("description", value{Text: text})
 	}
 	if c := uniq(s.Components); len(c) > 0 {
 		set("components", value{Chosen: c})

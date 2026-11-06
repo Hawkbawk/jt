@@ -61,16 +61,25 @@ func (c copier) copy(s string) error {
 
 // tmuxOptions reads the options as they apply to the current pane.
 func tmuxOptions() (string, string, error) {
+	out, err := TmuxDisplay("#{set-clipboard} #{allow-passthrough}")
+	if err != nil {
+		return "", "", err
+	}
+	clip, pass, _ := strings.Cut(out, " ")
+	return clip, pass, nil
+}
+
+// TmuxDisplay expands a tmux format string for the current pane.
+func TmuxDisplay(format string) (string, error) {
 	args := []string{"display-message", "-p"}
 	if pane := os.Getenv("TMUX_PANE"); pane != "" {
 		args = append(args, "-t", pane)
 	}
-	out, err := exec.Command("tmux", append(args, "#{set-clipboard} #{allow-passthrough}")...).Output()
+	out, err := exec.Command("tmux", append(args, format)...).Output()
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-	clip, pass, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
-	return clip, pass, nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 // OpenInBrowser opens url with the platform's default handler.

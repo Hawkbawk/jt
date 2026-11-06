@@ -16,7 +16,6 @@ import (
 
 	"github.com/ankitpokhrel/jira-cli/pkg/adf"
 	jcli "github.com/ankitpokhrel/jira-cli/pkg/jira"
-	"github.com/ankitpokhrel/jira-cli/pkg/jira/filter/issue"
 	"github.com/ankitpokhrel/jira-cli/pkg/md"
 
 	"github.com/hawkbawk/jt/internal/config"
@@ -42,6 +41,9 @@ type Client struct {
 	quick     map[int][]Filter
 	fieldMeta map[fieldsKey]map[string]fieldMeta
 	moves     map[fieldsKey][]Transition
+	// attachments is each issue's attachment list as of the last time it was
+	// fetched, for matching the media in its comments.
+	attachments map[string]cachedAttachments
 }
 
 // New builds a client from jt's Jira settings and the API token. It signs in
@@ -303,25 +305,68 @@ func (c *Client) Search(jql string) ([]Issue, error) {
 	return out, nil
 }
 
-// Issue fetches an issue with its description.
+// Issue fetches an issue with its description. The same request returns the
+// attachments and the rendered description that images in the description are
+// matched against.
 func (c *Client) Issue(key string) (*IssueDetail, error) {
-	iss, err := c.jc.GetIssue(key, issue.NewNumCommentsFilter(0))
-	if err != nil {
+	var res struct {
+		Key    string `json:"key"`
+		Fields struct {
+			Summary string `json:"summary"`
+			Status  struct {
+				Name string `json:"name"`
+			} `json:"status"`
+			Assignee *struct {
+				DisplayName string `json:"displayName"`
+			} `json:"assignee"`
+			IssueType struct {
+				Name string `json:"name"`
+			} `json:"issuetype"`
+			Priority *struct {
+				Name string `json:"name"`
+			} `json:"priority"`
+			Reporter *struct {
+				DisplayName string `json:"displayName"`
+			} `json:"reporter"`
+			Description *adf.ADF     `json:"description"`
+			Labels      []string     `json:"labels"`
+			Created     string       `json:"created"`
+			Updated     string       `json:"updated"`
+			Attachment  []attachment `json:"attachment"`
+		} `json:"fields"`
+		RenderedFields struct {
+			Description string `json:"description"`
+		} `json:"renderedFields"`
+	}
+	path := "/issue/" + url.PathEscape(key) +
+		"?fields=summary,status,assignee,issuetype,priority,reporter,description,labels,created,updated,attachment&expand=renderedFields"
+	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
 		return nil, err
 	}
-	f := iss.Fields
+	f := res.Fields
+	c.rememberAttachments(key, f.Attachment)
+	var images *mediaIndex
+	if anyMedia([]any{f.Description}) {
+		images = newMediaIndex(f.Attachment, res.RenderedFields.Description)
+	}
 	d := &IssueDetail{
-		Key:         iss.Key,
+		Key:         res.Key,
 		Summary:     f.Summary,
 		Status:      f.Status.Name,
-		Assignee:    Option{Name: f.Assignee.Name},
 		Type:        f.IssueType.Name,
-		Priority:    f.Priority.Name,
-		Description: toMarkdown(f.Description),
-		Reporter:    f.Reporter.Name,
+		Description: toMarkdown(f.Description, images),
 		Labels:      f.Labels,
 		Created:     formatTime(f.Created),
 		Updated:     formatTime(f.Updated),
+	}
+	if f.Assignee != nil {
+		d.Assignee = Option{Name: f.Assignee.DisplayName}
+	}
+	if f.Priority != nil {
+		d.Priority = f.Priority.Name
+	}
+	if f.Reporter != nil {
+		d.Reporter = f.Reporter.DisplayName
 	}
 	return d, nil
 }
@@ -329,20 +374,31 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 // Comments fetches the newest comments on an issue, newest first, along with
 // how many it has in all.
 func (c *Client) Comments(key string) (*CommentList, error) {
-	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d", url.PathEscape(key), commentsLimit)
+	path := fmt.Sprintf("/issue/%s/comment?orderBy=-created&maxResults=%d&expand=renderedBody", url.PathEscape(key), commentsLimit)
 	var res struct {
 		Comments []struct {
 			Author struct {
 				DisplayName string `json:"displayName"`
 			} `json:"author"`
-			Body    *adf.ADF `json:"body"`
-			Created string   `json:"created"`
-			Updated string   `json:"updated"`
+			Body         *adf.ADF `json:"body"`
+			RenderedBody string   `json:"renderedBody"`
+			Created      string   `json:"created"`
+			Updated      string   `json:"updated"`
 		} `json:"comments"`
 		Total int `json:"total"`
 	}
 	if err := c.getJSON(c.jc.Get, path, &res); err != nil {
 		return nil, err
+	}
+	bodies := make([]any, 0, len(res.Comments))
+	rendered := make([]string, 0, len(res.Comments))
+	for _, cm := range res.Comments {
+		bodies = append(bodies, cm.Body)
+		rendered = append(rendered, cm.RenderedBody)
+	}
+	var images *mediaIndex
+	if anyMedia(bodies) {
+		images = newMediaIndex(c.issueAttachments(key), rendered...)
 	}
 	out := make([]Comment, 0, len(res.Comments))
 	for _, cm := range res.Comments {
@@ -350,7 +406,7 @@ func (c *Client) Comments(key string) (*CommentList, error) {
 			Author:  cm.Author.DisplayName,
 			Created: formatTime(cm.Created),
 			Edited:  editedAfter(cm.Created, cm.Updated),
-			Body:    toMarkdown(cm.Body),
+			Body:    toMarkdown(cm.Body, images),
 		})
 	}
 	return &CommentList{Items: out, Total: res.Total}, nil
@@ -457,14 +513,19 @@ func responseError(res *http.Response, body jcli.Errors) error {
 	return errors.New(strings.Join(msgs, "; "))
 }
 
-// toMarkdown converts an ADF document (cloud) or Jira wiki markup (server) to markdown.
-func toMarkdown(v any) string {
+// toMarkdown converts an ADF document (cloud) or Jira wiki markup (server) to
+// markdown. Media nodes that match an attachment in images, which may be nil,
+// become image links.
+func toMarkdown(v any, images *mediaIndex) string {
 	switch v := v.(type) {
 	case *adf.ADF:
 		if v == nil {
 			return ""
 		}
-		return adf.NewTranslator(v, adf.NewMarkdownTranslator()).Translate()
+		tr := adf.NewMarkdownTranslator(adf.WithMarkdownOpenHooks(map[adf.NodeType]func(adf.Connector) string{
+			adf.NodeMedia: mediaHook(images),
+		}))
+		return adf.NewTranslator(v, tr).Translate()
 	case string:
 		return md.FromJiraMD(v)
 	default:

@@ -22,6 +22,8 @@ func (f *fakeBackend) Issue(string) (*jira.IssueDetail, error) { return &jira.Is
 
 func (f *fakeBackend) Comments(string) (*jira.CommentList, error) { return f.list, nil }
 
+func (f *fakeBackend) Attachment(string) ([]byte, error) { return nil, errors.New("none") }
+
 func (f *fakeBackend) AddComment(key, body string) error {
 	if f.addErr != nil {
 		return f.addErr

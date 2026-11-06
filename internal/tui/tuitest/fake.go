@@ -3,6 +3,8 @@
 package tuitest
 
 import (
+	"errors"
+
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
@@ -81,6 +83,9 @@ func (f *Backend) Issue(string) (*jira.IssueDetail, error) { return f.Detail, ni
 
 // Comments implements the screens' Backend.
 func (f *Backend) Comments(string) (*jira.CommentList, error) { return f.CommentList, nil }
+
+// Attachment implements the screens' Backend.
+func (f *Backend) Attachment(string) ([]byte, error) { return nil, errors.New("no attachments") }
 
 // Transitions implements the screens' Backend.
 func (f *Backend) Transitions(jira.Issue) ([]jira.Transition, error) {

@@ -16,6 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/termimage"
 	"github.com/hawkbawk/jt/internal/tui/board"
 	"github.com/hawkbawk/jt/internal/tui/search"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -170,7 +171,7 @@ func fakeOptions() []fakejira.Option {
 
 // run shows m until it quits, following changes to the terminal's theme.
 func run(m tea.Model) error {
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(graphicsProbe{m})
 	// Send blocks until the program reads the message, and a tint can change
 	// from inside Update, so it runs on its own goroutine.
 	defer tint.Subscribe(func(ev tint.Event) {
@@ -180,6 +181,9 @@ func run(m tea.Model) error {
 	})()
 
 	_, err := p.Run()
+	if termimage.Supported() {
+		_, _ = fmt.Fprint(os.Stdout, termimage.DeleteAll())
+	}
 	return err
 }
 
