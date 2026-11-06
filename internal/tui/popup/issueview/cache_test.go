@@ -24,13 +24,11 @@ func TestCacheLoadsOnceForConcurrentAsks(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 5 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if got, err := c.get("a", load); err != nil || got != img {
 				t.Errorf("get = %v, %v", got, err)
 			}
-		}()
+		})
 	}
 	close(release)
 	wg.Wait()
@@ -57,13 +55,11 @@ func TestCacheRunsLimitedLoadsAtOnce(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for i := range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if _, err := c.get(strconv.Itoa(i), load); err != nil {
 				t.Error(err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	if peak != 2 {

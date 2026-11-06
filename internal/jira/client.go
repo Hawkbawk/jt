@@ -350,12 +350,10 @@ func (c *Client) Issue(key string) (*IssueDetail, error) {
 		images = newMediaIndex(f.Attachment, res.RenderedFields.Description)
 	}
 	d := &IssueDetail{
-		Issue: Issue{
-			Key:     res.Key,
-			Summary: f.Summary,
-			Status:  f.Status.Name,
-			Type:    f.IssueType.Name,
-		},
+		Key:         res.Key,
+		Summary:     f.Summary,
+		Status:      f.Status.Name,
+		Type:        f.IssueType.Name,
 		Description: toMarkdown(f.Description, images),
 		Labels:      f.Labels,
 		Created:     formatTime(f.Created),
