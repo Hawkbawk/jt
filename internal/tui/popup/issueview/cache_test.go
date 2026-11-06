@@ -2,9 +2,11 @@ package issueview
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/hawkbawk/jt/internal/termimage"
 )
@@ -13,7 +15,7 @@ import (
 func (c *imageCache) reset() { c.flights.Clear() }
 
 func TestCacheLoadsOnceForConcurrentAsks(t *testing.T) {
-	var c imageCache
+	c := newImageCache(2)
 	var loads atomic.Int32
 	release := make(chan struct{})
 	img := &termimage.Image{}
@@ -37,8 +39,40 @@ func TestCacheLoadsOnceForConcurrentAsks(t *testing.T) {
 	}
 }
 
+func TestCacheRunsLimitedLoadsAtOnce(t *testing.T) {
+	c := newImageCache(2)
+	var mu sync.Mutex
+	var running, peak int
+	var loadErr error
+	load := func() (*termimage.Image, error) {
+		mu.Lock()
+		running++
+		peak = max(peak, running)
+		mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+		return &termimage.Image{}, loadErr
+	}
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := c.get(strconv.Itoa(i), load); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if peak != 2 {
+		t.Errorf("peak parallel loads = %d, want 2", peak)
+	}
+}
+
 func TestCacheDoesNotKeepFailures(t *testing.T) {
-	var c imageCache
+	c := newImageCache(2)
 	var loads int
 	fail := func() (*termimage.Image, error) { loads++; return nil, errors.New("boom") }
 	for range 2 {
