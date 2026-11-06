@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -14,6 +13,11 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/termimage"
+)
+
+const (
+	maxImageCols = 80
+	maxImageRows = 20
 )
 
 // segment is a run of markdown, or the attachment an image link points to.
@@ -194,15 +198,9 @@ func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	case st.status == imageLoading:
 		return styles.Dim().Render("Loading image…")
 	}
-	lines, seq := st.img.Place(width*4/5, m.vp.Height()*4/5)
+	lines, seq := st.img.Place(min(width, maxImageCols), maxImageRows)
 	if seq != "" {
 		m.pending = append(m.pending, seq)
-	}
-	if len(lines) > 0 {
-		pad := strings.Repeat(" ", max(0, (width-lipgloss.Width(lines[0]))/2))
-		for i, l := range lines {
-			lines[i] = pad + l
-		}
 	}
 	return strings.Join(lines, "\n")
 }

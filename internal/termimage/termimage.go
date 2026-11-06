@@ -38,10 +38,6 @@ const (
 	chunkSize         = 4096
 	defaultFrameMS    = 100
 	minFrameMS        = 20
-
-	// placementID is the one placement each image has. Placing it again at a
-	// new size replaces it instead of adding another.
-	placementID = 1
 )
 
 // Supported reports whether the terminal draws kitty graphics with Unicode
@@ -130,35 +126,28 @@ func Decode(data []byte) (*Image, error) {
 // Upload is the sequence that sends the image to the terminal. Write it once.
 func (im *Image) Upload() string { return im.upload }
 
-// Place sizes the image to the largest size that fits maxCols by maxRows
-// cells, enlarging it if need be, and returns the rows of placeholder text that show it. The sequence is what
+// Place sizes the image to fit maxCols by maxRows cells without enlarging it,
+// and returns the rows of placeholder text that show it. The sequence is what
 // the terminal needs before it can draw them, and is empty when the image is
 // already placed at that size.
 func (im *Image) Place(maxCols, maxRows int) (lines []string, seq string) {
 	cols, rows := cells(im.width, im.height, max(1, maxCols), max(1, maxRows))
 	if cols != im.cols || rows != im.rows {
 		im.cols, im.rows = cols, rows
-		seq = ansi.KittyGraphics(nil, "a=p", fmt.Sprintf("i=%d", im.id), fmt.Sprintf("p=%d", placementID),
-			"U=1", fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows), "q=2")
+		seq = ansi.KittyGraphics(nil, "a=p", fmt.Sprintf("i=%d", im.id), "U=1",
+			fmt.Sprintf("c=%d", cols), fmt.Sprintf("r=%d", rows), "q=2")
 	}
-	// The foreground color names the image and the underline color names the
-	// placement, three bytes each.
-	color := fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[58;2;0;%d;%dm",
-		im.id>>16&0xff, im.id>>8&0xff, im.id&0xff, placementID>>8&0xff, placementID&0xff)
+	color := fmt.Sprintf("\x1b[38;2;%d;%d;%dm", im.id>>16&0xff, im.id>>8&0xff, im.id&0xff)
 	lines = make([]string, rows)
 	for r := range lines {
 		var b strings.Builder
 		b.WriteString(color)
-		// Only the first cell of a row says where it is. The terminal takes
-		// a bare placeholder as the next column of the same row, which saves
-		// the redraw work of measuring two combining marks on every cell.
-		b.WriteRune(kitty.Placeholder)
-		b.WriteRune(kitty.Diacritic(r))
-		b.WriteRune(kitty.Diacritic(0))
-		for range cols - 1 {
+		for c := range cols {
 			b.WriteRune(kitty.Placeholder)
+			b.WriteRune(kitty.Diacritic(r))
+			b.WriteRune(kitty.Diacritic(c))
 		}
-		b.WriteString("\x1b[39m\x1b[59m")
+		b.WriteString("\x1b[39m")
 		lines[r] = b.String()
 	}
 	return lines, seq
@@ -169,10 +158,10 @@ func DeleteAll() string {
 	return ansi.KittyGraphics(nil, "a=d", "d=A", "q=2")
 }
 
-// cells is the size in cells of an image of w by h pixels, scaled up or down
-// to the largest size that fits maxCols by maxRows.
+// cells is the size in cells of an image of w by h pixels, shrunk to fit
+// maxCols by maxRows and never enlarged.
 func cells(w, h, maxCols, maxRows int) (cols, rows int) {
-	scale := min(float64(maxCols*cellW)/float64(w), float64(maxRows*cellH)/float64(h))
+	scale := min(1, float64(maxCols*cellW)/float64(w), float64(maxRows*cellH)/float64(h))
 	cols = max(1, min(maxCols, int(float64(w)*scale/cellW+0.5)))
 	rows = max(1, min(maxRows, int(float64(h)*scale/cellH+0.5)))
 	return cols, rows
