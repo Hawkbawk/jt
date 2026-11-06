@@ -52,7 +52,7 @@ func searchMatcher(jql string) func(*issue) bool {
 		keys[strings.ToUpper(m[1])] = true
 	}
 	for _, m := range jqlKeysRe.FindAllStringSubmatch(jql, -1) {
-		for _, k := range strings.Split(m[1], ",") {
+		for k := range strings.SplitSeq(m[1], ",") {
 			keys[strings.ToUpper(strings.TrimSpace(k))] = true
 		}
 	}

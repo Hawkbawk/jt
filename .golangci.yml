@@ -4,9 +4,18 @@ linters:
   enable:
     - errorlint
     - misspell
+    - modernize
     - revive
     - unconvert
     - unparam
+  settings:
+    govet:
+      # Same analyzers gopls runs by default (plus a few extras), minus the
+      # noisy opt-in ones.
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
 
 formatters:
   enable:

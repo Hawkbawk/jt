@@ -558,7 +558,7 @@ func TestFieldValueValidate(t *testing.T) {
 		{jira.FieldDate, false, "", true},
 	}
 	for _, tt := range tests {
-		v := &fieldValue{EditField: jira.EditField{Kind: tt.kind, Required: tt.required}}
+		v := &fieldValue{Kind: tt.kind, Required: tt.required}
 		if err := v.validate(tt.text); (err == nil) != tt.ok {
 			t.Errorf("validate(%v, required=%v, %q) = %v", tt.kind, tt.required, tt.text, err)
 		}
@@ -579,7 +579,7 @@ func TestNormalizeTime(t *testing.T) {
 		{jira.FieldDateTime, "", ""},
 	}
 	for _, tt := range tests {
-		v := &fieldValue{EditField: jira.EditField{Kind: tt.kind}, text: tt.in}
+		v := &fieldValue{Kind: tt.kind, text: tt.in}
 		v.normalizeTime(now)
 		if v.text != tt.want {
 			t.Errorf("normalizeTime(%v, %q) = %q, want %q", tt.kind, tt.in, v.text, tt.want)

@@ -150,8 +150,7 @@ func createError(path string, err error) error {
 
 // withoutPath drops the path from an OS error, leaving the reason.
 func withoutPath(err error) error {
-	var pe *fs.PathError
-	if errors.As(err, &pe) {
+	if pe, ok := errors.AsType[*fs.PathError](err); ok {
 		return pe.Err
 	}
 	return err
