@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"slices"
 	"strings"
 	"testing"
 
@@ -205,6 +206,22 @@ func TestSplitOnlyCutsAtImageParagraphs(t *testing.T) {
 		if got := split(src); len(got) != 1 || got[0].text != src {
 			t.Errorf("%s: split = %+v", name, got)
 		}
+	}
+}
+
+func TestMediaIDsListsEachLinkedAttachmentOnce(t *testing.T) {
+	link := func(id string) string { return "![x.png](" + jira.MediaLinkPrefix + id + ")" }
+	m := &Model{
+		issue: &jira.IssueDetail{Description: "intro\n\n" + link("b") + "\n\n" + link("a")},
+		list: &jira.CommentList{Items: []jira.Comment{
+			{Body: link("a")},
+			{Body: "no images here"},
+			{Body: "intro\n\n" + link("b") + "\n\n" + link("a")},
+		}},
+	}
+	want := []string{"b", "a"}
+	if got := m.mediaIDs(); !slices.Equal(got, want) {
+		t.Errorf("expected %q, got mediaIDs = %q", want, got)
 	}
 }
 
