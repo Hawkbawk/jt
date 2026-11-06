@@ -1,7 +1,10 @@
 package issueview
 
 import (
+	"bytes"
 	"errors"
+	"image"
+	"image/png"
 	"strings"
 	"testing"
 
@@ -10,12 +13,21 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/termimage"
 )
 
 type fakeBackend struct {
 	detail   *jira.IssueDetail
 	comments *jira.CommentList
 	err      error
+	files    map[string][]byte
+}
+
+func (f fakeBackend) Attachment(id string) ([]byte, error) {
+	if data, ok := f.files[id]; ok {
+		return data, nil
+	}
+	return nil, errors.New("no such attachment")
 }
 
 func (f fakeBackend) Issue(string) (*jira.IssueDetail, error) { return f.detail, f.err }
@@ -153,5 +165,86 @@ func TestEditedCommentIsMarked(t *testing.T) {
 	}}
 	if got := strings.Count(renderComments(l, 40, plain), "edited"); got != 1 {
 		t.Fatalf("got %d edited markers, want 1", got)
+	}
+}
+
+func supported(t *testing.T, on bool) {
+	t.Helper()
+	old := termimage.Supported
+	termimage.Supported = func() bool { return on }
+	t.Cleanup(func() { termimage.Supported = old })
+}
+
+func withImage(files map[string][]byte) fakeBackend {
+	d := detail()
+	d.Description = "before\n\n![shot.png](" + jira.MediaLinkPrefix + "img-1)\n\nafter"
+	return fakeBackend{detail: d, files: files}
+}
+
+func pngFile(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 80, 32))); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestSplitOnlyCutsAtImageParagraphs(t *testing.T) {
+	link := "![a.png](" + jira.MediaLinkPrefix + "7)"
+	got := split("before\n\n" + link + "\n\nafter")
+	if len(got) != 3 || got[1].media != "7" ||
+		strings.TrimSpace(got[0].text) != "before" || strings.TrimSpace(got[2].text) != "after" {
+		t.Errorf("split = %+v", got)
+	}
+	for name, src := range map[string]string{
+		"code block": "```\n" + link + "\n```",
+		"in a line":  "see " + link + " here",
+		"other link": "![x](https://example.com/x.png)",
+	} {
+		if got := split(src); len(got) != 1 || got[0].text != src {
+			t.Errorf("%s: split = %+v", name, got)
+		}
+	}
+}
+
+func TestImageLinkFallsBackToTextWithoutSupport(t *testing.T) {
+	supported(t, false)
+	m := loaded(sized(Details(withImage(nil), "T-1", plain), 40, 20))
+	if got := view(m); !strings.Contains(got, "[attachment]") || !strings.Contains(got, "before") || !strings.Contains(got, "after") {
+		t.Errorf("view = %q", got)
+	}
+	if len(m.images) != 0 {
+		t.Errorf("loaded images without support: %v", m.images)
+	}
+}
+
+func TestImageReplacesLinkOnceLoaded(t *testing.T) {
+	supported(t, true)
+	t.Cleanup(func() { imageCache.Delete("img-1") })
+	m := loaded(sized(Details(withImage(map[string][]byte{"img-1": pngFile(t)}), "T-1", plain), 40, 20))
+	if got := view(m); !strings.Contains(got, "Loading image") {
+		t.Fatalf("expected a loading hint, got %q", got)
+	}
+
+	_, cmd := m.Update(m.loadImage("img-1")())
+	if cmd == nil {
+		t.Fatal("expected a command that sends the image to the terminal")
+	}
+	got := view(m)
+	if !strings.ContainsRune(got, '\U0010EEEE') || strings.Contains(got, "[attachment]") || strings.Contains(got, "Loading image") {
+		t.Errorf("view = %q", got)
+	}
+	if len(m.pending) != 0 {
+		t.Errorf("pending not flushed: %d", len(m.pending))
+	}
+}
+
+func TestImageThatFailsToLoadStaysText(t *testing.T) {
+	supported(t, true)
+	m := loaded(sized(Details(withImage(nil), "T-1", plain), 40, 20))
+	m.Update(m.loadImage("img-1")())
+	if got := view(m); !strings.Contains(got, "[attachment]") {
+		t.Errorf("view = %q", got)
 	}
 }

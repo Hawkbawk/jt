@@ -16,6 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/termimage"
 	"github.com/hawkbawk/jt/internal/tui/board"
 	"github.com/hawkbawk/jt/internal/tui/search"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -180,6 +181,9 @@ func run(m tea.Model) error {
 	})()
 
 	_, err := p.Run()
+	if termimage.Supported() {
+		_, _ = fmt.Fprint(os.Stdout, termimage.DeleteAll())
+	}
 	return err
 }
 

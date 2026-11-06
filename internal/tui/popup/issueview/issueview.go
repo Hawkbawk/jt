@@ -27,10 +27,11 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
-// Backend loads issues and their comments.
+// Backend loads issues, their comments and the images in them.
 type Backend interface {
 	Issue(key string) (*jira.IssueDetail, error)
 	Comments(key string) (*jira.CommentList, error)
+	Attachment(id string) ([]byte, error)
 }
 
 // Markdown renders markdown wrapped to width.
@@ -62,6 +63,10 @@ type Model struct {
 	md      Markdown
 	issue   *jira.IssueDetail
 	list    *jira.CommentList
+	// images is the state of each image the text links to, by attachment ID.
+	// pending is what the terminal still has to be sent for them.
+	images  map[string]*imageState
+	pending []string
 
 	vp   viewport.Model
 	spin spinner.Model
@@ -99,6 +104,7 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 		top: keys.Get().Top, bottom: keys.Get().Bottom,
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
 		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
+		images: map[string]*imageState{},
 	}
 }
 
@@ -155,24 +161,35 @@ func (m *Model) ScrollPercent() float64 { return m.vp.ScrollPercent() }
 
 func (m *Model) refresh() {
 	if m.issue != nil || m.list != nil {
-		m.vp.SetContent(m.render(m, m.vp.Width(), m.md))
+		m.vp.SetContent(m.render(m, m.vp.Width(), m.withImages(m.md)))
 	}
 }
 
 // Update shows the issue once it loads and handles sizing, the spinner and
 // scroll keys. It ignores everything else, including the keys that close the
-// popup. The title takes one line of the height it's sized for.
+// popup. The title takes one line of the height it's sized for. Images in the
+// text load after it, and replace the text that stood in for them.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.update(msg)
+	return m, tea.Batch(cmd, m.flush())
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
+		var cmd tea.Cmd
 		switch {
 		case msg.id != m.id:
 		case msg.err != nil:
 			m.err, m.loading = msg.err, false
 		case msg.issue != nil || msg.comments != nil:
 			m.issue, m.list, m.err, m.loading = msg.issue, msg.comments, nil, false
+			cmd = m.loadImages()
 			m.refresh()
 		}
+		return m, cmd
+	case imageMsg:
+		m.imageLoaded(msg)
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.SetWidth(msg.Width)
