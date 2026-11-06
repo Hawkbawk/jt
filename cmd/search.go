@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/hawkbawk/jt/internal/tui"
+	"github.com/hawkbawk/jt/internal/tui/search"
 )
 
 var searchCmd = &cobra.Command{
@@ -25,7 +25,7 @@ func runSearch(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	m := tui.NewSearch(backend, settings)
+	m := search.New(backend, settings)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
