@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -49,6 +50,10 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "ctrl+s":
 		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
+	case "ctrl+e":
+		return tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
@@ -109,17 +114,20 @@ func TestComposeAndSend(t *testing.T) {
 	m := open(t, b)
 
 	press(m, "x")
-	if m.input.Focused() || m.input.Value() != "" {
+	if m.form != nil || m.body != "" {
 		t.Fatal("typing should not reach the textarea before enter")
 	}
 
-	press(m, "enter", "h", "i", "enter", "y", "o")
-	if !m.input.Focused() || m.input.Value() != "hi\nyo" {
-		t.Fatalf("enter should focus, then insert newlines; value=%q", m.input.Value())
+	press(m, "enter", "h", "i", "ctrl+j", "y", "o")
+	if m.form == nil || m.body != "hi\nyo" {
+		t.Fatalf("enter should focus, then insert newlines; value=%q", m.body)
 	}
 
-	if out := press(m, "esc"); len(out) != 0 || m.input.Focused() {
-		t.Fatal("esc should leave the textarea without closing")
+	if out := press(m, "esc"); len(out) != 0 || m.form != nil || m.body != "hi\nyo" {
+		t.Fatal("esc should leave the editor without closing or dropping the draft")
+	}
+	if v := view(m); !strings.Contains(v, "hi") || !strings.Contains(v, "yo") {
+		t.Fatalf("the retained draft should remain visible after closing the editor:\n%s", v)
 	}
 	press(m, "enter")
 
@@ -130,8 +138,52 @@ func TestComposeAndSend(t *testing.T) {
 	if len(out) != 1 || out[0] != (Sent{Key: "T-1"}) {
 		t.Fatalf("sending should report Sent, got %v", out)
 	}
-	if m.input.Value() != "" || m.input.Focused() || m.sending {
-		t.Fatal("textarea should reset and blur after sending")
+	if m.body != "" || m.form != nil || m.sending {
+		t.Fatal("editor should reset and close after sending")
+	}
+}
+
+func TestRetainedDraftIsBounded(t *testing.T) {
+	m := open(t, newBackend())
+	press(m, "enter")
+	m.body = "draft 1\ndraft 2\ndraft 3\ndraft 4\ndraft 5\ndraft 6\ndraft 7"
+	press(m, "esc")
+
+	v := view(m)
+	if !strings.Contains(v, "draft 1") || strings.Contains(v, "draft 7") {
+		t.Fatalf("the inactive composer should show a bounded draft:\n%s", v)
+	}
+}
+
+func TestComposerForwardsNonKeyMessagesToIssueView(t *testing.T) {
+	b := newBackend()
+	m := open(t, b)
+	press(m, "enter")
+
+	b.list = &jira.CommentList{Total: 3, Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
+		{Author: "Linus", Created: "2026-10-03 11:00", Body: "new comment"},
+	}}
+	m.Update(m.issue.Reload()())
+	if m.issue.CommentList().Total != 3 {
+		t.Fatal("issue view should receive asynchronous reload responses while composing")
+	}
+
+	m.issue.SetBusy(true)
+	_, cmd := m.Update(spinner.TickMsg{})
+	if cmd == nil {
+		t.Fatal("issue view should receive spinner ticks while composing")
+	}
+}
+
+func TestComposeOffersEditor(t *testing.T) {
+	m := open(t, newBackend())
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	press(m, "enter")
+	if v := view(m); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") ||
+		!strings.Contains(v, "alt+enter / ctrl+j") || !strings.Contains(v, "new line") {
+		t.Fatalf("comment input should offer the external editor:\n%s", v)
 	}
 }
 
@@ -149,7 +201,7 @@ func TestSendErrorKeepsDraft(t *testing.T) {
 	b.addErr = errors.New("nope")
 	m := open(t, b)
 	out := press(m, "enter", "a", "ctrl+s")
-	if len(out) != 0 || m.input.Value() != "a" || !m.input.Focused() {
+	if len(out) != 0 || m.body != "a" || m.form == nil {
 		t.Fatal("draft should survive a failed send without reporting Sent")
 	}
 	if !strings.Contains(view(m), "nope") {
@@ -181,8 +233,8 @@ func TestTopAndBottom(t *testing.T) {
 	}
 
 	press(m, "enter", "g", "G")
-	if m.input.Value() != "gG" || m.issue.ScrollPercent() != 0 {
-		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", m.input.Value(), m.issue.ScrollPercent())
+	if m.body != "gG" || m.issue.ScrollPercent() != 0 {
+		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", m.body, m.issue.ScrollPercent())
 	}
 }
 

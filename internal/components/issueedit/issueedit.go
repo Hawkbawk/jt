@@ -199,7 +199,7 @@ func (v *fieldValue) Description() string {
 func (v *fieldValue) huhField() huh.Field {
 	switch v.Kind {
 	case jira.FieldTextArea:
-		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).Value(&v.text)
+		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).ExternalEditor(true).Value(&v.text)
 	case jira.FieldSelect:
 		var opts []huh.Option[jira.Option]
 		if !v.Required {
@@ -277,9 +277,10 @@ const (
 type keyMap struct {
 	close, blur, confirm, deny, accept, send, undo key.Binding
 	choose, apply, cancel                          key.Binding
-	filter, next, back, toggle, newLine            key.Binding
+	filter, next, back, toggle                     key.Binding
 
 	mode helpMode
+	form []key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -299,7 +300,6 @@ func newKeyMap() keyMap {
 		next:    keys.Describe(k.Accept, "next"),
 		back:    keys.Describe(k.PrevTab, "back to search"),
 		toggle:  keys.Describe(k.Toggle, "toggles"),
-		newLine: k.NewLine,
 	}
 }
 
@@ -308,6 +308,11 @@ const helpPane helpMode = -1
 
 func (k keyMap) withMode(m helpMode) keyMap {
 	k.mode = m
+	return k
+}
+
+func (k keyMap) withForm(binds []key.Binding) keyMap {
+	k.form = binds
 	return k
 }
 
@@ -322,7 +327,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 	case helpUserField:
 		return []key.Binding{k.next, k.back, k.toggle, keys.Describe(k.blur, "back")}
 	case helpField:
-		return []key.Binding{keys.Describe(k.accept, "done"), keys.Describe(k.blur, "back"), k.newLine}
+		return append([]key.Binding{keys.Describe(k.accept, "done"), keys.Describe(k.blur, "back")}, k.form...)
 	case helpFilter:
 		return []key.Binding{keys.Describe(k.accept, "apply filter"), keys.Describe(k.blur, "clear"), save}
 	case helpList:
@@ -629,7 +634,11 @@ func (p *Model) hint() string {
 	case p.list.SettingFilter():
 		mode = helpFilter
 	}
-	return p.help.View(p.keys.withMode(mode))
+	km := p.keys.withMode(mode)
+	if mode == helpField {
+		km = km.withForm(p.form.KeyBinds())
+	}
+	return p.help.View(km)
 }
 
 // sameSet reports whether a and b hold the same options, by id.

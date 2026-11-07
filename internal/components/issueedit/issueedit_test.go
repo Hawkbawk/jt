@@ -350,6 +350,16 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 	}
 }
 
+func TestFieldsTextAreaOffersEditor(t *testing.T) {
+	h, _ := fieldsHost(t)
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 28})
+	h.press("j", "enter")
+	if v := h.view(); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") ||
+		!strings.Contains(v, "alt+enter / ctrl+j") || !strings.Contains(v, "new line") {
+		t.Fatalf("text area should show its form key bindings:\n%s", v)
+	}
+}
+
 func TestFieldsSelectCanClearOptionalField(t *testing.T) {
 	h, fb := fieldsHost(t)
 	h.press("j", "j", "enter", "k", "k", "enter", "ctrl+s")

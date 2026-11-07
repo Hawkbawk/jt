@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/keys"
@@ -21,6 +21,7 @@ import (
 
 const (
 	inputHeight = 5
+	inputLines  = inputHeight + 2
 	// hintLines is the height of the key hint under the input.
 	hintLines = 1
 )
@@ -53,6 +54,7 @@ type keyMap struct {
 	scroll, topBottom, write, close key.Binding
 	send, blur                      key.Binding
 
+	form    []key.Binding
 	writing bool
 }
 
@@ -69,15 +71,16 @@ func newKeyMap() keyMap {
 }
 
 // inWriting returns k with the help for when the input has focus.
-func (k keyMap) inWriting() keyMap {
+func (k keyMap) inWriting(form []key.Binding) keyMap {
 	k.writing = true
+	k.form = form
 	return k
 }
 
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
 	if k.writing {
-		return []key.Binding{k.send, k.blur}
+		return append(append([]key.Binding{k.send}, k.form...), k.blur)
 	}
 	return []key.Binding{k.scroll, k.topBottom, k.write, k.close}
 }
@@ -104,7 +107,9 @@ type Model struct {
 	backend  Backend
 	issueKey string
 	issue    *issueview.Model
-	input    textarea.Model
+	body     string
+	input    *huh.Text
+	form     *huh.Form
 
 	sending bool
 	sendErr error
@@ -112,16 +117,9 @@ type Model struct {
 
 // New loads the comments of the issue with issueKey, rendering them with md.
 func New(b Backend, issueKey string, md issueview.Markdown) *Model {
-	ta := textarea.New()
-	ta.Prompt = ""
-	ta.ShowLineNumbers = false
-	ta.Placeholder = "Write a comment…"
-	ta.SetStyles(styles.TextArea())
-	ta.SetHeight(inputHeight)
-
 	return &Model{
 		id: pane.NewID(), backend: b, issueKey: issueKey, keys: newKeyMap(),
-		issue: issueview.Comments(b, issueKey, md), input: ta,
+		issue: issueview.Comments(b, issueKey, md),
 	}
 }
 
@@ -132,8 +130,10 @@ func (m *Model) Init() tea.Cmd { return m.issue.Init() }
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.input.SetWidth(msg.Width - styles.Input().GetHorizontalFrameSize())
-		msg.Height -= inputHeight + styles.Input().GetVerticalFrameSize() + hintLines
+		if m.form != nil {
+			m.form.WithWidth(msg.Width).WithHeight(inputLines)
+		}
+		msg.Height -= inputLines + hintLines
 		_, cmd := m.issue.Update(msg)
 		return m, cmd
 	case sentMsg:
@@ -145,53 +145,80 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return m, nil
 		}
-		m.input.Reset()
-		m.input.Blur()
+		m.body = ""
+		m.closeInput()
 		return m, tea.Batch(m.issue.Reload(), func() tea.Msg { return Sent{Key: msg.key} })
 	case tea.KeyPressMsg:
-		if m.input.Focused() {
-			return m, m.updateInput(msg)
+		if m.form != nil {
+			switch {
+			case key.Matches(msg, m.keys.blur):
+				m.closeInput()
+				return m, nil
+			case key.Matches(msg, m.keys.send):
+				return m, m.send()
+			}
+			if m.sending {
+				return m, nil
+			}
+			_, cmd := m.form.Update(msg)
+			return m, cmd
 		}
 		if key.Matches(msg, m.keys.close) {
 			return m, func() tea.Msg { return Closed{} }
 		}
 		if key.Matches(msg, m.keys.write) && !m.issue.Loading() {
-			m.sendErr = nil
-			return m, m.input.Focus()
+			return m, m.openInput()
 		}
+	}
+	if m.form != nil {
+		_, formCmd := m.form.Update(msg)
+		_, issueCmd := m.issue.Update(msg)
+		return m, tea.Batch(formCmd, issueCmd)
 	}
 	_, cmd := m.issue.Update(msg)
 	return m, cmd
 }
 
-func (m *Model) updateInput(msg tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.blur):
-		m.input.Blur()
+func (m *Model) openInput() tea.Cmd {
+	m.sendErr = nil
+	m.input = huh.NewText().Placeholder("Write a comment…").
+		CharLimit(0).ShowLineNumbers(false).Lines(inputHeight).ExternalEditor(true).Value(&m.body)
+	km := huh.NewDefaultKeyMap()
+	km.Quit = key.NewBinding(key.WithDisabled())
+	km.Text.Next = key.NewBinding(key.WithDisabled())
+	km.Text.Prev = key.NewBinding(key.WithDisabled())
+	km.Text.Submit = key.NewBinding(key.WithDisabled())
+	m.form = pane.NewForm(m.input).WithKeyMap(km)
+	return m.form.Init()
+}
+
+func (m *Model) closeInput() {
+	m.form, m.input = nil, nil
+}
+
+func (m *Model) send() tea.Cmd {
+	if m.sending || strings.TrimSpace(m.body) == "" {
 		return nil
-	case key.Matches(msg, m.keys.send):
-		body := m.input.Value()
-		if m.sending || strings.TrimSpace(body) == "" {
-			return nil
-		}
-		m.sending, m.sendErr = true, nil
-		b, id, issueKey := m.backend, m.id, m.issueKey
-		return tea.Batch(m.issue.SetBusy(true), func() tea.Msg {
-			return sentMsg{id: id, key: issueKey, err: b.AddComment(issueKey, body)}
-		})
 	}
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
-	return cmd
+	m.sending, m.sendErr = true, nil
+	b, id, issueKey, body := m.backend, m.id, m.issueKey, m.body
+	return tea.Batch(m.issue.SetBusy(true), func() tea.Msg {
+		return sentMsg{id: id, key: issueKey, err: b.AddComment(issueKey, body)}
+	})
 }
 
 // View implements tea.Model.
 func (m *Model) View() tea.View {
-	border := styles.Input()
 	hint := helpView(m.keys, m.issue.Width())
-	if m.input.Focused() {
-		border = border.BorderForeground(styles.Highlight())
-		hint = helpView(m.keys.inWriting(), m.issue.Width())
+	input := styles.Input().Width(m.issue.Width()).Height(inputHeight).
+		Render(styles.Dim().Render("Write a comment…"))
+	if m.form != nil {
+		m.form.WithWidth(m.issue.Width()).WithHeight(inputLines)
+		input = m.form.View()
+		hint = helpView(m.keys.inWriting(m.form.KeyBinds()), m.issue.Width())
+	} else if m.body != "" {
+		input = styles.Input().Width(m.issue.Width()).Height(inputHeight).
+			MaxHeight(inputHeight).Render(m.body)
 	}
 	switch {
 	case m.sending:
@@ -203,12 +230,12 @@ func (m *Model) View() tea.View {
 		prefix := styles.Dim().Render(fmt.Sprintf("Newest %d of %d · ", len(l.Items), l.Total))
 		rest := m.issue.Width() - lipgloss.Width(prefix)
 		hint = prefix + helpView(m.keys, rest)
-		if m.input.Focused() {
-			hint = prefix + helpView(m.keys.inWriting(), rest)
+		if m.form != nil {
+			hint = prefix + helpView(m.keys.inWriting(m.form.KeyBinds()), rest)
 		}
 	}
 	if !m.issue.Ready() {
 		hint = ""
 	}
-	return tea.NewView(strings.Join([]string{m.issue.View().Content, border.Render(m.input.View()), hint}, "\n"))
+	return tea.NewView(strings.Join([]string{m.issue.View().Content, input, hint}, "\n"))
 }
