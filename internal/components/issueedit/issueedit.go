@@ -199,7 +199,7 @@ func (v *fieldValue) Description() string {
 func (v *fieldValue) huhField() huh.Field {
 	switch v.Kind {
 	case jira.FieldTextArea:
-		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).Value(&v.text)
+		return huh.NewText().Title(v.Name).CharLimit(0).ShowLineNumbers(false).ExternalEditor(true).Value(&v.text)
 	case jira.FieldSelect:
 		var opts []huh.Option[jira.Option]
 		if !v.Required {
@@ -277,7 +277,7 @@ const (
 type keyMap struct {
 	close, blur, confirm, deny, accept, send, undo key.Binding
 	choose, apply, cancel                          key.Binding
-	filter, next, back, toggle, newLine            key.Binding
+	filter, next, back, toggle, newLine, editor    key.Binding
 
 	mode helpMode
 }
@@ -300,6 +300,7 @@ func newKeyMap() keyMap {
 		back:    keys.Describe(k.PrevTab, "back to search"),
 		toggle:  keys.Describe(k.Toggle, "toggles"),
 		newLine: k.NewLine,
+		editor:  key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "open editor")),
 	}
 }
 
@@ -322,7 +323,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 	case helpUserField:
 		return []key.Binding{k.next, k.back, k.toggle, keys.Describe(k.blur, "back")}
 	case helpField:
-		return []key.Binding{keys.Describe(k.accept, "done"), keys.Describe(k.blur, "back"), k.newLine}
+		return []key.Binding{keys.Describe(k.accept, "done"), keys.Describe(k.blur, "back"), k.newLine, k.editor}
 	case helpFilter:
 		return []key.Binding{keys.Describe(k.accept, "apply filter"), keys.Describe(k.blur, "clear"), save}
 	case helpList:

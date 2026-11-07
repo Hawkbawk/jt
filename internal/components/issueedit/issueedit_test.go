@@ -350,6 +350,14 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 	}
 }
 
+func TestFieldsTextAreaOffersEditor(t *testing.T) {
+	h, _ := fieldsHost(t)
+	h.press("j", "enter")
+	if v := h.view(); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") {
+		t.Fatalf("text area should offer the external editor:\n%s", v)
+	}
+}
+
 func TestFieldsSelectCanClearOptionalField(t *testing.T) {
 	h, fb := fieldsHost(t)
 	h.press("j", "j", "enter", "k", "k", "enter", "ctrl+s")

@@ -4,6 +4,7 @@
 package issuecomments
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
+	"github.com/hawkbawk/jt/internal/system"
 	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -51,7 +53,7 @@ func (s Sent) Status() string { return "Commented on " + s.Key }
 // has focus.
 type keyMap struct {
 	scroll, topBottom, write, close key.Binding
-	send, blur                      key.Binding
+	send, blur, editor              key.Binding
 
 	writing bool
 }
@@ -65,6 +67,7 @@ func newKeyMap() keyMap {
 		close:     k.Close,
 		send:      k.Send,
 		blur:      keys.Describe(k.Dismiss, "stop writing"),
+		editor:    key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "open editor")),
 	}
 }
 
@@ -77,7 +80,7 @@ func (k keyMap) inWriting() keyMap {
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
 	if k.writing {
-		return []key.Binding{k.send, k.blur}
+		return []key.Binding{k.send, k.editor, k.blur}
 	}
 	return []key.Binding{k.scroll, k.topBottom, k.write, k.close}
 }
@@ -95,6 +98,12 @@ type sentMsg struct {
 	id  int64
 	key string
 	err error
+}
+
+type editorFinishedMsg struct {
+	id      int64
+	content *string
+	err     error
 }
 
 // Model shows an issue's comments above a box for writing a new one.
@@ -148,6 +157,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input.Reset()
 		m.input.Blur()
 		return m, tea.Batch(m.issue.Reload(), func() tea.Msg { return Sent{Key: msg.key} })
+	case editorFinishedMsg:
+		if msg.id != m.id {
+			return m, nil
+		}
+		if msg.content != nil {
+			m.input.SetValue(*msg.content)
+			m.input.CursorEnd()
+		}
+		m.sendErr = msg.err
+		return m, nil
 	case tea.KeyPressMsg:
 		if m.input.Focused() {
 			return m, m.updateInput(msg)
@@ -166,6 +185,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateInput(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
+	case key.Matches(msg, m.keys.editor):
+		cmd, read, err := system.PrepareEditor(m.input.Value())
+		if err != nil {
+			m.sendErr = err
+			return nil
+		}
+		id := m.id
+		return tea.ExecProcess(cmd, func(err error) tea.Msg {
+			content, readErr := read()
+			result := editorFinishedMsg{id: id, err: errors.Join(err, readErr)}
+			if readErr == nil {
+				result.content = &content
+			}
+			return result
+		})
 	case key.Matches(msg, m.keys.blur):
 		m.input.Blur()
 		return nil

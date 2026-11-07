@@ -49,6 +49,8 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "ctrl+s":
 		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
+	case "ctrl+e":
+		return tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
@@ -132,6 +134,14 @@ func TestComposeAndSend(t *testing.T) {
 	}
 	if m.input.Value() != "" || m.input.Focused() || m.sending {
 		t.Fatal("textarea should reset and blur after sending")
+	}
+}
+
+func TestComposeOffersEditor(t *testing.T) {
+	m := open(t, newBackend())
+	press(m, "enter")
+	if v := view(m); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") {
+		t.Fatalf("comment input should offer the external editor:\n%s", v)
 	}
 }
 
