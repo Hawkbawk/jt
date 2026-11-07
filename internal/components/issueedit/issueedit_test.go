@@ -352,9 +352,11 @@ func TestFieldsTextAreaTakesNewlines(t *testing.T) {
 
 func TestFieldsTextAreaOffersEditor(t *testing.T) {
 	h, _ := fieldsHost(t)
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 28})
 	h.press("j", "enter")
-	if v := h.view(); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") {
-		t.Fatalf("text area should offer the external editor:\n%s", v)
+	if v := h.view(); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") ||
+		!strings.Contains(v, "alt+enter / ctrl+j") || !strings.Contains(v, "new line") {
+		t.Fatalf("text area should show its form key bindings:\n%s", v)
 	}
 }
 
