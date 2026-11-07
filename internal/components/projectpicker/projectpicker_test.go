@@ -19,9 +19,7 @@ func (f fakeSource) DefaultProject() string { return f.defaultKey }
 func loaded(t *testing.T, src Source) *Picker {
 	t.Helper()
 	p := New(src, nil, true)
-	p.Init()
-	msg := Load(src, p.id)()
-	p.Update(msg)
+	p.Update(p.Init()().(tea.BatchMsg)[0]())
 	return p
 }
 
@@ -36,11 +34,11 @@ func TestMarksDefaultProject(t *testing.T) {
 	}
 }
 
-func TestIgnoresOtherPickersResponses(t *testing.T) {
+func TestLoadReportsProjectsToHost(t *testing.T) {
 	p := New(fakeSource{}, nil, true)
-	p.Update(LoadedMsg{ID: p.id + 1, Projects: []jira.Project{{Key: "X"}}})
-	if p.Loaded() {
-		t.Fatal("picker used a response meant for another")
+	_, cmd := p.Update(p.Init()().(tea.BatchMsg)[0]())
+	if msg, ok := cmd().(LoadedMsg); !ok || len(msg.Projects) != 2 {
+		t.Fatalf("host was given %v", cmd())
 	}
 }
 

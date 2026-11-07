@@ -15,7 +15,6 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -131,8 +130,10 @@ func (h *host) drain(cmd tea.Cmd) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
 		case spinner.TickMsg:
-		case popup.CloseMsg:
-			h.closed, h.then = true, msg.Then
+		case tuimsg.Cancelled:
+			h.closed = true
+		case tuimsg.Final:
+			h.closed, h.then = true, msg
 		default:
 			_, next := h.m.Update(msg)
 			queue = append(queue, next)

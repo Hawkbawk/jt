@@ -100,7 +100,6 @@ type imageState struct {
 // imageMsg carries an attachment that was downloaded and decoded, or why it
 // wasn't.
 type imageMsg struct {
-	id    int64
 	media string
 	img   *termimage.Image
 	err   error
@@ -124,8 +123,8 @@ func (m *Model) loadVisible() tea.Cmd {
 }
 
 func (m *Model) loadImage(media string) tea.Cmd {
-	b, id := m.backend, m.id
-	return func() tea.Msg {
+	b := m.backend
+	return m.Request(func() tea.Msg {
 		img, err := imageStore.get(media, func() (*termimage.Image, error) {
 			data, err := b.Attachment(media)
 			if err != nil {
@@ -133,13 +132,13 @@ func (m *Model) loadImage(media string) tea.Cmd {
 			}
 			return termimage.Decode(data)
 		})
-		return imageMsg{id: id, media: media, img: img, err: err}
-	}
+		return imageMsg{media: media, img: img, err: err}
+	})
 }
 
 func (m *Model) imageLoaded(msg imageMsg) {
 	st := m.images[msg.media]
-	if msg.id != m.id || st == nil {
+	if st == nil {
 		return
 	}
 	if msg.err != nil {

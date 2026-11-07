@@ -12,7 +12,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/reltime"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 const anyOption = "Any"
@@ -81,11 +81,11 @@ func (f *searchForm) build() tea.Cmd {
 			Placeholder("project = DEMO AND status != Done ORDER BY updated DESC").
 			CharLimit(0).ShowLineNumbers(false).Lines(5).Value(&f.jql).Validate(requireJQL)
 		f.fields = []huh.Field{jql}
-		f.form = pane.NewForm(f.fields...)
+		f.form = widget.NewForm(f.fields...)
 	} else {
 		left, right := f.basicColumns()
 		f.fields = append(append([]huh.Field{}, left...), right...)
-		f.form = pane.NewGroupsForm(huh.NewGroup(left...), huh.NewGroup(right...)).
+		f.form = widget.NewGroupsForm(huh.NewGroup(left...), huh.NewGroup(right...)).
 			WithLayout(huh.LayoutColumns(2))
 	}
 	f.restyle()

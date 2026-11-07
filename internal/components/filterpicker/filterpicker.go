@@ -1,6 +1,6 @@
 // Package filterpicker is a tea.Model that lists a board's quick filters and
 // assignees on separate tabs and reports the one the user picks. It's meant to
-// be hosted by a popup.
+// end with a SelectedMsg, or tuimsg.Cancelled.
 package filterpicker
 
 import (
@@ -13,8 +13,9 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/layout"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 // SelectedMsg reports the filter the user picked. A nil Filter clears it.
@@ -22,22 +23,25 @@ type SelectedMsg struct {
 	Filter *jira.Filter
 }
 
+// Final implements tuimsg.Final.
+func (SelectedMsg) Final() {}
+
 // keyMap is the picker's key bindings.
 type keyMap struct {
-	popup.KeyMap
+	layout.KeyMap
 	nextTab, prevTab, left, right, blur key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	return keyMap{
-		KeyMap:  popup.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
+		KeyMap:  layout.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
 		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right, blur: k.Dismiss,
 	}
 }
 
 // helpView renders a help footer in the given width.
-func helpView(km popup.KeyMap, width int) string {
+func helpView(km layout.KeyMap, width int) string {
 	h := styles.Help()
 	h.SetWidth(max(0, width))
 	return h.View(km)
@@ -116,7 +120,7 @@ func (p *Picker) buildForm() {
 	if len(t.filters) == 0 {
 		p.selectField.Description(t.empty)
 	}
-	p.form = pane.NewForm(p.selectField)
+	p.form = widget.NewForm(p.selectField)
 	km := huh.NewDefaultKeyMap()
 	km.Quit = key.NewBinding(key.WithDisabled())
 	km.Select.Filter.SetHelp("/", "search")
@@ -143,8 +147,8 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(km, p.keys.blur) && p.consumesEsc():
 			_, cmd := p.form.Update(msg)
 			return p, cmd
-		case !p.Filtering() && key.Matches(km, p.keys.Close()):
-			return p, popup.Close()
+		case !p.Filtering() && key.Matches(km, p.keys.Dismiss()):
+			return p, tuimsg.Cancel()
 		case key.Matches(km, p.keys.nextTab) || (!p.Filtering() && key.Matches(km, p.keys.right)):
 			p.switchTab(1)
 			return p, p.form.Init()
@@ -159,7 +163,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p.cursor > 0 {
 			sel = &p.tabs[p.tab].filters[p.cursor-1]
 		}
-		return p, popup.CloseWith(SelectedMsg{Filter: sel})
+		return p, tuimsg.End(SelectedMsg{Filter: sel})
 	}
 	return p, cmd
 }
@@ -182,5 +186,5 @@ func (p *Picker) View() tea.View {
 	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
 	body := strings.Split(p.form.View(), "\n")
 	km := p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
-	return tea.NewView(popup.Stack(p.height, header, body, helpView(km, p.width)))
+	return tea.NewView(layout.Stack(p.height, header, body, helpView(km, p.width)))
 }

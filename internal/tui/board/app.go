@@ -4,12 +4,10 @@ package board
 
 import (
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
-	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -78,10 +76,14 @@ func (m Model) busy() bool {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := m.HandleCommon(msg, m.busy()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
-		return m, m.RunWithSpinner(m.board.reload(msg.IssueKey()))
+		cmd := m.RunWithSpinner(m.board.reload(msg.IssueKey()))
+		return m, cmd
 
 	case tea.WindowSizeMsg:
 		return m, m.Resize(msg)
@@ -93,31 +95,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case themepicker.SelectedMsg:
 		return m, m.SelectTheme(msg)
 
-	case screen.ThemeSavedMsg:
-		m.OnThemeSaved(msg)
-		return m, nil
-
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
-	case spinner.TickMsg:
-		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
-
-	case issuecomments.Closed:
-		return m, popup.Close()
-
-	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.UpdatePopup(msg)
-
 	case projectpicker.SelectedMsg:
 		m.Status = ""
-		return m, m.RunWithSpinner(m.board.open(msg.Key))
+		cmd := m.RunWithSpinner(m.board.open(msg.Key))
+		return m, cmd
 
 	case projectpicker.LoadedMsg:
-		if msg.Err == nil {
-			m.projects = msg.Projects
-		}
-		return m, m.UpdatePopup(msg)
+		m.projects = msg.Projects
+		return m, nil
 
 	case boardpicker.SelectedMsg:
 		return m.selectBoard(msg)
@@ -159,11 +147,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filterpicker.SelectedMsg:
 		m.Status = ""
-		return m, m.RunWithSpinner(m.board.setFilter(msg.Filter))
-
-	case screen.ActionDoneMsg:
-		m.Status = msg.Display()
-		return m, nil
+		cmd := m.RunWithSpinner(m.board.setFilter(msg.Filter))
+		return m, cmd
 	}
 	// A popup's responses and form run on their own messages, so it gets
 	// what's left.
@@ -176,7 +161,8 @@ func (m Model) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.Status = ""
-	return m, m.RunWithSpinner(m.board.openBoard(msg.Board.ID))
+	cmd := m.RunWithSpinner(m.board.openBoard(msg.Board.ID))
+	return m, cmd
 }
 
 func (m Model) newProjectPopup(cancellable bool) *projectpicker.Picker {
@@ -218,7 +204,8 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			focusKey = sel.Key
 		}
 		m.Status = ""
-		return m, m.RunWithSpinner(m.board.reload(focusKey))
+		cmd := m.RunWithSpinner(m.board.reload(focusKey))
+		return m, cmd
 	}
 	if key.Matches(msg, keys.Get().Theme) {
 		return m, popup.Open(themepicker.New())

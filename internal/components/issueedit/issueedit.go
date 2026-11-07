@@ -22,9 +22,9 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/layout"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 // Backend loads and saves an issue's fields.
@@ -34,13 +34,17 @@ type Backend interface {
 	SearchUsers(issueKey, query string) ([]jira.Option, error)
 }
 
-// Edited is what the popup closes with after saving. It's a tuimsg.Finished.
+// Edited is what the component ends with after saving. It's a
+// tuimsg.Finished and a tuimsg.Final.
 type Edited struct {
 	Key   string
 	Count int
 }
 
 var _ tuimsg.Finished = Edited{}
+
+// Final implements tuimsg.Final.
+func (Edited) Final() {}
 
 // IssueKey implements tuimsg.Finished.
 func (e Edited) IssueKey() string { return e.Key }
@@ -51,23 +55,21 @@ func (e Edited) Status() string {
 }
 
 type fieldsLoadedMsg struct {
-	id     int64
 	key    string
 	fields []jira.EditField
 	err    error
 }
 
 type fieldsSavedMsg struct {
-	id    int64
 	key   string
 	count int
 	err   error
 }
 
-func loadFields(b Backend, id int64, iss jira.Issue) tea.Cmd {
+func loadFields(b Backend, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
 		fs, err := b.EditFields(iss)
-		return fieldsLoadedMsg{id: id, key: iss.Key, fields: fs, err: err}
+		return fieldsLoadedMsg{key: iss.Key, fields: fs, err: err}
 	}
 }
 
@@ -342,12 +344,12 @@ func (k keyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp(
 // Model lists an issue's editable fields and edits one at a time in a
 // form. Changes are kept until they're all saved together.
 type Model struct {
+	tuimsg.Requests
 	keys    keyMap
-	id      int64
 	key     string
 	issue   jira.Issue
 	backend Backend
-	spin    spinner.Model
+	spin    widget.Spinner
 	help    help.Model
 
 	width, height int
@@ -367,12 +369,12 @@ type Model struct {
 
 // New returns the popup that edits iss, which loads the fields when it opens.
 func New(b Backend, iss jira.Issue) *Model {
-	return &Model{id: pane.NewID(), key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
+	return &Model{key: iss.Key, issue: iss, backend: b, spin: widget.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
 }
 
 // Init implements tea.Model.
 func (p *Model) Init() tea.Cmd {
-	return tea.Batch(loadFields(p.backend, p.id, p.issue), p.spin.Tick)
+	return tea.Batch(p.Request(loadFields(p.backend, p.issue)), p.spin.Sync(p.loading()))
 }
 
 func (p *Model) loading() bool {
@@ -421,7 +423,7 @@ func (p *Model) edit(v *fieldValue) tea.Cmd {
 	} else {
 		v.input = v.huhField()
 	}
-	p.form = pane.NewForm(v.input)
+	p.form = widget.NewForm(v.input)
 	p.growText()
 	return p.form.Init()
 }
@@ -433,19 +435,18 @@ func (p *Model) closeForm() {
 
 // Update implements tea.Model.
 func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	was := p.loading()
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width, p.height = msg.Width, msg.Height
 	case spinner.TickMsg:
-		cmd = pane.Tick(&p.spin, msg, p.loading())
+		cmd = p.spin.Update(msg, p.loading())
 	case tea.KeyPressMsg:
 		cmd = p.updateKey(msg)
 	default:
 		cmd = p.update(msg)
 	}
-	return p, pane.Restart(p.spin, was, p.loading(), cmd)
+	return p, tea.Batch(cmd, p.spin.Sync(p.loading()))
 }
 
 func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
@@ -464,7 +465,7 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 			p.confirmClose = true
 			return nil
 		}
-		return popup.Close()
+		return tuimsg.Cancel()
 	}
 	return p.update(km)
 }
@@ -472,7 +473,7 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(km, p.keys.confirm):
-		return popup.Close()
+		return tuimsg.Cancel()
 	case key.Matches(km, p.keys.deny):
 		p.confirmClose = false
 	case key.Matches(km, p.keys.send):
@@ -485,9 +486,6 @@ func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case fieldsLoadedMsg:
-		if msg.id != p.id {
-			break
-		}
 		p.loaded, p.err = true, msg.err
 		for _, f := range msg.fields {
 			p.vals = append(p.vals, newFieldValue(f, searchUsers(p.backend, p.key)))
@@ -495,12 +493,9 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		p.list = newFieldList(p.vals)
 		return nil
 	case fieldsSavedMsg:
-		if msg.id != p.id {
-			return nil
-		}
 		p.saving, p.err = false, msg.err
 		if msg.err == nil {
-			return popup.CloseWith(Edited{Key: msg.key, Count: msg.count})
+			return tuimsg.End(Edited{Key: msg.key, Count: msg.count})
 		}
 		return nil
 	}
@@ -548,10 +543,10 @@ func (p *Model) save() tea.Cmd {
 		return nil
 	}
 	p.saving, p.err = true, nil
-	b, id, issueKey := p.backend, p.id, p.key
-	return func() tea.Msg {
-		return fieldsSavedMsg{id: id, key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
-	}
+	b, issueKey := p.backend, p.key
+	return p.Request(func() tea.Msg {
+		return fieldsSavedMsg{key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
+	})
 }
 
 // changed returns the fields that differ from how they loaded. What is still
@@ -591,7 +586,7 @@ func (p *Model) View() tea.View {
 	}
 	spin := p.spin.View()
 	var lines []string
-	formH := max(1, p.height-pane.ChromeLines-2)
+	formH := max(1, p.height-layout.ChromeLines-2)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
@@ -609,8 +604,8 @@ func (p *Model) View() tea.View {
 		p.list.SetSize(p.width, formH)
 		lines = strings.Split(p.list.View(), "\n")
 	}
-	lines = append(lines, "", pane.StatusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
-	return tea.NewView(popup.Stack(p.height, []string{title, ""}, lines, footer))
+	lines = append(lines, "", layout.StatusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
+	return tea.NewView(layout.Stack(p.height, []string{title, ""}, lines, footer))
 }
 
 // refreshMsg makes the form redraw its content, which it only does on updates.

@@ -1,10 +1,8 @@
 // Package projectpicker is a tea.Model that lists the Jira projects and
-// reports the one the user picks. It's meant to be hosted by a popup.
+// reports the one the user picks. It ends with a SelectedMsg, or tuimsg.Cancelled.
 package projectpicker
 
 import (
-	"sync/atomic"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
@@ -14,8 +12,9 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/layout"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 // Source is where the picker gets projects and which one is the default.
@@ -24,13 +23,16 @@ type Source interface {
 	DefaultProject() string
 }
 
-// LoadedMsg carries the result of Load. A picker ignores the ones that carry
-// another picker's ID.
+// LoadedMsg carries the result of Load. A picker that loaded the projects
+// itself sends one to its host once they're listed, so the host can keep them
+// for later pickers.
 type LoadedMsg struct {
-	ID       int64
 	Projects []jira.Project
 	Err      error
 }
+
+// loadedMsg is the response to a picker's own load.
+type loadedMsg LoadedMsg
 
 // FavoriteMsg asks the host to make a project the default. The picker stays
 // open, and the host calls Refresh once the default has changed.
@@ -43,10 +45,13 @@ type SelectedMsg struct {
 	Key string
 }
 
+// Final implements tuimsg.Final.
+func (SelectedMsg) Final() {}
+
 // keyMap is the picker's key bindings. The close binding only shows when the
 // picker can be cancelled.
 type keyMap struct {
-	popup.KeyMap
+	layout.KeyMap
 	open, favorite key.Binding
 }
 
@@ -54,12 +59,10 @@ func newKeyMap(cancellable bool) keyMap {
 	k := keys.Get()
 	open := keys.Describe(k.Accept, "open")
 	return keyMap{
-		KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite).WithCloseShown(cancellable),
+		KeyMap: layout.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite).WithDismissShown(cancellable),
 		open:   open, favorite: k.Favorite,
 	}
 }
-
-var lastID atomic.Int64
 
 type item struct {
 	jira.Project
@@ -76,22 +79,22 @@ func (i item) Title() string {
 func (i item) Description() string { return i.Name }
 func (i item) FilterValue() string { return i.Key + " " + i.Name }
 
-// Load fetches the projects and returns them in a LoadedMsg tagged with id.
-func Load(src Source, id int64) tea.Cmd {
+// Load fetches the projects and returns them in a LoadedMsg.
+func Load(src Source) tea.Cmd {
 	return func() tea.Msg {
 		ps, err := src.Projects()
-		return LoadedMsg{ID: id, Projects: ps, Err: err}
+		return LoadedMsg{Projects: ps, Err: err}
 	}
 }
 
-// Picker lists the projects and closes its popup with a SelectedMsg when one
+// Picker lists the projects and ends with a SelectedMsg when one
 // is picked. The caller can keep the projects from the LoadedMsg and give them
 // to later pickers.
 type Picker struct {
+	tuimsg.Requests
 	keys        keyMap
-	id          int64
 	src         Source
-	spin        spinner.Model
+	spin        widget.Spinner
 	cancellable bool
 	list        list.Model
 	projects    []jira.Project
@@ -106,9 +109,8 @@ func New(src Source, projects []jira.Project, cancellable bool) *Picker {
 	km := newKeyMap(cancellable)
 	return &Picker{
 		keys:        km,
-		id:          lastID.Add(1),
 		src:         src,
-		spin:        spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
+		spin:        widget.NewSpinner(),
 		cancellable: cancellable,
 		list:        newList(km),
 		projects:    projects,
@@ -146,7 +148,8 @@ func (p *Picker) Init() tea.Cmd {
 	if p.projects != nil {
 		return p.setProjects(p.projects)
 	}
-	return tea.Batch(Load(p.src, p.id), p.spin.Tick)
+	load := Load(p.src)
+	return tea.Batch(p.Request(func() tea.Msg { return loadedMsg(load().(LoadedMsg)) }), p.spin.Sync(p.loading()))
 }
 
 // Refresh marks the source's current default project.
@@ -177,25 +180,18 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.list.SetSize(msg.Width, msg.Height)
 		return p, nil
 	case spinner.TickMsg:
-		if !p.loading() {
-			return p, nil
-		}
-		var cmd tea.Cmd
-		p.spin, cmd = p.spin.Update(msg)
-		return p, cmd
+		return p, p.spin.Update(msg, p.loading())
 	case tuimsg.ThemeChanged:
 		p.list.Styles.Title = styles.Title()
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
-	case LoadedMsg:
-		if msg.ID != p.id {
-			return p, nil
-		}
+	case loadedMsg:
 		if msg.Err != nil {
 			p.err = msg.Err
 			return p, nil
 		}
-		return p, p.setProjects(msg.Projects)
+		ps := msg.Projects
+		return p, tea.Batch(p.setProjects(ps), func() tea.Msg { return LoadedMsg{Projects: ps} })
 	case tea.KeyPressMsg:
 		return p, p.handleKey(msg)
 	}
@@ -204,8 +200,8 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
-		if key.Matches(msg, p.keys.Close()) && p.cancellable {
-			return popup.Close()
+		if key.Matches(msg, p.keys.Dismiss()) && p.cancellable {
+			return tuimsg.Cancel()
 		}
 		return nil
 	}
@@ -213,12 +209,12 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return p.forward(msg)
 	}
 	switch {
-	case key.Matches(msg, p.keys.Close()):
+	case key.Matches(msg, p.keys.Dismiss()):
 		if p.list.IsFiltered() {
 			break
 		}
 		if p.cancellable {
-			return popup.Close()
+			return tuimsg.Cancel()
 		}
 		return nil
 	case key.Matches(msg, p.keys.favorite):
@@ -232,7 +228,7 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if !ok {
 			return nil
 		}
-		return popup.CloseWith(SelectedMsg{Key: sel.Key})
+		return tuimsg.End(SelectedMsg{Key: sel.Key})
 	}
 	return p.forward(msg)
 }

@@ -14,7 +14,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 // Layout is the state and behavior the jt screens share: the window size,
@@ -23,7 +23,7 @@ import (
 type Layout struct {
 	Settings      Settings
 	Width, Height int
-	Spinner       spinner.Model
+	Spinner       widget.Spinner
 	Status        string
 	Help          help.Model
 
@@ -35,15 +35,15 @@ type Layout struct {
 func NewLayout(settings Settings) Layout {
 	return Layout{
 		Settings: settings,
-		Spinner:  pane.NewSpinner(),
+		Spinner:  widget.NewSpinner(),
 		Help:     styles.Help(),
 		Popup:    popup.New(popup.WithStyle(styles.Popup)),
 	}
 }
 
-// RunWithSpinner runs cmd alongside the spinner.
-func (c Layout) RunWithSpinner(cmd tea.Cmd) tea.Cmd {
-	return tea.Batch(cmd, c.Spinner.Tick)
+// RunWithSpinner runs cmd with the spinner going until the screen isn't busy.
+func (c *Layout) RunWithSpinner(cmd tea.Cmd) tea.Cmd {
+	return tea.Batch(cmd, c.Spinner.Sync(true))
 }
 
 // BodyHeight is the height left between the header and the footer.
@@ -70,11 +70,26 @@ func (c *Layout) SelectTheme(msg themepicker.SelectedMsg) tea.Cmd {
 	return SaveTheme(c.Settings, msg.ID)
 }
 
-// OnThemeSaved handles the outcome of saving the theme.
-func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) {
-	if msg.Err != nil {
-		c.Status = styles.Error().Render("saving theme: " + msg.Err.Error())
+// HandleCommon handles the messages every screen handles the same way: the
+// spinner, opening and closing the popup, saving the theme and the result of
+// an issue action. busy is whether the screen is waiting on the network. It
+// reports whether msg was one of them.
+func (c *Layout) HandleCommon(msg tea.Msg, busy bool) (tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		return tea.Batch(c.Spinner.Update(msg, busy), c.UpdatePopup(msg)), true
+	case popup.OpenMsg, popup.CloseMsg:
+		return c.UpdatePopup(msg), true
+	case ThemeSavedMsg:
+		if msg.Err != nil {
+			c.Status = styles.Error().Render("saving theme: " + msg.Err.Error())
+		}
+		return nil, true
+	case ActionDoneMsg:
+		c.Status = msg.Display()
+		return nil, true
 	}
+	return nil, false
 }
 
 // UpdatePopup passes msg to the popup host.
@@ -82,12 +97,6 @@ func (c *Layout) UpdatePopup(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	c.Popup, cmd = c.Popup.Update(msg)
 	return cmd
-}
-
-// Tick advances the spinner while busy. The tick chain ends once nothing is
-// busy.
-func (c *Layout) Tick(msg spinner.TickMsg, busy bool) tea.Cmd {
-	return pane.Tick(&c.Spinner, msg, busy)
 }
 
 // WithView wraps the rendered screen in a full-window view themed to match.

@@ -1,6 +1,7 @@
 package popup
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -8,11 +9,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 type initMsg struct{}
 
 type doneMsg struct{}
+
+func (doneMsg) Final() {}
 
 // stub records what it receives and closes on "x".
 type stub struct {
@@ -29,7 +33,7 @@ func (s *stub) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	case tea.KeyPressMsg:
 		if msg.Text == "x" {
-			return s, CloseWith(doneMsg{})
+			return s, tuimsg.End(doneMsg{})
 		}
 	}
 	s.got = append(s.got, msg)
@@ -234,3 +238,101 @@ func TestOverlayDrawsOverBackgroundOnlyWhenOpen(t *testing.T) {
 		t.Fatal("closed host changed the background")
 	}
 }
+
+type loadedMsg struct{ n int }
+
+// asker asks for a reply on Init, and again in a sequence on "r".
+type asker struct {
+	tuimsg.Requests
+	n   int
+	got []tea.Msg
+}
+
+func (r *asker) Init() tea.Cmd {
+	return r.Request(func() tea.Msg { return loadedMsg{r.n} })
+}
+
+func (r *asker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.Text == "r" {
+		return r, tea.Sequence(
+			func() tea.Msg { return nil },
+			r.Request(func() tea.Msg { return loadedMsg{-r.n} }),
+		)
+	}
+	if l, ok := msg.(loadedMsg); ok {
+		r.got = append(r.got, l)
+	}
+	return r, nil
+}
+
+func (r *asker) View() tea.View { return tea.NewView("") }
+
+func TestRepliesReachOnlyThePopupThatAsked(t *testing.T) {
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	first, second := &asker{n: 1}, &asker{n: 2}
+	m, cmd := m.Update(OpenMsg{Content: first})
+	stale := flatten(cmd)
+	m, cmd = m.Update(OpenMsg{Content: second})
+	fresh := flatten(cmd)
+	for _, msg := range append(stale, fresh...) {
+		m, _ = m.Update(msg)
+	}
+	if len(first.got) != 0 {
+		t.Fatalf("replaced popup got %v", first.got)
+	}
+	if len(second.got) != 1 || second.got[0] != (loadedMsg{2}) {
+		t.Fatalf("open popup got %v", second.got)
+	}
+}
+
+func TestRepliesInsideSequencesAreStamped(t *testing.T) {
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	r := &asker{n: 3}
+	m, _ = m.Update(OpenMsg{Content: r})
+	m, cmd := m.Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	seq := reflect.ValueOf(cmd())
+	if seq.Kind() != reflect.Slice || seq.Len() != 2 {
+		t.Fatalf("sequence lost its type: %T", cmd())
+	}
+	m.Update(seq.Index(1).Interface().(tea.Cmd)())
+	if len(r.got) != 1 || r.got[0] != (loadedMsg{-3}) {
+		t.Fatalf("got %v", r.got)
+	}
+}
+
+func TestRepliesAfterCloseAreDropped(t *testing.T) {
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	r := &asker{n: 4}
+	m, cmd := m.Update(OpenMsg{Content: r})
+	pending := flatten(cmd)
+	m, _ = m.Update(CloseMsg{})
+	for _, msg := range pending {
+		m, _ = m.Update(msg)
+	}
+	if len(r.got) != 0 || m.IsOpen() {
+		t.Fatalf("closed popup got %v", r.got)
+	}
+}
+
+func TestCancelClosesWithoutResult(t *testing.T) {
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	m, _ = m.Update(OpenMsg{Content: &ender{end: tuimsg.Cancel()}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if msg, ok := cmd().(CloseMsg); !ok || msg.Then != nil {
+		t.Fatalf("got %#v", cmd())
+	}
+}
+
+// ender ends with end on any key.
+type ender struct{ end tea.Cmd }
+
+func (e *ender) Init() tea.Cmd { return nil }
+
+func (e *ender) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(tea.KeyPressMsg); ok {
+		return e, e.end
+	}
+	return e, nil
+}
+
+func (e *ender) View() tea.View { return tea.NewView("") }

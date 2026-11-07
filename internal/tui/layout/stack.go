@@ -1,4 +1,4 @@
-package popup
+package layout
 
 import "strings"
 
@@ -7,15 +7,15 @@ import "strings"
 // fill the space.
 func Stack(height int, header, body []string, footer string) string {
 	bodyH := max(1, height-len(header)-1)
-	content := fitHeight(strings.Join(body, "\n"), bodyH)
+	content := FitHeight(strings.Join(body, "\n"), bodyH)
 	lines := append(append([]string{}, header...), content, footer)
 	return strings.Join(lines, "\n")
 }
 
-// fitHeight clips or pads s to height lines. Unlike lipgloss's Height, it
+// FitHeight clips or pads s to height lines. Unlike lipgloss's Height, it
 // doesn't measure or pad the width of each line, which is slow on a screen of
-// styled text. The frame around the content pads the width.
-func fitHeight(s string, height int) string {
+// styled text. Whatever frames the content pads the width.
+func FitHeight(s string, height int) string {
 	if height <= 0 {
 		return ""
 	}

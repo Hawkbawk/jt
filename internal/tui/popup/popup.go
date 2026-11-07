@@ -6,28 +6,42 @@
 //
 //	return m, popup.Open(newConfirm())
 //
-// and the content ends itself the same way, optionally handing a result back
-// to the parent after the popup is gone:
+// Content doesn't need to know it's in a popup. It ends by returning a message
+// that implements tuimsg.Final, such as its result or tuimsg.Cancelled, and
+// the host closes the popup and hands that message to the parent:
 //
-//	return c, popup.CloseWith(deletedMsg{id: c.id})
+//	return c, tuimsg.End(Deleted{Key: c.key})
 //
 // The host sizes its content by sending it a tea.WindowSizeMsg for the area
 // inside the frame, so any model that sizes itself from that message works
 // unchanged. Content must use virtual cursors, since the host ignores the
 // tea.View cursor the content returns.
 //
-// Messages other than input reach the content and the parent both. Responses to
-// requests the content started can arrive after it has closed, or after
-// another popup has replaced it. The host drops messages while it's closed, but
-// can't tell whose response a message is once a new popup is open, so content
-// tags its own requests with an ID, as bubbles' spinner does, and ignores
-// responses that carry someone else's.
+// Where a message goes:
+//
+//   - Input goes to the content while a popup is open (see Captures).
+//   - Content that embeds tuimsg.Requests passes its requests, such as network
+//     loads, through Request. The host wraps them so their responses come back
+//     to the parent as an opaque message, which the parent hands to the host
+//     without looking at it. The host gives it to the content that made the
+//     request, or drops it if that popup has closed or been replaced since, so
+//     content never has to check whose response it got.
+//   - A tuimsg.Final message closes the popup, then reaches the parent, except
+//     tuimsg.Cancelled, which only closes it.
+//   - Any other message the content returns reaches the parent first. The
+//     parent handles the ones meant for it and hands the rest to the host,
+//     which passes them to the content.
 package popup
 
 import (
+	"reflect"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/hawkbawk/jt/internal/tui/layout"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // OpenMsg shows Content, replacing any popup that's already open.
@@ -51,9 +65,21 @@ func Close() tea.Cmd {
 	return func() tea.Msg { return CloseMsg{} }
 }
 
-// CloseWith returns the command that closes the popup and then sends msg.
-func CloseWith(msg tea.Msg) tea.Cmd {
-	return func() tea.Msg { return CloseMsg{Then: msg} }
+// requester is content whose requests the host can wrap. Embedding
+// tuimsg.Requests implements it.
+type requester interface {
+	WrapRequests(func(tea.Cmd) tea.Cmd)
+}
+
+// replyMsg is the response to a request the content made. gen is the popup
+// that made it, which the host sets as the request leaves the content.
+type replyMsg struct {
+	gen uint64
+	msg tea.Msg
+}
+
+func reply(cmd tea.Cmd) tea.Cmd {
+	return func() tea.Msg { return replyMsg{msg: cmd()} }
 }
 
 // DefaultSize is the outer size of a popup in an area: most of it, but never
@@ -65,6 +91,9 @@ func DefaultSize(width, height int) (int, int) {
 // Model is the popup host. The zero value isn't usable; build one with New.
 type Model struct {
 	content tea.Model
+	// gen counts the popups opened, so a reply can be matched to the popup
+	// that asked for it.
+	gen uint64
 	// areaW and areaH are the area the popup is drawn in, as last reported by
 	// a tea.WindowSizeMsg.
 	areaW, areaH int
@@ -146,8 +175,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.content = msg.Content
+		m.gen++
+		if r, ok := m.content.(requester); ok {
+			r.WrapRequests(reply)
+		}
 		m, sized := m.resize()
-		return m, tea.Batch(sized, m.content.Init())
+		return m, tea.Batch(sized, m.stamp(m.content.Init()))
+	case replyMsg:
+		if m.content == nil || msg.gen != m.gen {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.content, cmd = m.content.Update(msg.msg)
+		return m, m.stamp(cmd)
 	case CloseMsg:
 		m.content = nil
 		if msg.Then == nil {
@@ -164,7 +204,51 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.content, cmd = m.content.Update(msg)
-	return m, cmd
+	return m, m.stamp(cmd)
+}
+
+// stamp marks the replies cmd produces as the current popup's, and turns the
+// content's final message into closing the popup.
+func (m Model) stamp(cmd tea.Cmd) tea.Cmd {
+	return stamp(cmd, m.gen)
+}
+
+var cmdType = reflect.TypeFor[tea.Cmd]()
+
+func stamp(cmd tea.Cmd, gen uint64) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd()
+		switch msg := msg.(type) {
+		case replyMsg:
+			msg.gen = gen
+			return msg
+		case tuimsg.Cancelled:
+			return CloseMsg{}
+		case tuimsg.Final:
+			return CloseMsg{Then: msg}
+		case tea.BatchMsg:
+			out := make(tea.BatchMsg, len(msg))
+			for i, c := range msg {
+				out[i] = stamp(c, gen)
+			}
+			return out
+		}
+		// tea.Sequence's message is unexported, but it's a []tea.Cmd too, so
+		// it's rebuilt as the same type with each command stamped.
+		v := reflect.ValueOf(msg)
+		if v.Kind() != reflect.Slice || v.Type().Elem() != cmdType {
+			return msg
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			c, _ := reflect.TypeAssert[tea.Cmd](v.Index(i))
+			out.Index(i).Set(reflect.ValueOf(stamp(c, gen)))
+		}
+		return out.Interface()
+	}
 }
 
 // resize tells the content the size of the area inside the frame. Nothing is
@@ -176,7 +260,7 @@ func (m Model) resize() (Model, tea.Cmd) {
 	w, h := m.inner()
 	var cmd tea.Cmd
 	m.content, cmd = m.content.Update(tea.WindowSizeMsg{Width: w, Height: h})
-	return m, cmd
+	return m, m.stamp(cmd)
 }
 
 // View returns the framed content, or "" when closed. The content is clipped or
@@ -187,7 +271,7 @@ func (m Model) View() string {
 	}
 	w, h := m.inner()
 	st := m.style()
-	body := fitHeight(m.content.View().Content, h)
+	body := layout.FitHeight(m.content.View().Content, h)
 	return st.Width(w + st.GetHorizontalFrameSize()).Render(body)
 }
 

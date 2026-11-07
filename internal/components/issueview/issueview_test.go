@@ -115,15 +115,6 @@ func TestLoadErrorIsShown(t *testing.T) {
 	}
 }
 
-func TestLoadForAnotherModelIsIgnored(t *testing.T) {
-	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 10)
-	m.Update(loadedMsg{id: m.id - 1, issue: &jira.IssueDetail{}})
-	m.Update(loadedMsg{id: m.id - 1, err: errors.New("boom")})
-	if !m.Loading() || m.err != nil {
-		t.Fatal("model accepted an issue it did not request")
-	}
-}
-
 func TestScrollKeys(t *testing.T) {
 	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 10)
 	loaded(m)

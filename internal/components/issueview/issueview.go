@@ -26,6 +26,8 @@ import (
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/termimage"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/widget"
 )
 
 // Backend loads issues, their comments and the images in them.
@@ -41,7 +43,6 @@ type Markdown = func(md string, width int) string
 // loadedMsg carries what a model loaded: the issue for Details, the comments
 // for Comments.
 type loadedMsg struct {
-	id       int64
 	issue    *jira.IssueDetail
 	comments *jira.CommentList
 	err      error
@@ -52,9 +53,9 @@ var lastID atomic.Int64
 // Model shows part of an issue as scrollable text under a title. Build one with
 // Details or Comments.
 type Model struct {
+	tuimsg.Requests
 	top, bottom key.Binding
-	// id tags the model's loads, so a late response that reaches a newer model
-	// for the same issue is ignored.
+	// id places the model's images apart from another model's.
 	id      int64
 	backend Backend
 	key     string
@@ -74,7 +75,7 @@ type Model struct {
 	pending   []string
 
 	vp   viewport.Model
-	spin spinner.Model
+	spin widget.Spinner
 
 	loading bool
 	busy    bool
@@ -104,39 +105,30 @@ func Comments(b Backend, issueKey string, md Markdown) *Model {
 func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend, string) loadedMsg, render func(*Model, int, Markdown) string) *Model {
 	vp := viewport.New()
 	vp.SetHorizontalStep(4)
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title()))
 	return &Model{
 		top: keys.Get().Top, bottom: keys.Get().Bottom,
 		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
-		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
+		fetch: fetch, render: render, md: md, vp: vp, spin: widget.NewSpinner(), loading: true,
 		images: map[string]*imageState{}, placed: map[string]termimage.Placement{},
 	}
 }
 
 // Init loads the issue and starts the spinner.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Tick) }
+func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Sync(m.spinning())) }
 
 // Reload fetches the issue again and swaps in the new text when it arrives,
 // keeping the old text meanwhile.
 func (m *Model) Reload() tea.Cmd {
-	b, id, issueKey, fetch := m.backend, m.id, m.key, m.fetch
-	return func() tea.Msg {
-		msg := fetch(b, issueKey)
-		msg.id = id
-		return msg
-	}
+	b, issueKey, fetch := m.backend, m.key, m.fetch
+	return m.Request(func() tea.Msg { return fetch(b, issueKey) })
 }
 
 // SetBusy keeps the spinner running while the owner waits on something that
 // doesn't replace the text, like sending a comment. The returned command
 // restarts the spinner, which stops when nothing is busy.
 func (m *Model) SetBusy(on bool) tea.Cmd {
-	was := m.spinning()
 	m.busy = on
-	if !was && m.spinning() {
-		return m.spin.Tick
-	}
-	return nil
+	return m.spin.Sync(m.spinning())
 }
 
 func (m *Model) spinning() bool { return m.loading || m.busy }
@@ -185,7 +177,6 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		switch {
-		case msg.id != m.id:
 		case msg.err != nil:
 			m.err, m.loading = msg.err, false
 		case msg.issue != nil || msg.comments != nil:
@@ -202,12 +193,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refresh()
 		return m, nil
 	case spinner.TickMsg:
-		if !m.spinning() {
-			return m, nil
-		}
-		var cmd tea.Cmd
-		m.spin, cmd = m.spin.Update(msg)
-		return m, cmd
+		return m, m.spin.Update(msg, m.spinning())
 	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.top):

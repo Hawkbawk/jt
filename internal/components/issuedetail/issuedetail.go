@@ -1,6 +1,6 @@
 // Package issuedetail is a tea.Model that shows an issue's details above a key
-// hint. It knows nothing about where it's shown: it asks to be dismissed with
-// popup.Close.
+// hint. It knows nothing about where it's shown: it ends with
+// tuimsg.Cancelled.
 package issuedetail
 
 import (
@@ -12,10 +12,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/issueview"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // hintLines is the height of the key hint under an issue's text.
@@ -31,6 +31,9 @@ func New(b issueview.Backend, issueKey string, md issueview.Markdown) *Model {
 	return &Model{Issue: issueview.Details(b, issueKey, md)}
 }
 
+// WrapRequests wraps the requests that load the issue.
+func (p *Model) WrapRequests(wrap func(tea.Cmd) tea.Cmd) { p.Issue.WrapRequests(wrap) }
+
 // Init implements tea.Model.
 func (p *Model) Init() tea.Cmd { return p.Issue.Init() }
 
@@ -43,7 +46,7 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, cmd
 	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.Get().Close) {
-			return p, popup.Close()
+			return p, tuimsg.Cancel()
 		}
 	}
 	_, cmd := p.Issue.Update(msg)

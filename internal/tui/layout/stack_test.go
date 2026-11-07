@@ -1,4 +1,4 @@
-package popup
+package layout
 
 import (
 	"strings"
@@ -32,8 +32,8 @@ func TestFitHeight(t *testing.T) {
 		{"a\n\nb\n", 3, "a\n\nb"},
 		{"a", 0, ""},
 	} {
-		if got := fitHeight(tc.in, tc.height); got != tc.want {
-			t.Errorf("fitHeight(%q, %d) = %q, want %q", tc.in, tc.height, got, tc.want)
+		if got := FitHeight(tc.in, tc.height); got != tc.want {
+			t.Errorf("FitHeight(%q, %d) = %q, want %q", tc.in, tc.height, got, tc.want)
 		}
 	}
 }

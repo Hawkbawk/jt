@@ -7,12 +7,10 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -84,7 +82,7 @@ func (m Model) WithWarning(text string) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend, 0), m.form.form.Init())
+	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend), m.form.form.Init())
 }
 
 func (m Model) busy() bool { return m.searching }
@@ -125,6 +123,9 @@ func (m *Model) fit() {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := m.HandleCommon(msg, m.busy()); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -144,19 +145,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.SelectTheme(msg)
 		cmd = tea.Batch(cmd, m.restyle())
 		return m, cmd
-
-	case screen.ThemeSavedMsg:
-		m.OnThemeSaved(msg)
-		return m, nil
-
-	case spinner.TickMsg:
-		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
-
-	case issuecomments.Closed:
-		return m, popup.Close()
-
-	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.UpdatePopup(msg)
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -181,10 +169,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case searchLoadedMsg:
 		m.applyResults(msg)
-		return m, nil
-
-	case screen.ActionDoneMsg:
-		m.Status = msg.Display()
 		return m, nil
 	}
 	cmd := m.forwardMsg(msg)

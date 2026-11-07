@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
 )
 
 type source []jira.BoardSummary
@@ -27,20 +26,8 @@ func TestStartsOnCurrentBoard(t *testing.T) {
 		t.Fatalf("loaded=%v len=%d", p.Loaded(), p.Len())
 	}
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	msg, ok := cmd().(popup.CloseMsg)
-	if !ok {
-		t.Fatalf("enter should close the popup, got %T", cmd())
-	}
-	sel, ok := msg.Then.(SelectedMsg)
+	sel, ok := cmd().(SelectedMsg)
 	if !ok || sel.Board.ID != 2 || sel.Project != "A" {
-		t.Fatalf("selected = %+v", msg.Then)
-	}
-}
-
-func TestIgnoresAnotherPickersBoards(t *testing.T) {
-	p := New(source{}, "A", 0)
-	p.Update(LoadedMsg{ID: p.id + 1, Boards: []jira.BoardSummary{{ID: 1, Name: "One"}}})
-	if p.Loaded() {
-		t.Fatal("loaded boards meant for another picker")
+		t.Fatalf("selected = %+v", sel)
 	}
 }

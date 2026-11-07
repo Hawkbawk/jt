@@ -1,5 +1,5 @@
 // Package themepicker is a tea.Model that lists every registered tint and
-// reports the one the user picks. It's meant to be hosted by a popup.
+// reports the one the user picks. It ends with a SelectedMsg, or tuimsg.Cancelled.
 package themepicker
 
 import (
@@ -13,7 +13,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/layout"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -24,19 +24,22 @@ type SelectedMsg struct {
 	ID   string
 }
 
+// Final implements tuimsg.Final.
+func (SelectedMsg) Final() {}
+
 // resetMsg carries the terminal's own theme, once it has answered.
 type resetMsg struct{ tint *tint.Tint }
 
 // keyMap is the picker's key bindings.
 type keyMap struct {
-	popup.KeyMap
+	layout.KeyMap
 	apply, reset key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	apply, reset := keys.Describe(k.Accept, "apply"), keys.Describe(k.Reset, "reset to terminal")
-	return keyMap{KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(apply, reset), apply: apply, reset: reset}
+	return keyMap{KeyMap: layout.NewKeyMap(k.Dismiss).WithLead(apply, reset), apply: apply, reset: reset}
 }
 
 type item struct {
@@ -60,7 +63,7 @@ func (i item) Description() string {
 
 func (i item) FilterValue() string { return i.DisplayName + " " + i.ID }
 
-// Picker lists every registered tint and closes its popup with a SelectedMsg
+// Picker lists every registered tint and ends with a SelectedMsg
 // when one is chosen.
 type Picker struct {
 	keys  keyMap
@@ -127,7 +130,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
 	case resetMsg:
-		return p, popup.CloseWith(SelectedMsg{Tint: msg.tint})
+		return p, tuimsg.End(SelectedMsg{Tint: msg.tint})
 	case tea.KeyPressMsg:
 		if cmd, ok := p.handleKey(msg); ok {
 			return p, cmd
@@ -144,14 +147,14 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	switch {
-	case key.Matches(msg, p.keys.Close()) && !p.list.IsFiltered():
-		return popup.Close(), true
+	case key.Matches(msg, p.keys.Dismiss()) && !p.list.IsFiltered():
+		return tuimsg.Cancel(), true
 	case key.Matches(msg, p.keys.apply):
 		t := p.Selected()
 		if t == nil {
 			return nil, true
 		}
-		return popup.CloseWith(SelectedMsg{Tint: t, ID: t.ID}), true
+		return tuimsg.End(SelectedMsg{Tint: t, ID: t.ID}), true
 	case key.Matches(msg, p.keys.reset):
 		// Reading the terminal's theme waits on it, so it happens in a command.
 		return func() tea.Msg { return resetMsg{tint: styles.Default(context.Background())} }, true
