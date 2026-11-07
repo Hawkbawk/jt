@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -125,6 +126,9 @@ func TestComposeAndSend(t *testing.T) {
 	if out := press(m, "esc"); len(out) != 0 || m.form != nil || m.body != "hi\nyo" {
 		t.Fatal("esc should leave the editor without closing or dropping the draft")
 	}
+	if v := view(m); !strings.Contains(v, "hi") || !strings.Contains(v, "yo") {
+		t.Fatalf("the retained draft should remain visible after closing the editor:\n%s", v)
+	}
 	press(m, "enter")
 
 	out := press(m, "ctrl+s")
@@ -136,6 +140,40 @@ func TestComposeAndSend(t *testing.T) {
 	}
 	if m.body != "" || m.form != nil || m.sending {
 		t.Fatal("editor should reset and close after sending")
+	}
+}
+
+func TestRetainedDraftIsBounded(t *testing.T) {
+	m := open(t, newBackend())
+	press(m, "enter")
+	m.body = "draft 1\ndraft 2\ndraft 3\ndraft 4\ndraft 5\ndraft 6\ndraft 7"
+	press(m, "esc")
+
+	v := view(m)
+	if !strings.Contains(v, "draft 1") || strings.Contains(v, "draft 7") {
+		t.Fatalf("the inactive composer should show a bounded draft:\n%s", v)
+	}
+}
+
+func TestComposerForwardsNonKeyMessagesToIssueView(t *testing.T) {
+	b := newBackend()
+	m := open(t, b)
+	press(m, "enter")
+
+	b.list = &jira.CommentList{Total: 3, Items: []jira.Comment{
+		{Author: "Ada", Created: "2026-10-01 09:00", Body: "first comment"},
+		{Author: "Grace", Created: "2026-10-02 10:00", Body: "second comment"},
+		{Author: "Linus", Created: "2026-10-03 11:00", Body: "new comment"},
+	}}
+	m.Update(m.issue.Reload()())
+	if m.issue.CommentList().Total != 3 {
+		t.Fatal("issue view should receive asynchronous reload responses while composing")
+	}
+
+	m.issue.SetBusy(true)
+	_, cmd := m.Update(spinner.TickMsg{})
+	if cmd == nil {
+		t.Fatal("issue view should receive spinner ticks while composing")
 	}
 }
 

@@ -171,8 +171,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	if m.form != nil {
-		_, cmd := m.form.Update(msg)
-		return m, cmd
+		_, formCmd := m.form.Update(msg)
+		_, issueCmd := m.issue.Update(msg)
+		return m, tea.Batch(formCmd, issueCmd)
 	}
 	_, cmd := m.issue.Update(msg)
 	return m, cmd
@@ -215,6 +216,9 @@ func (m *Model) View() tea.View {
 		m.form.WithWidth(m.issue.Width()).WithHeight(inputLines)
 		input = m.form.View()
 		hint = helpView(m.keys.inWriting(m.form.KeyBinds()), m.issue.Width())
+	} else if m.body != "" {
+		input = styles.Input().Width(m.issue.Width()).Height(inputHeight).
+			MaxHeight(inputHeight).Render(m.body)
 	}
 	switch {
 	case m.sending:
