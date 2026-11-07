@@ -51,6 +51,8 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	case "ctrl+e":
 		return tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl}
+	case "ctrl+j":
+		return tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl}
 	}
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
@@ -115,7 +117,7 @@ func TestComposeAndSend(t *testing.T) {
 		t.Fatal("typing should not reach the textarea before enter")
 	}
 
-	press(m, "enter", "h", "i", "enter", "y", "o")
+	press(m, "enter", "h", "i", "ctrl+j", "y", "o")
 	if m.form == nil || m.body != "hi\nyo" {
 		t.Fatalf("enter should focus, then insert newlines; value=%q", m.body)
 	}
@@ -139,8 +141,10 @@ func TestComposeAndSend(t *testing.T) {
 
 func TestComposeOffersEditor(t *testing.T) {
 	m := open(t, newBackend())
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	press(m, "enter")
-	if v := view(m); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") {
+	if v := view(m); !strings.Contains(v, "ctrl+e") || !strings.Contains(v, "open editor") ||
+		!strings.Contains(v, "alt+enter / ctrl+j") || !strings.Contains(v, "new line") {
 		t.Fatalf("comment input should offer the external editor:\n%s", v)
 	}
 }

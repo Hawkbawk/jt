@@ -52,8 +52,9 @@ func (s Sent) Status() string { return "Commented on " + s.Key }
 // has focus.
 type keyMap struct {
 	scroll, topBottom, write, close key.Binding
-	send, blur, editor, newLine     key.Binding
+	send, blur                      key.Binding
 
+	form    []key.Binding
 	writing bool
 }
 
@@ -66,21 +67,20 @@ func newKeyMap() keyMap {
 		close:     k.Close,
 		send:      k.Send,
 		blur:      keys.Describe(k.Dismiss, "stop writing"),
-		editor:    key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "open editor")),
-		newLine:   key.NewBinding(key.WithKeys("enter", "ctrl+j"), key.WithHelp("enter / ctrl+j", "new line")),
 	}
 }
 
 // inWriting returns k with the help for when the input has focus.
-func (k keyMap) inWriting() keyMap {
+func (k keyMap) inWriting(form []key.Binding) keyMap {
 	k.writing = true
+	k.form = form
 	return k
 }
 
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
 	if k.writing {
-		return []key.Binding{k.send, k.editor, k.newLine, k.blur}
+		return append(append([]key.Binding{k.send}, k.form...), k.blur)
 	}
 	return []key.Binding{k.scroll, k.topBottom, k.write, k.close}
 }
@@ -187,7 +187,6 @@ func (m *Model) openInput() tea.Cmd {
 	km.Text.Next = key.NewBinding(key.WithDisabled())
 	km.Text.Prev = key.NewBinding(key.WithDisabled())
 	km.Text.Submit = key.NewBinding(key.WithDisabled())
-	km.Text.NewLine = m.keys.newLine
 	m.form = pane.NewForm(m.input).WithKeyMap(km)
 	return m.form.Init()
 }
@@ -215,7 +214,7 @@ func (m *Model) View() tea.View {
 	if m.form != nil {
 		m.form.WithWidth(m.issue.Width()).WithHeight(inputLines)
 		input = m.form.View()
-		hint = helpView(m.keys.inWriting(), m.issue.Width())
+		hint = helpView(m.keys.inWriting(m.form.KeyBinds()), m.issue.Width())
 	}
 	switch {
 	case m.sending:
@@ -228,7 +227,7 @@ func (m *Model) View() tea.View {
 		rest := m.issue.Width() - lipgloss.Width(prefix)
 		hint = prefix + helpView(m.keys, rest)
 		if m.form != nil {
-			hint = prefix + helpView(m.keys.inWriting(), rest)
+			hint = prefix + helpView(m.keys.inWriting(m.form.KeyBinds()), rest)
 		}
 	}
 	if !m.issue.Ready() {
