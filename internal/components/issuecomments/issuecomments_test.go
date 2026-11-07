@@ -111,17 +111,17 @@ func TestComposeAndSend(t *testing.T) {
 	m := open(t, b)
 
 	press(m, "x")
-	if m.input.Focused() || m.input.Value() != "" {
+	if m.form != nil || m.body != "" {
 		t.Fatal("typing should not reach the textarea before enter")
 	}
 
 	press(m, "enter", "h", "i", "enter", "y", "o")
-	if !m.input.Focused() || m.input.Value() != "hi\nyo" {
-		t.Fatalf("enter should focus, then insert newlines; value=%q", m.input.Value())
+	if m.form == nil || m.body != "hi\nyo" {
+		t.Fatalf("enter should focus, then insert newlines; value=%q", m.body)
 	}
 
-	if out := press(m, "esc"); len(out) != 0 || m.input.Focused() {
-		t.Fatal("esc should leave the textarea without closing")
+	if out := press(m, "esc"); len(out) != 0 || m.form != nil || m.body != "hi\nyo" {
+		t.Fatal("esc should leave the editor without closing or dropping the draft")
 	}
 	press(m, "enter")
 
@@ -132,8 +132,8 @@ func TestComposeAndSend(t *testing.T) {
 	if len(out) != 1 || out[0] != (Sent{Key: "T-1"}) {
 		t.Fatalf("sending should report Sent, got %v", out)
 	}
-	if m.input.Value() != "" || m.input.Focused() || m.sending {
-		t.Fatal("textarea should reset and blur after sending")
+	if m.body != "" || m.form != nil || m.sending {
+		t.Fatal("editor should reset and close after sending")
 	}
 }
 
@@ -159,7 +159,7 @@ func TestSendErrorKeepsDraft(t *testing.T) {
 	b.addErr = errors.New("nope")
 	m := open(t, b)
 	out := press(m, "enter", "a", "ctrl+s")
-	if len(out) != 0 || m.input.Value() != "a" || !m.input.Focused() {
+	if len(out) != 0 || m.body != "a" || m.form == nil {
 		t.Fatal("draft should survive a failed send without reporting Sent")
 	}
 	if !strings.Contains(view(m), "nope") {
@@ -191,8 +191,8 @@ func TestTopAndBottom(t *testing.T) {
 	}
 
 	press(m, "enter", "g", "G")
-	if m.input.Value() != "gG" || m.issue.ScrollPercent() != 0 {
-		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", m.input.Value(), m.issue.ScrollPercent())
+	if m.body != "gG" || m.issue.ScrollPercent() != 0 {
+		t.Fatalf("g/G should type into the focused input; value=%q scrolled to %v", m.body, m.issue.ScrollPercent())
 	}
 }
 
