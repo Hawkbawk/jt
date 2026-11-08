@@ -4,6 +4,7 @@ package tuimsg
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/hawkbawk/jt/internal/command"
 	"github.com/hawkbawk/jt/internal/config"
@@ -33,12 +34,17 @@ type CommandLoaded struct {
 type CommandFinished struct {
 	Command config.Command
 	Err     error
+	Stderr  string
 }
 
 // Status returns the command's result for the status line.
 func (m CommandFinished) Status() string {
 	if m.Err != nil {
-		return fmt.Sprintf("running %s: %v", m.Command.DisplayName(), m.Err)
+		status := fmt.Sprintf("running %s: %v", m.Command.DisplayName(), m.Err)
+		if stderr := strings.TrimSpace(m.Stderr); stderr != "" {
+			return status + ": " + stderr
+		}
+		return status
 	}
 	return "Ran " + m.Command.DisplayName()
 }

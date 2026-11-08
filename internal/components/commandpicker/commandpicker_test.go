@@ -1,6 +1,8 @@
 package commandpicker
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -13,6 +15,52 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
+
+func TestCommandProcess(t *testing.T) {
+	switch os.Getenv("JT_COMMAND_PROCESS_TEST") {
+	case "success":
+		os.Exit(0)
+	case "failure":
+		_, _ = fmt.Fprintln(os.Stderr, "command diagnostic")
+		os.Exit(1)
+	}
+}
+
+func TestStartRunsCommandAndCapturesFailureOutput(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		mode string
+		want string
+	}{
+		{name: "success", mode: "success", want: "Ran test command"},
+		{name: "failure", mode: "failure", want: "running test command: exit status 1: command diagnostic"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("JT_COMMAND_PROCESS_TEST", test.mode)
+			cmd, err := Start(tuimsg.CommandLoaded{
+				Command: config.Command{
+					Name:    "test command",
+					Command: executable,
+					Args:    []string{"-test.run=^TestCommandProcess$"},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			msg, ok := cmd().(tuimsg.CommandFinished)
+			if !ok {
+				t.Fatalf("message = %T, want tuimsg.CommandFinished", msg)
+			}
+			if got := msg.Status(); got != test.want {
+				t.Fatalf("status = %q, want %q", got, test.want)
+			}
+		})
+	}
+}
 
 func startedPicker(t *testing.T, commands []config.Command) *Picker {
 	t.Helper()

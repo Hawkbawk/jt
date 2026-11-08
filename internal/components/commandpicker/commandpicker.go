@@ -3,6 +3,7 @@
 package commandpicker
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -154,7 +155,7 @@ func Load(b Backend, selected tuimsg.CommandSelected) tea.Cmd {
 	}
 }
 
-// Start renders the arguments and returns a command that runs the executable.
+// Start renders the arguments and returns an asynchronous command that runs the executable.
 func Start(loaded tuimsg.CommandLoaded) (tea.Cmd, error) {
 	args, err := command.RenderArgs(loaded.Command.Args, loaded.Data)
 	if err != nil {
@@ -163,9 +164,13 @@ func Start(loaded tuimsg.CommandLoaded) (tea.Cmd, error) {
 	if strings.TrimSpace(loaded.Command.Command) == "" {
 		return nil, fmt.Errorf("preparing command: command is empty")
 	}
-	return tea.ExecProcess(exec.Command(loaded.Command.Command, args...), func(err error) tea.Msg {
-		return tuimsg.CommandFinished{Command: loaded.Command, Err: err}
-	}), nil
+	return func() tea.Msg {
+		cmd := exec.Command(loaded.Command.Command, args...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return tuimsg.CommandFinished{Command: loaded.Command, Err: err, Stderr: stderr.String()}
+	}, nil
 }
 
 // Handle processes shared command messages for a screen.
