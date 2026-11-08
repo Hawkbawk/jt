@@ -112,10 +112,10 @@ func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
 
 func TestCommentsPopupShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
-	m = tuitest.PressDrain(t, m, "c")
+	m = tuitest.PressDrain(t, m, "C")
 	_, ok := m.Popup.Content().(*issuecomments.Model)
 	if !ok {
-		t.Fatal("c should open the comments popup")
+		t.Fatal("C should open the comments popup")
 	}
 	content := ansi.Strip(m.Popup.View())
 	for _, want := range []string{"Ada", "first comment", "Grace", "second comment"} {

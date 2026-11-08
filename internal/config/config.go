@@ -19,12 +19,38 @@ type Config struct {
 	// Theme is the ID of the bubbletint tint to draw with. Empty follows the
 	// terminal's theme.
 	Theme string `mapstructure:"theme"`
+	// Commands are the user-defined commands available from the board.
+	Commands []Command `mapstructure:"commands"`
 	// Jira is how to reach the Jira server. The API token isn't stored here,
 	// see Token.
 	Jira Jira `mapstructure:"jira"`
 
 	viper *viper.Viper
 	mu    *sync.Mutex
+}
+
+// Command is an executable and its arguments, shown in the command picker.
+type Command struct {
+	Name       string   `mapstructure:"name"`
+	Executable string   `mapstructure:"executable"`
+	Command    string   `mapstructure:"command"`
+	Args       []string `mapstructure:"args"`
+}
+
+// Program returns the configured executable.
+func (c Command) Program() string {
+	if c.Executable != "" {
+		return c.Executable
+	}
+	return c.Command
+}
+
+// DisplayName returns the configured name, or the executable when unnamed.
+func (c Command) DisplayName() string {
+	if c.Name != "" {
+		return c.Name
+	}
+	return c.Program()
 }
 
 // Load reads the settings file, creating it with the defaults when missing.

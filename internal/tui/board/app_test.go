@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
@@ -170,6 +171,45 @@ func TestBoardKeysMoveFocus(t *testing.T) {
 	m, _ = press(t, m, "h", "h", "j")
 	if got := m.board.nav.selected().Key; got != "T-2" {
 		t.Fatalf("selected %s", got)
+	}
+}
+
+func TestCommandsKeyOpensConfiguredCommandPicker(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.commands = []config.Command{{Name: "Open issue", Executable: "code"}}
+	m = tuitest.PressDrain(t, m, "c")
+	if !m.Popup.IsOpen() || !strings.Contains(m.Popup.View(), "Open issue") {
+		t.Fatalf("c should open the configured command picker: %s", m.Popup.View())
+	}
+}
+
+func TestCommandsKeyDoesNothingWithoutSelectedIssue(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.commands = []config.Command{{Name: "Open issue", Executable: "code"}}
+	m, cmd := press(t, m, "l", "c")
+	if m.Popup.IsOpen() || cmd != nil {
+		t.Fatal("c opened a command picker without a selected issue")
+	}
+}
+
+func TestCommandLoadsTicketContextBeforeRunning(t *testing.T) {
+	m, fb := loadedModel(t)
+	fb.Detail = &jira.IssueDetail{
+		Issue:       jira.Issue{Key: "T-1", Summary: "ticket title"},
+		Description: "ticket description",
+	}
+	fb.CommentList = &jira.CommentList{Items: []jira.Comment{{Author: "Ada", Body: "comment"}}}
+	result := m.loadCommand(config.Command{Executable: "true"})().(commandLoadedMsg)
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if result.issue.Key != "T-1" || result.project != "TEST" || result.board != "Test Board" ||
+		result.url != "https://jira.example.com/browse/T-1" || result.title != "ticket title" ||
+		result.description != "ticket description" || len(result.comments) != 1 || result.comments[0].Body != "comment" {
+		t.Fatalf("loaded command context = %#v", result)
+	}
+	if _, cmd := m.Update(result); cmd == nil {
+		t.Fatal("loaded command did not produce an executable process")
 	}
 }
 

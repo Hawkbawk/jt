@@ -481,7 +481,7 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 	t.Parallel()
 	m, fb := searched(t)
 	fb.CommentList = &jira.CommentList{}
-	m = tuitest.PressDrain(t, m, "j", "c", "enter")
+	m = tuitest.PressDrain(t, m, "j", "C", "enter")
 	m = searchType(t, m, "A comment")
 	m = tuitest.PressDrain(t, m, "ctrl+s")
 	if len(fb.Commented) != 1 || fb.Commented[0] != "DEMO-2:A comment" {

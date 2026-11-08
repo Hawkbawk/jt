@@ -118,7 +118,11 @@ func runBoard(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	m := board.New(backend, settings)
+	var commands []config.Command
+	if !fake {
+		commands = cfg.Commands
+	}
+	m := board.New(backend, settings, commands...)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
