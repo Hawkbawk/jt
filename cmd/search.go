@@ -3,7 +3,6 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/tui/search"
 )
 
@@ -26,11 +25,7 @@ func runSearch(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	var commands []config.Command
-	if !fake {
-		commands = cfg.Commands
-	}
-	m := search.New(backend, settings, commands...)
+	m := search.New(backend, settings, commandsForSession(fake, cfg.Commands)...)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
