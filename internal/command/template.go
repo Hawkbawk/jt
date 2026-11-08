@@ -12,7 +12,6 @@ import (
 // Data is the ticket context available to command argument templates.
 type Data struct {
 	Key         string
-	IssueKey    string
 	Project     string
 	Board       string
 	URL         string

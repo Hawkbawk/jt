@@ -3,13 +3,10 @@
 package board
 
 import (
-	"os/exec"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/hawkbawk/jt/internal/command"
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
@@ -85,6 +82,10 @@ func (m Model) busy() bool {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, status, handled := commandpicker.Handle(m.board.backend, msg); handled {
+		m.Status = status
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -112,36 +113,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case issuecomments.Closed:
 		return m, popup.Close()
-
-	case commandpicker.SelectedMsg:
-		m.Status = styles.Dim().Render("Preparing " + msg.Command.DisplayName() + "…")
-		return m, m.loadCommand(msg.Command)
-
-	case commandLoadedMsg:
-		if msg.err != nil {
-			m.Status = styles.Error().Render("preparing " + msg.command.DisplayName() + ": " + msg.err.Error())
-			return m, nil
-		}
-		args, err := command.RenderArgs(msg.command.Args, command.Data{
-			Key: msg.issue.Key, IssueKey: msg.issue.Key, Project: msg.project,
-			Board: msg.board, URL: msg.url, Title: msg.title,
-			Description: msg.description, Comments: msg.comments,
-		})
-		if err != nil {
-			m.Status = styles.Error().Render("preparing command: " + err.Error())
-			return m, nil
-		}
-		return m, tea.ExecProcess(exec.Command(msg.command.Program(), args...), func(err error) tea.Msg {
-			return commandFinishedMsg{command: msg.command, err: err}
-		})
-
-	case commandFinishedMsg:
-		if msg.err != nil {
-			m.Status = styles.Error().Render("running " + msg.command.DisplayName() + ": " + msg.err.Error())
-		} else {
-			m.Status = styles.Dim().Render("Ran " + msg.command.DisplayName())
-		}
-		return m, nil
 
 	case popup.OpenMsg, popup.CloseMsg:
 		return m, m.UpdatePopup(msg)
@@ -253,7 +224,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if sel == nil {
 			return m, nil
 		}
-		return m, popup.Open(commandpicker.New(m.commands))
+		return m, popup.Open(commandpicker.New(m.commands, *sel, m.board.nav.board.Project, m.board.nav.board.Name))
 	}
 	if key.Matches(msg, keys.Get().Refresh) && m.board.project != "" && !m.board.loading {
 		focusKey := ""
@@ -276,54 +247,4 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, m.actions.Handle(msg, *sel)
-}
-
-type commandLoadedMsg struct {
-	command             config.Command
-	issue               jira.Issue
-	project, board, url string
-	title, description  string
-	comments            []jira.Comment
-	err                 error
-}
-
-type commandFinishedMsg struct {
-	command config.Command
-	err     error
-}
-
-func (m Model) loadCommand(c config.Command) tea.Cmd {
-	selected := m.board.selected()
-	if selected == nil {
-		return nil
-	}
-	issue := *selected
-	project, board := m.board.nav.board.Project, m.board.nav.board.Name
-	backend := m.board.backend
-	return func() tea.Msg {
-		detail, err := backend.Issue(issue.Key)
-		if err != nil {
-			return commandLoadedMsg{command: c, err: err}
-		}
-		comments, err := backend.Comments(issue.Key)
-		if err != nil {
-			return commandLoadedMsg{command: c, err: err}
-		}
-		title, description := issue.Summary, ""
-		if detail != nil {
-			if detail.Summary != "" {
-				title = detail.Summary
-			}
-			description = detail.Description
-		}
-		var commentItems []jira.Comment
-		if comments != nil {
-			commentItems = comments.Items
-		}
-		return commandLoadedMsg{
-			command: c, issue: issue, project: project, board: board,
-			url: backend.IssueURL(issue.Key), title: title, description: description,
-			comments: commentItems,
-		}
-	}
 }

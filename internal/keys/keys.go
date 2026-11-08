@@ -50,8 +50,8 @@ func Default() Map {
 		Bottom: key.NewBinding(key.WithKeys("G")),
 
 		View:     key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "view")),
-		Comments: key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "comments")),
-		Commands: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commands")),
+		Comments: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comments")),
+		Commands: key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "commands")),
 		Edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		Move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
 		Assign:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign")),

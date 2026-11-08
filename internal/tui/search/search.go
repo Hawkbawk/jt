@@ -12,9 +12,11 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
+	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -48,10 +50,11 @@ func loadIssueTypes(b Backend) tea.Cmd {
 // board's issue popups. Only one search runs at a time.
 type Model struct {
 	screen.Layout
-	backend Backend
-	form    *searchForm
-	actions screen.IssueActions
-	results resultList
+	backend  Backend
+	form     *searchForm
+	actions  screen.IssueActions
+	results  resultList
+	commands []config.Command
 
 	// inResults is whether the table rather than the form has focus.
 	inResults bool
@@ -65,12 +68,13 @@ type Model struct {
 }
 
 // New builds the search screen with the backend's default project selected.
-func New(backend Backend, settings screen.Settings) Model {
+func New(backend Backend, settings screen.Settings, commands ...config.Command) Model {
 	m := Model{
-		Layout:  screen.NewLayout(settings),
-		backend: backend,
-		form:    newSearchForm(backend.DefaultProject()),
-		actions: screen.NewIssueActions(backend),
+		Layout:   screen.NewLayout(settings),
+		backend:  backend,
+		form:     newSearchForm(backend.DefaultProject()),
+		actions:  screen.NewIssueActions(backend),
+		commands: commands,
 	}
 	m.results.set(nil)
 	return m
@@ -125,6 +129,10 @@ func (m *Model) fit() {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, status, handled := commandpicker.Handle(m.backend, msg); handled {
+		m.Status = status
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -363,6 +371,10 @@ func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {
+		if key.Matches(msg, keys.Get().Commands) {
+			project, _, _ := strings.Cut(sel.Key, "-")
+			return m, popup.Open(commandpicker.New(m.commands, *sel, project, ""))
+		}
 		if key.Matches(msg, keys.Get().Accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
 		}

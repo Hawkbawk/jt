@@ -12,7 +12,7 @@ func TestCommentsPopupSendsAndReloadsIssue(t *testing.T) {
 	m := newTestModel(t, "TEST", fb)
 	m.actions.MD = plainMarkdown
 	m = tuitest.Drain(t, m, m.Init())
-	m = tuitest.PressDrain(t, m, "C", "enter", "h", "i", "ctrl+s")
+	m = tuitest.PressDrain(t, m, "c", "enter", "h", "i", "ctrl+s")
 
 	if len(fb.Commented) != 1 || fb.Commented[0] != "T-1:hi" {
 		t.Fatalf("comments = %q", fb.Commented)

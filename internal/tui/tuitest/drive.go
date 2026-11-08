@@ -73,8 +73,21 @@ func IsQuit(cmd tea.Cmd) bool {
 // Drain runs cmd and feeds resulting messages back into the model until no
 // more immediate work is produced.
 func Drain[M tea.Model](t *testing.T, m M, cmd tea.Cmd) M {
+	m, _ = DrainMessages(t, m, cmd)
+	return m
+}
+
+// DrainMessages is Drain and returns the immediate messages it handled.
+func DrainMessages[M tea.Model](t *testing.T, m M, cmd tea.Cmd) (M, []tea.Msg) {
+	return DrainUntil(t, m, cmd, nil)
+}
+
+// DrainUntil is DrainMessages and stops before passing a message accepted by
+// stop to the model.
+func DrainUntil[M tea.Model](t *testing.T, m M, cmd tea.Cmd, stop func(tea.Msg) bool) (M, []tea.Msg) {
 	t.Helper()
 	queue := []tea.Cmd{cmd}
+	var messages []tea.Msg
 	for steps := 0; len(queue) > 0; steps++ {
 		if steps > maxSteps {
 			t.Fatal("drain: too many commands, likely a message loop")
@@ -95,11 +108,15 @@ func Drain[M tea.Model](t *testing.T, m M, cmd tea.Cmd) M {
 		case spinner.TickMsg:
 			continue
 		}
+		messages = append(messages, msg)
+		if stop != nil && stop(msg) {
+			return m, messages
+		}
 		next, nc := m.Update(msg)
 		m = next.(M)
 		queue = append(queue, nc)
 	}
-	return m
+	return m, messages
 }
 
 // PressDrain sends keys in order, running each resulting command to completion.

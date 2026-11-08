@@ -3,38 +3,52 @@
 package commandpicker
 
 import (
+	"fmt"
+	"os/exec"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/command"
 	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
-// SelectedMsg reports the command the user picked.
-type SelectedMsg struct {
-	Command config.Command
+// Backend loads the ticket data available to command templates.
+type Backend interface {
+	Issue(key string) (*jira.IssueDetail, error)
+	Comments(key string) (*jira.CommentList, error)
+	IssueURL(key string) string
 }
 
 // Picker lists the configured commands.
 type Picker struct {
 	commands []config.Command
+	issue    jira.Issue
+	project  string
+	board    string
 	choice   int
 	field    *huh.Select[int]
 	form     *huh.Form
-	close    key.Binding
+	keys     popup.KeyMap
 	width    int
 	height   int
 }
 
-// New builds a picker with the configured commands.
-func New(commands []config.Command) *Picker {
-	p := &Picker{commands: commands, close: keys.Get().Close}
+// New builds a picker with commands available for issue.
+func New(commands []config.Command, issue jira.Issue, project, board string) *Picker {
+	k := keys.Get()
+	p := &Picker{
+		commands: commands, issue: issue, project: project, board: board,
+		keys: popup.NewKeyMap(k.Close).WithLead(keys.Describe(k.Accept, "run")),
+	}
 	if len(commands) > 0 {
 		opts := make([]huh.Option[int], 0, len(commands))
 		for i, c := range commands {
@@ -64,14 +78,14 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, nil
 	}
 	if p.form == nil {
-		if km, ok := msg.(tea.KeyPressMsg); ok && key.Matches(km, p.close) {
+		if km, ok := msg.(tea.KeyPressMsg); ok && key.Matches(km, p.keys.Close()) {
 			return p, popup.Close()
 		}
 		return p, nil
 	}
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
-		case key.Matches(km, p.close) && !p.consumesEsc():
+		case key.Matches(km, p.keys.Close()) && !p.consumesEsc():
 			return p, popup.Close()
 		case key.Matches(km, keys.Get().Dismiss) && p.consumesEsc():
 			_, cmd := p.form.Update(msg)
@@ -80,7 +94,9 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	_, cmd := p.form.Update(msg)
 	if p.form.State == huh.StateCompleted {
-		return p, popup.CloseWith(SelectedMsg{Command: p.commands[p.choice]})
+		return p, popup.CloseWith(tuimsg.CommandSelected{
+			Command: p.commands[p.choice], Issue: p.issue, Project: p.project, Board: p.board,
+		})
 	}
 	return p, cmd
 }
@@ -98,6 +114,80 @@ func (p *Picker) View() tea.View {
 		p.form.WithWidth(p.width).WithHeight(max(1, p.height-2))
 		body = p.form.View()
 	}
-	return tea.NewView(popup.Stack(p.height, []string{"Commands", ""}, strings.Split(body, "\n"),
-		styles.Dim().Render("enter run · esc close")))
+	km := p.keys.WithForm(nil, false)
+	h := styles.Help()
+	h.SetWidth(max(0, p.width))
+	help := h.View(km)
+	return tea.NewView(popup.Stack(p.height, []string{"Commands", ""}, strings.Split(body, "\n"), help))
+}
+
+// Load fetches ticket details and comments before rendering the selected command.
+func Load(b Backend, selected tuimsg.CommandSelected) tea.Cmd {
+	return func() tea.Msg {
+		detail, err := b.Issue(selected.Issue.Key)
+		if err != nil {
+			return tuimsg.CommandLoaded{Command: selected.Command, Err: err}
+		}
+		comments, err := b.Comments(selected.Issue.Key)
+		if err != nil {
+			return tuimsg.CommandLoaded{Command: selected.Command, Err: err}
+		}
+		title, description := selected.Issue.Summary, ""
+		if detail != nil {
+			if detail.Summary != "" {
+				title = detail.Summary
+			}
+			description = detail.Description
+		}
+		var commentItems []jira.Comment
+		if comments != nil {
+			commentItems = comments.Items
+		}
+		return tuimsg.CommandLoaded{
+			Command: selected.Command,
+			Data: command.Data{
+				Key: selected.Issue.Key, Project: selected.Project, Board: selected.Board,
+				URL: b.IssueURL(selected.Issue.Key), Title: title,
+				Description: description, Comments: commentItems,
+			},
+		}
+	}
+}
+
+// Start renders the arguments and returns a command that runs the executable.
+func Start(loaded tuimsg.CommandLoaded) (tea.Cmd, error) {
+	args, err := command.RenderArgs(loaded.Command.Args, loaded.Data)
+	if err != nil {
+		return nil, fmt.Errorf("preparing command: %w", err)
+	}
+	if strings.TrimSpace(loaded.Command.Command) == "" {
+		return nil, fmt.Errorf("preparing command: command is empty")
+	}
+	return tea.ExecProcess(exec.Command(loaded.Command.Command, args...), func(err error) tea.Msg {
+		return tuimsg.CommandFinished{Command: loaded.Command, Err: err}
+	}), nil
+}
+
+// Handle processes shared command messages for a screen.
+func Handle(b Backend, msg tea.Msg) (tea.Cmd, string, bool) {
+	switch msg := msg.(type) {
+	case tuimsg.CommandSelected:
+		return Load(b, msg), styles.Dim().Render("Preparing " + msg.Command.DisplayName() + "…"), true
+	case tuimsg.CommandLoaded:
+		if msg.Err != nil {
+			return nil, styles.Error().Render("preparing " + msg.Command.DisplayName() + ": " + msg.Err.Error()), true
+		}
+		cmd, err := Start(msg)
+		if err != nil {
+			return nil, styles.Error().Render(err.Error()), true
+		}
+		return cmd, "", true
+	case tuimsg.CommandFinished:
+		if msg.Err != nil {
+			return nil, styles.Error().Render(msg.Status()), true
+		}
+		return nil, styles.Dim().Render(msg.Status()), true
+	default:
+		return nil, "", false
+	}
 }

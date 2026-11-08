@@ -84,7 +84,7 @@ jt
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
-Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+tab` to switch lists, `/` to search the current list, and `enter` to apply the highlighted option. Select "All issues" to clear the filter. Press `c` on a selected issue to run a configured command; `C` opens its comments.
+Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+tab` to switch lists, `/` to search the current list, and `enter` to apply the highlighted option. Select "All issues" to clear the filter. Press `C` on a selected issue to run a configured command; `c` opens its comments.
 
 ### Search
 
@@ -99,7 +99,7 @@ If the filters aren't enough, press `ctrl+t` to write JQL directly. Switching wi
 | `ctrl+t` | Switch between basic filters and JQL |
 | `ctrl+o` | Move between the form and the results |
 
-In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `C` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser and `r` to run the search again. `esc` goes back to the form.
+In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `c` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser, `C` to run a configured command and `r` to run the search again. `esc` goes back to the form.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
 
@@ -137,23 +137,23 @@ Leave `theme` empty to follow your terminal's theme, or press `r` in the picker 
 
 ### Commands
 
-Add commands to `jt.yaml` to run them on the selected issue with `c`:
+Add commands to `jt.yaml` to run them on the selected issue with `C`:
 
 ```yaml
 commands:
   - name: Open issue in VS Code
-    executable: code
+    command: code
     args:
       - "{{.Key}}"
       - "{{.URL}}"
-  - executable: gh
+  - command: gh
     args:
       - issue
       - view
       - "{{.Key}}"
 ```
 
-Each argument is rendered separately with Go `text/template` syntax; the executable is run directly, without a shell. The optional `name` is shown in the picker and defaults to the executable. Use `executable` for its path (the synonymous `command` key is also accepted). Templates can use `.Key` (or `.IssueKey`), `.Project`, `.Board`, `.URL`, `.Title`, `.Description`, and `.Comments`. Comments are Jira comments with `.Author`, `.Created`, `.Edited`, and `.Body` fields, so you can use `{{range .Comments}}{{.Body}}{{end}}`.
+Each argument is rendered separately with Go `text/template` syntax; the executable is run directly, without a shell. The optional `name` is shown in the picker and defaults to `command`. Templates can use `.Key`, `.Project`, `.Board`, `.URL`, `.Title`, `.Description`, and `.Comments`. On the search screen, `.Project` is inferred from the issue key and `.Board` is empty. Comments are Jira comments with `.Author`, `.Created`, `.Edited`, and `.Body` fields, so you can use `{{range .Comments}}{{.Body}}{{end}}`.
 
 ## Development
 

@@ -29,20 +29,11 @@ type Config struct {
 	mu    *sync.Mutex
 }
 
-// Command is an executable and its arguments, shown in the command picker.
+// Command is a command name and its arguments, shown in the command picker.
 type Command struct {
-	Name       string   `mapstructure:"name"`
-	Executable string   `mapstructure:"executable"`
-	Command    string   `mapstructure:"command"`
-	Args       []string `mapstructure:"args"`
-}
-
-// Program returns the configured executable.
-func (c Command) Program() string {
-	if c.Executable != "" {
-		return c.Executable
-	}
-	return c.Command
+	Name    string   `mapstructure:"name"`
+	Command string   `mapstructure:"command"`
+	Args    []string `mapstructure:"args"`
 }
 
 // DisplayName returns the configured name, or the executable when unnamed.
@@ -50,7 +41,7 @@ func (c Command) DisplayName() string {
 	if c.Name != "" {
 		return c.Name
 	}
-	return c.Program()
+	return c.Command
 }
 
 // Load reads the settings file, creating it with the defaults when missing.

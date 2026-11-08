@@ -5,82 +5,76 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/config"
+	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func pickerKey(s string) tea.KeyPressMsg {
-	if s == "enter" {
-		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	}
-	if s == "esc" {
-		return tea.KeyPressMsg{Code: tea.KeyEsc}
-	}
-	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
-}
-
-func startedPicker(commands []config.Command) *Picker {
-	p := New(commands)
-	p.Init()
-	p.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
-	return p
-}
-
-func settle(p *Picker, cmd tea.Cmd) tea.Msg {
-	queue := []tea.Cmd{cmd}
-	for steps := 0; len(queue) > 0 && steps < 100; steps++ {
-		c := queue[0]
-		queue = queue[1:]
-		if c == nil {
-			continue
-		}
-		switch msg := c().(type) {
-		case tea.BatchMsg:
-			queue = append(queue, msg...)
-		case popup.CloseMsg:
-			return msg
-		default:
-			_, next := p.Update(msg)
-			queue = append(queue, next)
-		}
-	}
-	return nil
+func startedPicker(t *testing.T, commands []config.Command) *Picker {
+	t.Helper()
+	p := New(commands, jira.Issue{Key: "ABC-1"}, "ABC", "Team")
+	p = tuitest.Drain(t, p, p.Init())
+	next, _ := p.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	return next.(*Picker)
 }
 
 func TestPickerListsAndSelectsCommand(t *testing.T) {
-	p := startedPicker([]config.Command{
-		{Name: "Open ticket", Executable: "code"},
-		{Executable: "gh"},
+	p := startedPicker(t, []config.Command{
+		{Name: "Open ticket", Command: "code"},
+		{Command: "gh"},
 	})
-	if v := p.View().Content; !strings.Contains(v, "Open ticket") || !strings.Contains(v, "gh") {
+	if v := ansi.Strip(p.View().Content); !strings.Contains(v, "Open ticket") || !strings.Contains(v, "gh") ||
+		!strings.Contains(v, "enter run") || !strings.Contains(v, "esc close") {
 		t.Fatalf("picker view = %q", v)
 	}
-	_, cmd := p.Update(pickerKey("enter"))
+	next, cmd := p.Update(tuitest.Key("enter"))
 	if cmd == nil {
 		t.Fatal("enter did not select a command")
 	}
-	result := settle(p, cmd)
-	msg, ok := result.(popup.CloseMsg)
-	if !ok {
-		t.Fatalf("selection returned %T, want popup.CloseMsg", result)
+	_, messages := tuitest.DrainUntil(t, next, cmd, func(msg tea.Msg) bool {
+		_, ok := msg.(popup.CloseMsg)
+		return ok
+	})
+	var msg popup.CloseMsg
+	found := false
+	for _, result := range messages {
+		if closed, ok := result.(popup.CloseMsg); ok {
+			msg = closed
+			found = true
+			break
+		}
 	}
-	selected, ok := msg.Then.(SelectedMsg)
-	if !ok || selected.Command.Executable != "code" {
+	if !found {
+		t.Fatalf("no popup close message in %v", messages)
+	}
+	selected, ok := msg.Then.(tuimsg.CommandSelected)
+	if !ok || selected.Command.Command != "code" || selected.Issue.Key != "ABC-1" ||
+		selected.Project != "ABC" || selected.Board != "Team" {
 		t.Fatalf("selected = %#v, want the first command", msg.Then)
 	}
 }
 
 func TestPickerExplainsWhenNoCommandsAreConfigured(t *testing.T) {
-	p := startedPicker(nil)
-	if !strings.Contains(p.View().Content, "No commands configured.") {
+	p := startedPicker(t, nil)
+	if !strings.Contains(ansi.Strip(p.View().Content), "No commands configured.") {
 		t.Fatal("empty picker should explain that no commands are configured")
 	}
-	_, cmd := p.Update(pickerKey("esc"))
+	next, cmd := p.Update(tuitest.Key("esc"))
 	if cmd == nil {
 		t.Fatal("esc should close the empty picker")
 	}
-	if _, ok := cmd().(popup.CloseMsg); !ok {
-		t.Fatalf("esc returned %T, want popup.CloseMsg", cmd())
+	_, messages := tuitest.DrainUntil(t, next, cmd, func(msg tea.Msg) bool {
+		_, ok := msg.(popup.CloseMsg)
+		return ok
+	})
+	if len(messages) == 0 {
+		t.Fatal("esc returned no message, want popup.CloseMsg")
+	}
+	if _, ok := messages[0].(popup.CloseMsg); !ok {
+		t.Fatalf("esc returned %T, want popup.CloseMsg", messages[0])
 	}
 }
