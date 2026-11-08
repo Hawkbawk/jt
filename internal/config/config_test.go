@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -41,6 +42,29 @@ func TestLoad(t *testing.T) {
 				t.Errorf("theme = %v, want %v", cfg.Theme, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadCommands(t *testing.T) {
+	cfg, err := load(t, `commands:
+  - name: "Open issue"
+    command: code
+    args:
+      - "{{.Key}}"
+      - "{{.URL}}"
+  - command: gh
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Commands) != 2 {
+		t.Fatalf("commands = %#v", cfg.Commands)
+	}
+	if got := cfg.Commands[0]; got.DisplayName() != "Open issue" || got.Command != "code" || !slices.Equal(got.Args, []string{"{{.Key}}", "{{.URL}}"}) {
+		t.Errorf("first command = %#v", got)
+	}
+	if got := cfg.Commands[1].DisplayName(); got != "gh" || cfg.Commands[1].Command != "gh" {
+		t.Errorf("unnamed command display name = %q, want gh", got)
 	}
 }
 

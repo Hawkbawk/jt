@@ -118,7 +118,7 @@ func runBoard(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	m := board.New(backend, settings)
+	m := board.New(backend, settings, commandsForSession(fake, cfg.Commands)...)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}
@@ -150,6 +150,13 @@ func openBackend() (screenBackend, board.Settings, error) {
 		return nil, nil, err
 	}
 	return client, cfg, nil
+}
+
+func commandsForSession(isFake bool, configured []config.Command) []config.Command {
+	if isFake {
+		return fakejira.DemoCommands()
+	}
+	return configured
 }
 
 // fakeOptions turns the --fake-* flags into options for the fake backend.

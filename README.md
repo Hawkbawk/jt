@@ -84,7 +84,7 @@ jt
 
 `jt` opens the default project from your settings (`jira.project`). If `jira.board_id` is set, `jt` uses that board for the default project. Otherwise it picks a board for the project. Scrum boards show open sprints. Kanban boards show open work plus issues resolved in the last 14 days.
 
-Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+tab` to switch lists, `/` to search the current list, and `enter` to apply the highlighted option. Select "All issues" to clear the filter.
+Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+tab` to switch lists, `/` to search the current list, and `enter` to apply the highlighted option. Select "All issues" to clear the filter. Press `C` on a selected issue to run a configured command; `c` opens its comments.
 
 ### Search
 
@@ -99,7 +99,7 @@ If the filters aren't enough, press `ctrl+t` to write JQL directly. Switching wi
 | `ctrl+t` | Switch between basic filters and JQL |
 | `ctrl+o` | Move between the form and the results |
 
-In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `c` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser and `r` to run the search again. `esc` goes back to the form.
+In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `c` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser, `C` to run a configured command and `r` to run the search again. `esc` goes back to the form.
 
 Run `jt --version` to see the installed version and `jt --help` for usage.
 
@@ -134,6 +134,26 @@ theme: gruvbox_dark_hard
 ```
 
 Leave `theme` empty to follow your terminal's theme, or press `r` in the picker to go back to it. `jt` reads the terminal's config and updates live when you change it. This works in kitty, Ghostty, Alacritty, foot, Windows Terminal and terminals configured through X resources. In other terminals, `jt` starts on Dracula+. An unknown `theme` falls back the same way, with a warning in the status line.
+
+### Commands
+
+Add commands to `jt.yaml` to run them on the selected issue with `C`:
+
+```yaml
+commands:
+  - name: Open issue in VS Code
+    command: code
+    args:
+      - "{{.Key}}"
+      - "{{.URL}}"
+  - command: gh
+    args:
+      - issue
+      - view
+      - "{{.Key}}"
+```
+
+Each argument is rendered separately with Go `text/template` syntax; the executable is run directly, without a shell. The optional `name` is shown in the picker and defaults to `command`. Templates can use `.Key`, `.Project`, `.Board`, `.URL`, `.Title`, `.Description`, and `.Comments`. On the search screen, `.Project` is inferred from the issue key and `.Board` is empty. Comments are Jira comments with `.Author`, `.Created`, `.Edited`, and `.Body` fields, so you can use `{{range .Comments}}{{.Body}}{{end}}`.
 
 ## Development
 

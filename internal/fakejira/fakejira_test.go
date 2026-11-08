@@ -2,8 +2,10 @@ package fakejira_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/hawkbawk/jt/internal/command"
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/board"
@@ -140,5 +142,28 @@ func TestWithSize(t *testing.T) {
 	}
 	if users, _ := f.SearchUsers("", ""); len(users) > 6 {
 		t.Errorf("found %d users", len(users))
+	}
+}
+
+func TestDemoCommands(t *testing.T) {
+	commands := fakejira.DemoCommands()
+	if len(commands) != 3 {
+		t.Fatalf("got %d demo commands, want 3", len(commands))
+	}
+	if commands[0].Command != "tmux" || !strings.Contains(commands[0].Name, "Neovim") {
+		t.Fatalf("first demo command = %+v", commands[0])
+	}
+	args, err := command.RenderArgs(commands[0].Args, command.Data{
+		Key: "DEMO-1", Title: `Title with "'; $(unsafe)`,
+		URL: "https://jira.example.com/browse/DEMO-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args[2] != "DEMO-1" || args[4] != "JT_DEMO_KEY=DEMO-1" ||
+		args[6] != `JT_DEMO_TITLE=Title with "'; $(unsafe)` ||
+		args[8] != "JT_DEMO_URL=https://jira.example.com/browse/DEMO-1" ||
+		strings.Contains(args[9], "unsafe") {
+		t.Fatalf("Neovim command does not show ticket details: %#v", args)
 	}
 }

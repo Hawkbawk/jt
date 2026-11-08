@@ -8,10 +8,12 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
+	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
+	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -40,6 +42,7 @@ type Model struct {
 	settings Settings
 	board    boardPane
 	actions  screen.IssueActions
+	commands []config.Command
 
 	// projects is the list the project popup loaded, kept for the session.
 	projects []jira.Project
@@ -47,12 +50,13 @@ type Model struct {
 
 // New builds the root model. The backend's default project, if any, is
 // opened on start.
-func New(backend Backend, settings Settings) Model {
+func New(backend Backend, settings Settings, commands ...config.Command) Model {
 	m := Model{
 		Layout:   screen.NewLayout(settings),
 		settings: settings,
 		board:    newBoardPane(backend),
 		actions:  screen.NewIssueActions(backend),
+		commands: commands,
 	}
 	return m
 }
@@ -78,6 +82,10 @@ func (m Model) busy() bool {
 
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, status, handled := commandpicker.Handle(m.board.backend, msg); handled {
+		m.Status = status
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -212,6 +220,12 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	sel := m.board.selected()
+	if key.Matches(msg, keys.Get().Commands) {
+		if sel == nil {
+			return m, nil
+		}
+		return m, popup.Open(commandpicker.New(m.commands, *sel, m.board.nav.board.Project, m.board.nav.board.Name))
+	}
 	if key.Matches(msg, keys.Get().Refresh) && m.board.project != "" && !m.board.loading {
 		focusKey := ""
 		if sel != nil {

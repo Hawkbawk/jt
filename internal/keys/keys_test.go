@@ -24,6 +24,13 @@ func TestArrowLabels(t *testing.T) {
 	}
 }
 
+func TestCommandAndCommentBindings(t *testing.T) {
+	m := Default()
+	if !slices.Contains(m.Commands.Keys(), "C") || !slices.Contains(m.Comments.Keys(), "c") {
+		t.Fatalf("commands keys = %v, comments keys = %v", m.Commands.Keys(), m.Comments.Keys())
+	}
+}
+
 func TestSetRefreshesDerivedBindings(t *testing.T) {
 	t.Cleanup(func() { Set(Default()) })
 

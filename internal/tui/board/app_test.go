@@ -7,7 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hawkbawk/jt/internal/components/commandpicker"
+	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
@@ -170,6 +173,50 @@ func TestBoardKeysMoveFocus(t *testing.T) {
 	m, _ = press(t, m, "h", "h", "j")
 	if got := m.board.nav.selected().Key; got != "T-2" {
 		t.Fatalf("selected %s", got)
+	}
+}
+
+func TestCommandsKeyOpensConfiguredCommandPicker(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.commands = []config.Command{{Name: "Open issue", Command: "code"}}
+	m = tuitest.PressDrain(t, m, "C")
+	if !m.Popup.IsOpen() || !strings.Contains(m.Popup.View(), "Open issue") {
+		t.Fatalf("C should open the configured command picker: %s", m.Popup.View())
+	}
+}
+
+func TestCommandsKeyDoesNothingWithoutSelectedIssue(t *testing.T) {
+	m, _ := loadedModel(t)
+	m.commands = []config.Command{{Name: "Open issue", Command: "code"}}
+	m, cmd := press(t, m, "l", "C")
+	if m.Popup.IsOpen() || cmd != nil {
+		t.Fatal("C opened a command picker without a selected issue")
+	}
+}
+
+func TestCommandLoadsTicketContextBeforeRunning(t *testing.T) {
+	m, fb := loadedModel(t)
+	fb.Detail = &jira.IssueDetail{
+		Key:         "T-1",
+		Summary:     "ticket title",
+		Description: "ticket description",
+	}
+	fb.CommentList = &jira.CommentList{Items: []jira.Comment{{Author: "Ada", Body: "comment"}}}
+	selected := tuimsg.CommandSelected{
+		Command: config.Command{Command: "true"}, Issue: *m.board.selected(),
+		Project: m.board.nav.board.Project, Board: m.board.nav.board.Name,
+	}
+	result := commandpicker.Load(fb, selected)().(tuimsg.CommandLoaded)
+	if result.Err != nil {
+		t.Fatal(result.Err)
+	}
+	if result.Data.Key != "T-1" || result.Data.Project != "TEST" || result.Data.Board != "Test Board" ||
+		result.Data.URL != "https://jira.example.com/browse/T-1" || result.Data.Title != "ticket title" ||
+		result.Data.Description != "ticket description" || len(result.Data.Comments) != 1 || result.Data.Comments[0].Body != "comment" {
+		t.Fatalf("loaded command context = %#v", result)
+	}
+	if cmd, err := commandpicker.Start(result); err != nil || cmd == nil {
+		t.Fatal("loaded command did not produce an executable process")
 	}
 }
 

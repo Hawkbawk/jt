@@ -25,7 +25,7 @@ func runSearch(*cobra.Command, []string) error {
 	if err != nil {
 		return err
 	}
-	m := search.New(backend, settings)
+	m := search.New(backend, settings, commandsForSession(fake, cfg.Commands)...)
 	if themeErr != nil {
 		m = m.WithWarning(themeErr.Error())
 	}

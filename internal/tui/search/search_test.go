@@ -11,7 +11,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/hawkbawk/jt/internal/components/commandpicker"
+	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
@@ -490,6 +493,34 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 	m = tuitest.PressDrain(t, m, "esc", "e")
 	if !m.Popup.IsOpen() || !strings.Contains(m.View().Content, "Edit · DEMO-2") {
 		t.Fatalf("edit shortcut should use the hovered result: %T", m.Popup.Content())
+	}
+}
+
+func TestSearchRunsConfiguredCommandForHoveredIssue(t *testing.T) {
+	t.Parallel()
+	m, _ := searched(t)
+	m.commands = []config.Command{{Name: "Open ticket", Command: "code"}}
+	m = tuitest.PressDrain(t, m, "j", "C")
+	p, ok := m.Popup.Content().(*commandpicker.Picker)
+	if !ok || !strings.Contains(p.View().Content, "Open ticket") {
+		t.Fatalf("C should open the command picker for the hovered issue: %T", m.Popup.Content())
+	}
+	if m.results.selected().Key != "DEMO-2" {
+		t.Fatalf("selected issue = %q, want DEMO-2", m.results.selected().Key)
+	}
+	selected := tuimsg.CommandSelected{
+		Command: config.Command{Command: "true"}, Issue: *m.results.selected(), Project: "DEMO",
+	}
+	next, cmd := m.Update(selected)
+	if cmd == nil {
+		t.Fatal("selecting a command did not load the hovered issue")
+	}
+	loaded := cmd().(tuimsg.CommandLoaded)
+	if loaded.Err != nil || loaded.Data.Key != "DEMO-2" || loaded.Data.Project != "DEMO" || loaded.Data.Board != "" {
+		t.Fatalf("loaded search command context = %#v", loaded)
+	}
+	if _, cmd = next.(Model).Update(loaded); cmd == nil {
+		t.Fatal("loaded command did not start")
 	}
 }
 
