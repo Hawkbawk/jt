@@ -93,6 +93,9 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return p, cmd
 		}
 	}
+	if p.form.State == huh.StateCompleted {
+		return p, nil
+	}
 	_, cmd := p.form.Update(msg)
 	if p.form.State == huh.StateCompleted {
 		return p, popup.CloseWith(tuimsg.CommandSelected{
