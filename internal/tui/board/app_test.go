@@ -197,7 +197,8 @@ func TestCommandsKeyDoesNothingWithoutSelectedIssue(t *testing.T) {
 func TestCommandLoadsTicketContextBeforeRunning(t *testing.T) {
 	m, fb := loadedModel(t)
 	fb.Detail = &jira.IssueDetail{
-		Issue:       jira.Issue{Key: "T-1", Summary: "ticket title"},
+		Key:         "T-1",
+		Summary:     "ticket title",
 		Description: "ticket description",
 	}
 	fb.CommentList = &jira.CommentList{Items: []jira.Comment{{Author: "Ada", Body: "comment"}}}

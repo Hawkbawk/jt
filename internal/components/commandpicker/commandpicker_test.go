@@ -16,7 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
-func TestCommandProcess(t *testing.T) {
+func TestCommandProcess(_ *testing.T) {
 	switch os.Getenv("JT_COMMAND_PROCESS_TEST") {
 	case "success":
 		os.Exit(0)
