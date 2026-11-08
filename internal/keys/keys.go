@@ -5,7 +5,14 @@
 package keys
 
 import (
+	"fmt"
+	"sort"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/evertras/bubble-table/table"
 )
 
@@ -119,6 +126,135 @@ func (m Map) Derive() Map {
 	m.ListDown = summary(arrow(m.Down), "down", m.Down, key.NewBinding(key.WithKeys("ctrl+n")))
 	m.ToggleUser = join(Describe(m.Toggle, "toggle"), key.NewBinding(key.WithKeys("x")))
 	return m
+}
+
+// WithOverrides applies valid settings and reports invalid ones without
+// changing their bindings. "..." expands to the binding's existing keys.
+func (m Map) WithOverrides(settings any) (Map, error) {
+	if settings == nil {
+		return m.Derive(), nil
+	}
+	overrides, ok := settings.(map[string]any)
+	if !ok {
+		return m.Derive(), fmt.Errorf("keys must be a mapping of binding names to keys")
+	}
+	bindings := map[string]*key.Binding{
+		"left": &m.Left, "right": &m.Right, "up": &m.Up, "down": &m.Down,
+		"top": &m.Top, "bottom": &m.Bottom,
+		"view": &m.View, "comments": &m.Comments, "commands": &m.Commands,
+		"edit": &m.Edit, "move": &m.Move, "assign": &m.Assign, "yank": &m.Yank,
+		"open": &m.Open, "filter": &m.Filter, "theme": &m.Theme, "refresh": &m.Refresh,
+		"projects": &m.Projects, "boards": &m.Boards, "quit": &m.Quit,
+		"favorite": &m.Favorite, "reset": &m.Reset, "undo": &m.Undo,
+		"dismiss": &m.Dismiss, "force_quit": &m.ForceQuit, "interrupt": &m.Interrupt,
+		"confirm": &m.Confirm, "deny": &m.Deny, "accept": &m.Accept, "send": &m.Send,
+		"toggle": &m.Toggle, "new_line": &m.NewLine, "next_tab": &m.NextTab,
+		"prev_tab": &m.PrevTab, "list_filter": &m.ListFilter, "switch_mode": &m.SwitchMode,
+		"focus_results": &m.FocusResults,
+	}
+	names := make([]string, 0, len(overrides))
+	for name := range overrides {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var warnings []string
+	for _, name := range names {
+		binding, ok := bindings[name]
+		if !ok {
+			warnings = append(warnings, fmt.Sprintf("unknown key binding %q", name))
+			continue
+		}
+		expanded, err := expandKeys(overrides[name], binding.Keys())
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("keys.%s: %s (using default)", name, err))
+			continue
+		}
+		*binding = key.NewBinding(
+			key.WithKeys(expanded...),
+			key.WithHelp(binding.Help().Key, binding.Help().Desc),
+		)
+	}
+	if len(warnings) > 0 {
+		return m.Derive(), fmt.Errorf("%s", strings.Join(warnings, "; "))
+	}
+	return m.Derive(), nil
+}
+
+func expandKeys(value any, defaults []string) ([]string, error) {
+	var values []any
+	switch v := value.(type) {
+	case string:
+		values = []any{v}
+	case []any:
+		values = v
+	default:
+		return nil, fmt.Errorf("expected a key or list of keys")
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("key list is empty")
+	}
+	var result []string
+	seen := map[string]bool{}
+	add := func(k string) {
+		if !seen[k] {
+			result = append(result, k)
+			seen[k] = true
+		}
+	}
+	for _, value := range values {
+		k, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("keys must be strings")
+		}
+		if k == "..." {
+			for _, defaultKey := range defaults {
+				add(defaultKey)
+			}
+		} else if validKey(k) {
+			add(k)
+		} else {
+			return nil, fmt.Errorf("invalid key %q", k)
+		}
+	}
+	return result, nil
+}
+
+// validKey accepts the key names Bubble Tea emits, including modifiers in its
+// canonical order. Generate special-key names from Bubble Tea's own codes.
+func validKey(s string) bool {
+	remaining := s
+	var mod tea.KeyMod
+	for _, m := range []struct {
+		prefix string
+		mod    tea.KeyMod
+	}{
+		{"ctrl+", tea.ModCtrl},
+		{"alt+", tea.ModAlt},
+		{"shift+", tea.ModShift},
+		{"meta+", tea.ModMeta},
+		{"hyper+", tea.ModHyper},
+		{"super+", tea.ModSuper},
+	} {
+		if rest, ok := strings.CutPrefix(remaining, m.prefix); ok {
+			remaining = rest
+			mod |= m.mod
+		}
+	}
+	if utf8.RuneCountInString(remaining) == 1 {
+		r, _ := utf8.DecodeRuneInString(remaining)
+		return unicode.IsGraphic(r) && !unicode.IsSpace(r) && (tea.Key{Code: r, Mod: mod}).Keystroke() == s
+	}
+	for _, code := range []rune{tea.KeyEnter, tea.KeyTab, tea.KeyBackspace, tea.KeyEsc, tea.KeySpace} {
+		if (tea.Key{Code: code, Mod: mod}).Keystroke() == s {
+			return true
+		}
+	}
+	for code := tea.KeyUp; code <= tea.KeyIsoLevel5Shift; code++ {
+		if (tea.Key{Code: code, Mod: mod}).Keystroke() == s {
+			return true
+		}
+	}
+	return false
 }
 
 var current = Default()

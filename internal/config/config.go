@@ -19,6 +19,8 @@ type Config struct {
 	// Theme is the ID of the bubbletint tint to draw with. Empty follows the
 	// terminal's theme.
 	Theme string `mapstructure:"theme"`
+	// Keys overrides the default terminal key bindings.
+	Keys any `mapstructure:"-"`
 	// Commands are the user-defined commands available from the board.
 	Commands []Command `mapstructure:"commands"`
 	// Jira is how to reach the Jira server. The API token isn't stored here,
@@ -69,6 +71,7 @@ func decode(v *viper.Viper) (Config, error) {
 	))); err != nil {
 		return Config{}, fmt.Errorf("invalid config: %w", err)
 	}
+	c.Keys = v.Get("keys")
 	c.Jira.Server = trimServer(c.Jira.Server)
 	return c, nil
 }

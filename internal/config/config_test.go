@@ -68,6 +68,38 @@ func TestLoadCommands(t *testing.T) {
 	}
 }
 
+func TestLoadKeyBindings(t *testing.T) {
+	cfg, err := load(t, `keys:
+  accept: space
+  dismiss:
+    - ...
+    - d
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindings, ok := cfg.Keys.(map[string]any)
+	if !ok {
+		t.Fatalf("keys = %#v", cfg.Keys)
+	}
+	if bindings["accept"] != "space" {
+		t.Errorf("accept keys = %v", bindings["accept"])
+	}
+	if got, ok := bindings["dismiss"].([]any); !ok || !slices.Equal(got, []any{"...", "d"}) {
+		t.Errorf("dismiss keys = %v", bindings["dismiss"])
+	}
+}
+
+func TestLoadMalformedKeyBindingsWithoutFailing(t *testing.T) {
+	cfg, err := load(t, "keys: invalid\njira:\n  project: ABC\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Keys != "invalid" || cfg.Jira.Project != "ABC" {
+		t.Fatalf("keys = %v, project = %s", cfg.Keys, cfg.Jira.Project)
+	}
+}
+
 func TestLoadCreatesDefaultFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "jt.yml")
 	t.Setenv("JT_CONFIG_FILE", path)

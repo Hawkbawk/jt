@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/fang/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/fakejira"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/termimage"
 	"github.com/hawkbawk/jt/internal/tui/board"
@@ -34,6 +36,7 @@ var (
 	cfg      config.Config
 	cfgErr   error
 	themeErr error
+	keysErr  error
 
 	// fake runs the screens on in-memory demo data. It's only allowed in
 	// development builds.
@@ -72,11 +75,15 @@ func Execute() {
 	defer cancel()
 	fake = fakeRequested(os.Args[1:])
 	theme := ""
+	keys.Set(keys.Default())
+	keysErr = nil
 	if !fake {
 		cfg, cfgErr = config.Load()
 		theme = cfg.Theme
 		if cfgErr != nil {
 			theme = styles.FallbackID()
+		} else {
+			keysErr = configureKeys(cfg.Keys)
 		}
 	}
 	themeErr = styles.Start(ctx, theme)
@@ -88,6 +95,12 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+func configureKeys(configured any) error {
+	m, err := keys.Default().WithOverrides(configured)
+	keys.Set(m)
+	return err
 }
 
 // fakeRequested reports whether --fake was passed. It runs before cobra parses
@@ -119,10 +132,21 @@ func runBoard(*cobra.Command, []string) error {
 		return err
 	}
 	m := board.New(backend, settings, commandsForSession(fake, cfg.Commands)...)
-	if themeErr != nil {
-		m = m.WithWarning(themeErr.Error())
+	if warning := startupWarning(); warning != "" {
+		m = m.WithWarning(warning)
 	}
 	return run(m)
+}
+
+func startupWarning() string {
+	var warnings []string
+	if keysErr != nil {
+		warnings = append(warnings, "invalid key bindings: "+keysErr.Error())
+	}
+	if themeErr != nil {
+		warnings = append(warnings, themeErr.Error())
+	}
+	return strings.Join(warnings, "; ")
 }
 
 // screenBackend is the Jira backend the board and search screens run on.

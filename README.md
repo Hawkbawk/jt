@@ -109,6 +109,22 @@ Run `jt --version` to see the installed version and `jt --help` for usage.
 
 `jt` reads the file once at startup. If you edit it by hand, restart `jt` to pick up the change.
 
+### Key bindings
+
+Override any key binding in the `keys` section. Unlisted bindings keep their defaults; each binding accepts one key or a list of keys:
+
+```yaml
+keys:
+  accept: space
+  dismiss:
+    - ...
+    - d
+```
+
+The `...` entry expands to that binding's defaults, so this example adds `d` to the default `esc` dismiss key. Without it, the list replaces the defaults. Invalid bindings produce a startup warning and keep their defaults; other valid overrides still apply.
+
+Binding names are `left`, `right`, `up`, `down`, `top`, `bottom`, `view`, `comments`, `commands`, `edit`, `move`, `assign`, `yank`, `open`, `filter`, `theme`, `refresh`, `projects`, `boards`, `quit`, `favorite`, `reset`, `undo`, `dismiss`, `force_quit`, `interrupt`, `confirm`, `deny`, `accept`, `send`, `toggle`, `new_line`, `next_tab`, `prev_tab`, `list_filter`, `switch_mode`, and `focus_results`. Key names use Bubble Tea syntax, such as `enter`, `space`, `esc`, `ctrl+x`, or `shift+tab`.
+
 ### Jira
 
 `jt init` writes the `jira` section, which says how to reach your Jira Cloud site. You can also edit it by hand:
