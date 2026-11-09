@@ -29,6 +29,9 @@ type Layout struct {
 
 	Popup popup.Model
 	Quit  QuitGuard
+
+	helpKeys  help.KeyMap
+	helpExtra int
 }
 
 // NewLayout returns a layout that saves its choices to settings.
@@ -46,14 +49,16 @@ func (c Layout) RunWithSpinner(cmd tea.Cmd) tea.Cmd {
 	return tea.Batch(cmd, c.Spinner.Tick)
 }
 
-// BodyHeight is the height left between the header and the footer.
+// BodyHeight is the height left between the header and the footer, which grows
+// taller while the full help shows.
 func (c Layout) BodyHeight() int {
-	return max(0, c.Height-2)
+	return max(0, c.Height-2-c.helpExtra)
 }
 
 // Resize applies a new window size and refits the popup.
 func (c *Layout) Resize(msg tea.WindowSizeMsg) tea.Cmd {
 	c.Width, c.Height = msg.Width, msg.Height
+	c.measureHelp()
 	return c.UpdatePopup(tea.WindowSizeMsg{Width: c.Width, Height: c.BodyHeight()})
 }
 
@@ -114,7 +119,34 @@ func (c Layout) FooterView(km help.KeyMap) string {
 	if c.Status != "" {
 		prefix = c.Status + styles.Dim().Render(" · ")
 	}
+	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + c.helpText(km, lipgloss.Width(prefix)))
+}
+
+// ToggleHelp shows or hides the full key help in the footer, which takes the
+// room it needs from the body. km is the keymap the footer is showing.
+func (c *Layout) ToggleHelp(km help.KeyMap) {
+	c.Help.ShowAll = !c.Help.ShowAll
+	c.helpKeys = km
+	c.measureHelp()
+}
+
+// CollapseHelp returns the footer to the short help.
+func (c *Layout) CollapseHelp() {
+	c.Help.ShowAll = false
+	c.helpKeys, c.helpExtra = nil, 0
+}
+
+// measureHelp counts the lines the full help adds to the one-line footer.
+func (c *Layout) measureHelp() {
+	c.helpExtra = 0
+	if !c.Help.ShowAll || c.helpKeys == nil {
+		return
+	}
+	c.helpExtra = max(0, lipgloss.Height(c.helpText(c.helpKeys, 0))-1)
+}
+
+func (c Layout) helpText(km help.KeyMap, prefixWidth int) string {
 	h := c.Help
-	h.SetWidth(max(0, c.Width-2-lipgloss.Width(prefix)))
-	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + h.View(km))
+	h.SetWidth(max(0, c.Width-2-prefixWidth))
+	return h.View(km)
 }

@@ -10,7 +10,7 @@ import (
 type boardKeyMap struct {
 	navigate, topBottom, view, comments, move, assign key.Binding
 	edit, yank, open, filter, theme, refresh          key.Binding
-	projects, boards, commands, quit                  key.Binding
+	projects, boards, commands, help, quit            key.Binding
 }
 
 func newBoardKeys() boardKeyMap {
@@ -19,14 +19,21 @@ func newBoardKeys() boardKeyMap {
 		navigate: k.Navigate, topBottom: k.TopBottom, view: k.View, comments: k.Comments,
 		move: k.Move, assign: k.Assign, edit: k.Edit, yank: k.Yank, open: k.Open,
 		filter: k.Filter, theme: k.Theme, refresh: k.Refresh,
-		projects: k.Projects, boards: k.Boards, commands: k.Commands, quit: k.Quit,
+		projects: k.Projects, boards: k.Boards, commands: k.Commands, help: k.Help, quit: k.Quit,
 	}
 }
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.topBottom, k.view, k.comments, k.commands, k.move, k.assign, k.edit, k.yank, k.open, k.filter, k.theme, k.refresh, k.projects, k.boards, k.quit}
+	return []key.Binding{k.navigate, k.view, k.move, k.commands, k.help, k.quit}
 }
 
 // FullHelp implements help.KeyMap.
-func (k boardKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+func (k boardKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.navigate, k.topBottom, k.projects, k.boards, k.filter},
+		{k.view, k.comments, k.edit, k.move, k.assign},
+		{k.commands, k.yank, k.open, k.refresh, k.theme},
+		{k.help, k.quit},
+	}
+}

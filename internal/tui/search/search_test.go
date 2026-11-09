@@ -587,3 +587,24 @@ func TestSearchIgnoresSubmitWhileSearching(t *testing.T) {
 		t.Errorf("searches = %q, searching = %v", fb.FindCalls, m.searching)
 	}
 }
+
+func TestSearchResultsHelpKeyTogglesFullHelp(t *testing.T) {
+	t.Parallel()
+	m, _ := searched(t)
+	if strings.Contains(ansi.Strip(m.render()), "yank URL") {
+		t.Fatal("short help should leave out yank")
+	}
+	m = tuitest.PressDrain(t, m, "?")
+	if !m.Help.ShowAll || !strings.Contains(ansi.Strip(m.render()), "yank URL") {
+		t.Fatal("? should show every binding")
+	}
+}
+
+func TestSearchFormTypesQuestionMark(t *testing.T) {
+	t.Parallel()
+	m := newTestSearch(t, &tuitest.Backend{Project: "DEMO"})
+	m = tuitest.PressDrain(t, m, "?")
+	if m.Help.ShowAll {
+		t.Fatal("? in the form must not open help")
+	}
+}

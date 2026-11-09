@@ -286,6 +286,8 @@ func (m *Model) focusResults() {
 
 func (m *Model) focusForm() tea.Cmd {
 	m.inResults = false
+	m.CollapseHelp()
+	m.fit()
 	return m.form.form.GetFocusedField().Focus()
 }
 
@@ -353,6 +355,10 @@ func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Get().Quit):
 		return m, tea.Quit
+	case key.Matches(msg, keys.Get().Help):
+		m.ToggleHelp(m.helpView())
+		m.fit()
+		return m, nil
 	case key.Matches(msg, keys.Get().Back, keys.Get().NextTab):
 		cmd := m.focusForm()
 		return m, cmd

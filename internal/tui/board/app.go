@@ -216,6 +216,10 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.Get().Quit) {
 		return m, tea.Quit
 	}
+	if key.Matches(msg, keys.Get().Help) {
+		m.ToggleHelp(newBoardKeys())
+		return m, nil
+	}
 	if m.board.move(msg) {
 		return m, nil
 	}
