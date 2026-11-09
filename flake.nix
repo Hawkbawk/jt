@@ -3,7 +3,9 @@
 
   nixConfig = {
     extra-substituters = [ "https://hawkbawk-jt.cachix.org" ];
-    extra-trusted-public-keys = [ "hawkbawk-jt.cachix.org-1:aGp3dIggp5bzdE2yp/mS5wqKSGVme3O7ApV3RC2kchE=" ];
+    extra-trusted-public-keys = [
+      "hawkbawk-jt.cachix.org-1:aGp3dIggp5bzdE2yp/mS5wqKSGVme3O7ApV3RC2kchE="
+    ];
   };
 
   inputs = {
@@ -11,13 +13,19 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ] (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         go = pkgs.go_latest or pkgs.go;
         buildGoModule = pkgs.buildGoModule.override { inherit go; };
-        version = "0.1.0";
+        version = "0.2.0";
       in
       {
         packages.default = buildGoModule {
@@ -25,7 +33,11 @@
           inherit version;
           src = self;
           vendorHash = "sha256-A/+q2QZu8ybB+zZl8iGd3238/3oG3CBCSIYwKXHxDAs=";
-          ldflags = [ "-s" "-w" "-X github.com/hawkbawk/jt/cmd.version=${version}" ];
+          ldflags = [
+            "-s"
+            "-w"
+            "-X github.com/hawkbawk/jt/cmd.version=${version}"
+          ];
           doCheck = false;
           nativeBuildInputs = [ pkgs.installShellFiles ];
           postInstall = ''
@@ -56,5 +68,6 @@
 
           GOFLAGS = "-timeout=10s";
         };
-      });
+      }
+    );
 }
