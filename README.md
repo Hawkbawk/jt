@@ -4,6 +4,8 @@
 
 `jt` works with Jira Cloud. Run `jt init` once to connect it, and it keeps the connection in its own settings file and your API token in your OS keyring.
 
+`jt` is still in active development and hasn't released a version 1 yet, so expect some breaking changes between versions, especially with regards to configuration shape.
+
 ## Built with
 
 `jt` is a thin layer on top of other people's work, and it wouldn't exist without them. Thank you to:
