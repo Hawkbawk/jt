@@ -43,6 +43,7 @@ type Model struct {
 	board    boardPane
 	actions  screen.IssueActions
 	commands []config.Command
+	keys     boardKeyMap
 
 	// projects is the list the project popup loaded, kept for the session.
 	projects []jira.Project
@@ -57,6 +58,7 @@ func New(backend Backend, settings Settings, commands ...config.Command) Model {
 		board:    newBoardPane(backend),
 		actions:  screen.NewIssueActions(backend),
 		commands: commands,
+		keys:     newBoardKeys(),
 	}
 	return m
 }
@@ -92,7 +94,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.RunWithSpinner(m.board.reload(msg.IssueKey()))
 
 	case tea.WindowSizeMsg:
-		return m, m.Resize(msg)
+		return m, m.Resize(msg, m.keys)
 
 	case tuimsg.ThemeChanged:
 		m.Restyle()
@@ -215,6 +217,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.Get().Quit) {
 		return m, tea.Quit
+	}
+	if key.Matches(msg, keys.Get().Help) {
+		m.ToggleHelp()
+		return m, nil
 	}
 	if m.board.move(msg) {
 		return m, nil

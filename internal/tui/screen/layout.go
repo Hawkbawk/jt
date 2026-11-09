@@ -46,15 +46,19 @@ func (c Layout) RunWithSpinner(cmd tea.Cmd) tea.Cmd {
 	return tea.Batch(cmd, c.Spinner.Tick)
 }
 
-// BodyHeight is the height left between the header and the footer.
-func (c Layout) BodyHeight() int {
-	return max(0, c.Height-2)
+// BodyHeight is the height left between the header and the footer that shows
+// km, which is taller while the full help is expanded.
+func (c Layout) BodyHeight(km help.KeyMap) int {
+	if !c.Help.ShowAll {
+		return max(0, c.Height-2)
+	}
+	return max(0, c.Height-1-lipgloss.Height(c.FooterView(km)))
 }
 
 // Resize applies a new window size and refits the popup.
-func (c *Layout) Resize(msg tea.WindowSizeMsg) tea.Cmd {
+func (c *Layout) Resize(msg tea.WindowSizeMsg, km help.KeyMap) tea.Cmd {
 	c.Width, c.Height = msg.Width, msg.Height
-	return c.UpdatePopup(tea.WindowSizeMsg{Width: c.Width, Height: c.BodyHeight()})
+	return c.UpdatePopup(tea.WindowSizeMsg{Width: c.Width, Height: c.BodyHeight(km)})
 }
 
 // Restyle rebuilds what the layout copied from the styles when it was built.
@@ -79,6 +83,9 @@ func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) {
 
 // UpdatePopup passes msg to the popup host.
 func (c *Layout) UpdatePopup(msg tea.Msg) tea.Cmd {
+	if _, ok := msg.(popup.OpenMsg); ok {
+		c.CollapseHelp()
+	}
 	var cmd tea.Cmd
 	c.Popup, cmd = c.Popup.Update(msg)
 	return cmd
@@ -114,7 +121,17 @@ func (c Layout) FooterView(km help.KeyMap) string {
 	if c.Status != "" {
 		prefix = c.Status + styles.Dim().Render(" · ")
 	}
+	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + c.helpText(km, lipgloss.Width(prefix)))
+}
+
+// ToggleHelp shows or hides the full key help in the footer.
+func (c *Layout) ToggleHelp() { c.Help.ShowAll = !c.Help.ShowAll }
+
+// CollapseHelp returns the footer to the short help.
+func (c *Layout) CollapseHelp() { c.Help.ShowAll = false }
+
+func (c Layout) helpText(km help.KeyMap, prefixWidth int) string {
 	h := c.Help
-	h.SetWidth(max(0, c.Width-2-lipgloss.Width(prefix)))
-	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + h.View(km))
+	h.SetWidth(max(0, c.Width-2-prefixWidth))
+	return h.View(km)
 }

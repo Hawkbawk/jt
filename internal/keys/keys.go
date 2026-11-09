@@ -20,7 +20,7 @@ type Map struct {
 
 	View, Comments, Commands, Edit, Move, Assign, Yank, Open key.Binding
 	Filter, Theme, Refresh, Projects, Boards, Quit           key.Binding
-	Favorite, Reset, Undo                                    key.Binding
+	Favorite, Reset, Undo, Help                              key.Binding
 
 	Dismiss, ForceQuit, Interrupt, Confirm, Deny key.Binding
 	Accept, Send, Toggle, NewLine                key.Binding
@@ -66,6 +66,7 @@ func Default() Map {
 		Favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite")),
 		Reset:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reset")),
 		Undo:     key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo")),
+		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 
 		Dismiss:   key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close")),
 		ForceQuit: key.NewBinding(key.WithKeys("ctrl+d")),
@@ -136,7 +137,7 @@ func (m *Map) base() []*key.Binding {
 		&m.Left, &m.Right, &m.Up, &m.Down, &m.Top, &m.Bottom,
 		&m.View, &m.Comments, &m.Commands, &m.Edit, &m.Move, &m.Assign, &m.Yank, &m.Open,
 		&m.Filter, &m.Theme, &m.Refresh, &m.Projects, &m.Boards, &m.Quit,
-		&m.Favorite, &m.Reset, &m.Undo,
+		&m.Favorite, &m.Reset, &m.Undo, &m.Help,
 		&m.Dismiss, &m.Interrupt, &m.Confirm, &m.Deny, &m.Accept, &m.Send,
 		&m.Toggle, &m.NewLine, &m.NextTab, &m.PrevTab, &m.ListFilter,
 		&m.SwitchMode, &m.FocusResults,

@@ -14,7 +14,7 @@ func (m Model) render() string {
 	if m.Width == 0 {
 		return ""
 	}
-	body := m.board.view(m.Width, m.BodyHeight(), m.Spinner.View())
+	body := m.board.view(m.Width, m.BodyHeight(m.keys), m.Spinner.View())
 	body = m.Popup.Overlay(body)
-	return lipgloss.JoinVertical(lipgloss.Left, m.HeaderView(m.board.headerParts(m.Spinner.View())), body, m.FooterView(newBoardKeys()))
+	return lipgloss.JoinVertical(lipgloss.Left, m.HeaderView(m.board.headerParts(m.Spinner.View())), body, m.FooterView(m.keys))
 }

@@ -55,6 +55,7 @@ type Model struct {
 	actions  screen.IssueActions
 	results  resultList
 	commands []config.Command
+	keys     searchKeyMap
 
 	// inResults is whether the table rather than the form has focus.
 	inResults bool
@@ -75,6 +76,7 @@ func New(backend Backend, settings screen.Settings, commands ...config.Command) 
 		form:     newSearchForm(backend.DefaultProject()),
 		actions:  screen.NewIssueActions(backend),
 		commands: commands,
+		keys:     newSearchKeys(),
 	}
 	m.results.set(nil)
 	return m
@@ -105,7 +107,7 @@ func (m Model) resultsFocused() bool { return m.inResults && m.searched }
 // mainHeight is the height left for the form and the results table with its
 // title, after the message under them.
 func (m Model) mainHeight() int {
-	h := m.BodyHeight()
+	h := m.BodyHeight(m.helpView())
 	if m.resultsMessage() != "" {
 		h--
 	}
@@ -140,7 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:
-		popupCmd := m.Resize(msg)
+		popupCmd := m.Resize(msg, m.helpView())
 		m.fit()
 		return m, tea.Batch(popupCmd, m.form.update(msg))
 
@@ -164,7 +166,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, popup.Close()
 
 	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.UpdatePopup(msg)
+		cmd := m.UpdatePopup(msg)
+		m.fit()
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -286,6 +290,8 @@ func (m *Model) focusResults() {
 
 func (m *Model) focusForm() tea.Cmd {
 	m.inResults = false
+	m.CollapseHelp()
+	m.fit()
 	return m.form.form.GetFocusedField().Focus()
 }
 
@@ -353,6 +359,10 @@ func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Get().Quit):
 		return m, tea.Quit
+	case key.Matches(msg, keys.Get().Help):
+		m.ToggleHelp()
+		m.fit()
+		return m, nil
 	case key.Matches(msg, keys.Get().Back, keys.Get().NextTab):
 		cmd := m.focusForm()
 		return m, cmd
@@ -401,11 +411,11 @@ func (m Model) bodyView() string {
 		parts = append(parts, styles.Dim().Render(msg))
 	}
 	return lipgloss.NewStyle().Padding(0, 1).Width(m.Width).MaxWidth(m.Width).
-		Height(m.BodyHeight()).MaxHeight(m.BodyHeight()).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
+		Height(m.BodyHeight(m.helpView())).MaxHeight(m.BodyHeight(m.helpView())).Render(lipgloss.JoinVertical(lipgloss.Left, parts...))
 }
 
 func (m Model) helpView() searchKeyMap {
-	km := newSearchKeys()
+	km := m.keys
 	km.results = m.resultsFocused()
 	km.searched, km.advanced = m.searched, m.form.advanced
 	if !km.results {

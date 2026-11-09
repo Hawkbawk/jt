@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -285,5 +287,23 @@ func TestRefreshIgnoredWithoutProject(t *testing.T) {
 	m := newTestModel(t, "", &tuitest.Backend{})
 	if _, cmd := press(t, m, "r"); cmd != nil {
 		t.Fatal("r without a project should do nothing")
+	}
+}
+
+func TestHelpKeyTogglesFullHelp(t *testing.T) {
+	m, _ := loadedModel(t)
+	if strings.Contains(ansi.Strip(m.render()), "yank URL") {
+		t.Fatal("short help should leave out yank")
+	}
+	m, _ = press(t, m, "?")
+	if h := lipgloss.Height(m.render()); h != m.Height {
+		t.Fatalf("expanded help made the screen %d lines, want %d", h, m.Height)
+	}
+	if !m.Help.ShowAll || !strings.Contains(ansi.Strip(m.render()), "yank URL") {
+		t.Fatal("? should show every binding")
+	}
+	m, _ = press(t, m, "?")
+	if m.Help.ShowAll {
+		t.Fatal("second ? should hide the full help")
 	}
 }
