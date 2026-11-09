@@ -153,6 +153,9 @@ func Help() help.Model {
 	h.Styles.ShortDesc = d
 	h.Styles.ShortSeparator = d
 	h.Styles.Ellipsis = d
+	h.Styles.FullKey = d
+	h.Styles.FullDesc = d
+	h.Styles.FullSeparator = d
 	return h
 }
 
