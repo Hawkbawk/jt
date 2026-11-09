@@ -107,7 +107,7 @@ Run `jt --version` to see the installed version and `jt --help` for usage.
 
 ## Settings
 
-`jt` keeps its own settings in `jt.yaml` in your user config directory (`~/.config` on Linux, `~/Library/Application Support` on macOS). It creates the file the first time you run `jt`. Set `JT_CONFIG_FILE` to use a different path.
+`jt` keeps its own settings in  `$XDG_CONFIG_HOME/jt/jt.yaml`, or `~/.config/jt/jt.yaml` if `$XDG_CONFIG_HOME` isn't set. It creates the file the first time you run `jt`. Set `JT_CONFIG_FILE` to use a different path.
 
 `jt` reads the file once at startup. If you edit it by hand, restart `jt` to pick up the change.
 
@@ -123,9 +123,7 @@ jira:
   board_id: 42 # optional
 ```
 
-`jt` signs in with your login email and an API token.
-
-The API token isn't stored in the file. `jt` reads it from your OS keyring, under the service `jt` and your login as the account.
+`jt` signs in with your login email and an API token. `jt` stores the API token in your OS keyring, under the service `jt` and your login as the account.
 
 ### Theme
 

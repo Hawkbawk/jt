@@ -185,14 +185,64 @@ func loadConfiguration(v *viper.Viper) (string, error) {
 		return f, nil
 	}
 
-	dir, err := os.UserConfigDir()
+	path, err := defaultPath()
 	if err != nil {
 		return "", err
 	}
+	if err := migrateLegacy(path); err != nil {
+		return "", err
+	}
 
-	v.SetConfigName("jt")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(dir)
+	v.SetConfigFile(path)
+	return path, nil
+}
 
-	return filepath.Join(dir, "jt.yaml"), nil
+// defaultPath is $XDG_CONFIG_HOME/jt/jt.yaml, or ~/.config/jt/jt.yaml, on
+// every platform.
+func defaultPath() (string, error) {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	return filepath.Join(dir, "jt", "jt.yaml"), nil
+}
+
+// migrateLegacy copies the settings file from the OS config directory (where
+// older versions kept it) to path, but only when path doesn't exist yet and
+// the old file does. The old file stays in place.
+func migrateLegacy(path string) error {
+	if _, err := os.Stat(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return nil
+	}
+	legacy := filepath.Join(dir, "jt.yaml")
+	if legacy == path {
+		return nil
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return createError(path, withoutPath(err))
+	}
+	data, err := os.ReadFile(legacy)
+	if err != nil {
+		return fmt.Errorf("can't read the old settings file %s: %w", legacy, withoutPath(err))
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return createError(path, withoutPath(err))
+	}
+	return nil
 }
