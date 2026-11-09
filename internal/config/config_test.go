@@ -210,3 +210,57 @@ func TestSaveProjectForgetsBoardOnlyWhenProjectChanges(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadMigratesLegacyFile(t *testing.T) {
+	tests := []struct {
+		name          string
+		legacy, newer string
+		want          string
+	}{
+		{"copies the old file", "theme: old\n", "", "old"},
+		{"keeps an existing new file", "theme: old\n", "theme: new\n", "new"},
+		{"no files", "", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv("JT_CONFIG_FILE", "")
+
+			osDir, err := os.UserConfigDir()
+			if err != nil {
+				t.Fatal(err)
+			}
+			legacy := filepath.Join(osDir, "jt.yaml")
+			path := filepath.Join(home, ".config", "jt", "jt.yaml")
+			write := func(p, contents string) {
+				if contents == "" {
+					return
+				}
+				if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(p, []byte(contents), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write(legacy, tt.legacy)
+			write(path, tt.newer)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Path() != path {
+				t.Errorf("Path = %q, want %q", cfg.Path(), path)
+			}
+			if cfg.Theme != tt.want {
+				t.Errorf("theme = %q, want %q", cfg.Theme, tt.want)
+			}
+			if b, err := os.ReadFile(legacy); tt.legacy != "" && (err != nil || string(b) != tt.legacy) {
+				t.Errorf("legacy file = %q, %v; want it untouched", b, err)
+			}
+		})
+	}
+}
