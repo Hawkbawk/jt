@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -63,7 +64,7 @@ type item struct {
 
 func (i item) Title() string {
 	if i.current {
-		return i.Name + " ✓"
+		return i.Name + " " + icons.Or(icons.Check, "✓")
 	}
 	return i.Name
 }

@@ -135,6 +135,14 @@ theme: gruvbox_dark_hard
 
 Leave `theme` empty to follow your terminal's theme, or press `r` in the picker to go back to it. `jt` reads the terminal's config and updates live when you change it. This works in kitty, Ghostty, Alacritty, foot, Windows Terminal and terminals configured through X resources. In other terminals, `jt` starts on Dracula+. An unknown `theme` falls back the same way, with a warning in the status line.
 
+### Icons
+
+jt uses [Nerd Fonts](https://www.nerdfonts.com) for some of the icons it displays. Set `icons: false` in the settings file if you'd prefer no icons:
+
+```yaml
+icons: false
+```
+
 ### Commands
 
 Add commands to `jt.yaml` to run them on the selected issue with `C`:

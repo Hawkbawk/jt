@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
 )
@@ -95,7 +96,7 @@ func renderCard(iss jira.Issue, selected bool, width int) string {
 
 	assignee := iss.Assignee.Name
 	if assignee == "" {
-		assignee = "Unassigned"
+		assignee = icons.Label(icons.NoUser, "Unassigned")
 	}
 	keyWidth := lipgloss.Width(iss.Key)
 	assignee = ansi.Truncate(assignee, max(0, inner-keyWidth-1), "…")

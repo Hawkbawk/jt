@@ -18,18 +18,20 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/lrstanley/bubbletint/glamourtint/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
+
+	"github.com/hawkbawk/jt/internal/icons"
 )
 
 // set is one tint's styles. It is never modified after it's built.
 type set struct {
 	tint *tint.Tint
 
-	title, dim, errStyle, warn, key, header lipgloss.Style
-	columnHeader, focusedColumnHeader       lipgloss.Style
-	card, selectedCard, popup, input        lipgloss.Style
+	title, brand, dim, errStyle, warn, key, header lipgloss.Style
+	columnHeader, focusedColumnHeader              lipgloss.Style
+	card, selectedCard, popup, input               lipgloss.Style
 
-	highlight, muted, grid color.Color
-	markdown               ansi.StyleConfig
+	highlight, muted, grid, accent color.Color
+	markdown                       ansi.StyleConfig
 }
 
 var current atomic.Pointer[set]
@@ -68,6 +70,8 @@ func build(t *tint.Tint) *set {
 	return &set{
 		tint:                t,
 		title:               lipgloss.NewStyle().Bold(true).Foreground(accent),
+		brand:               lipgloss.NewStyle().Bold(true).Foreground(t.Bg).Background(accent),
+		accent:              accent,
 		dim:                 lipgloss.NewStyle().Foreground(subtle),
 		errStyle:            lipgloss.NewStyle().Foreground(danger),
 		warn:                lipgloss.NewStyle().Foreground(highlight),
@@ -102,6 +106,17 @@ func Foreground() color.Color { return get().tint.Fg }
 
 // Title styles headings and the app name.
 func Title() lipgloss.Style { return get().title }
+
+// Brand renders text as a filled pill, with rounded ends when icons are on and
+// square ones otherwise.
+func Brand(text string) string {
+	s := get()
+	if !icons.Enabled() {
+		return s.brand.Padding(0, 1).Render(text)
+	}
+	end := lipgloss.NewStyle().Foreground(s.accent)
+	return end.Render(icons.PillLeft) + s.brand.Render(text) + end.Render(icons.PillRight)
+}
 
 // Dim styles secondary text and hints.
 func Dim() lipgloss.Style { return get().dim }
