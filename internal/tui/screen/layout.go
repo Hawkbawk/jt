@@ -12,6 +12,7 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/components/themepicker"
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/popup/pane"
@@ -108,7 +109,7 @@ func (c Layout) WithView(content string) tea.View {
 
 // HeaderView renders the title bar with the screen's parts after the name.
 func (c Layout) HeaderView(parts []string) string {
-	parts = append([]string{styles.Title().Render("jt")}, parts...)
+	parts = append([]string{styles.Brand(icons.Label(icons.Jira, "jt"))}, parts...)
 	return styles.Header().Width(c.Width).Render(strings.Join(parts, styles.Dim().Render(" · ")))
 }
 

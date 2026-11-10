@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
+
+	"github.com/hawkbawk/jt/internal/icons"
 )
 
 func TestListsEveryTintAndStartsOnCurrent(t *testing.T) {
@@ -18,7 +20,7 @@ func TestListsEveryTintAndStartsOnCurrent(t *testing.T) {
 		t.Errorf("listed %d tints, want all %d", got, want)
 	}
 	sel, _ := p.list.SelectedItem().(item)
-	if p.Selected() != tint.TintNord || !strings.HasSuffix(sel.Title(), "✓") {
+	if p.Selected() != tint.TintNord || !strings.HasSuffix(sel.Title(), icons.Check) {
 		t.Errorf("selected = %q, want the current tint, checked", sel.Title())
 	}
 }

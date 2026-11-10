@@ -19,6 +19,8 @@ type Config struct {
 	// Theme is the ID of the bubbletint tint to draw with. Empty follows the
 	// terminal's theme.
 	Theme string `mapstructure:"theme"`
+	// Icons turns the Nerd Font icons in the help on or off. It defaults to on.
+	Icons bool `mapstructure:"icons"`
 	// Commands are the user-defined commands available from the board.
 	Commands []Command `mapstructure:"commands"`
 	// Jira is how to reach the Jira server. The API token isn't stored here,
@@ -175,6 +177,7 @@ func withoutPath(err error) error {
 
 func applyDefaults(v *viper.Viper) {
 	v.SetDefault("theme", "")
+	v.SetDefault("icons", true)
 }
 
 // loadConfiguration points v at the settings file and returns where the file

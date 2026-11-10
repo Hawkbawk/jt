@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
@@ -46,7 +47,7 @@ type item struct {
 
 func (i item) Title() string {
 	if i.current {
-		return i.DisplayName + " ✓"
+		return i.DisplayName + " " + icons.Or(icons.Check, "✓")
 	}
 	return i.DisplayName
 }

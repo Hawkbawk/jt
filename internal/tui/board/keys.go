@@ -3,6 +3,7 @@ package board
 import (
 	"charm.land/bubbles/v2/key"
 
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/keys"
 )
 
@@ -25,7 +26,11 @@ func newBoardKeys() boardKeyMap {
 
 // ShortHelp implements help.KeyMap.
 func (k boardKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.navigate, k.view, k.move, k.commands, k.help, k.quit}
+	return []key.Binding{
+		keys.WithIcon(k.navigate, icons.Navigate), keys.WithIcon(k.view, icons.View),
+		keys.WithIcon(k.move, icons.Move), keys.WithIcon(k.commands, icons.Commands),
+		keys.WithIcon(k.help, icons.Help), keys.WithIcon(k.quit, icons.Quit),
+	}
 }
 
 // FullHelp implements help.KeyMap.

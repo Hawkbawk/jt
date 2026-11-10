@@ -7,6 +7,8 @@ package keys
 import (
 	"charm.land/bubbles/v2/key"
 	"github.com/evertras/bubble-table/table"
+
+	"github.com/hawkbawk/jt/internal/icons"
 )
 
 // Map is every binding jt uses. Rebind by changing the base bindings of a Map
@@ -202,4 +204,12 @@ func allKeys(from ...key.Binding) []string {
 		}
 	}
 	return out
+}
+
+// WithIcon returns b with icon before its help description, or b unchanged
+// when icons are off.
+func WithIcon(b key.Binding, icon string) key.Binding {
+	h := b.Help()
+	b.SetHelp(h.Key, icons.Label(icon, h.Desc))
+	return b
 }

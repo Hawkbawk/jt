@@ -14,7 +14,9 @@ import (
 
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/fakejira"
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/termimage"
 	"github.com/hawkbawk/jt/internal/tui/board"
@@ -80,6 +82,10 @@ func Execute() {
 		}
 	}
 	themeErr = styles.Start(ctx, theme)
+	if cfgErr == nil && !fake {
+		icons.SetEnabled(cfg.Icons)
+	}
+	keys.Set(keys.Default())
 
 	err := fang.Execute(ctx, rootCmd,
 		fang.WithVersion(version),

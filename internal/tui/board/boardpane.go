@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
@@ -143,13 +144,13 @@ func (b *boardPane) selected() *jira.Issue {
 func (b boardPane) headerParts(spin string) []string {
 	var parts []string
 	if b.project != "" {
-		parts = append(parts, b.project)
+		parts = append(parts, icons.Label(icons.Project, b.project))
 	}
 	if b.nav != nil {
 		parts = append(parts, styles.Dim().Render(b.nav.board.Name))
 	}
 	if b.filter != nil {
-		parts = append(parts, "filter: "+b.filter.Name)
+		parts = append(parts, icons.Label(icons.Filter, "filter: "+b.filter.Name))
 	}
 	if b.loading {
 		parts = append(parts, spin)
