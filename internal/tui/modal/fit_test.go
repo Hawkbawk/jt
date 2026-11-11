@@ -1,4 +1,4 @@
-package popup
+package modal
 
 import "testing"
 

@@ -1,5 +1,5 @@
 // Package projectpicker is a tea.Model that lists the Jira projects and
-// reports the one the user picks. It's meant to be hosted by a popup.
+// reports the one the user picks. It's meant to be hosted by a modal.
 package projectpicker
 
 import (
@@ -30,7 +30,7 @@ type LoadedMsg struct {
 	Err      error
 }
 
-// ForParent marks LoadedMsg for the popup host.
+// ForParent marks LoadedMsg for the modal host.
 func (LoadedMsg) ForParent() {}
 
 // FavoriteMsg asks the host to make a project the default. The picker stays
@@ -39,7 +39,7 @@ type FavoriteMsg struct {
 	Key string
 }
 
-// ForParent marks FavoriteMsg for the popup host.
+// ForParent marks FavoriteMsg for the modal host.
 func (FavoriteMsg) ForParent() {}
 
 // DefaultChanged tells the picker to mark the source's current default
@@ -51,11 +51,11 @@ type SelectedMsg struct {
 	Key string
 }
 
-// ForParent marks SelectedMsg for the popup host.
+// ForParent marks SelectedMsg for the modal host.
 func (SelectedMsg) ForParent() {}
 
-// ClosesPopup marks SelectedMsg for the popup host.
-func (SelectedMsg) ClosesPopup() {}
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
 
 // keyMap is the picker's key bindings. The close binding only shows when the
 // picker can be cancelled.
@@ -99,7 +99,7 @@ func Load(src Source) tea.Cmd {
 	}
 }
 
-// Picker lists the projects and closes its popup with a SelectedMsg when one
+// Picker lists the projects and closes its modal with a SelectedMsg when one
 // is picked. The caller can keep the projects from the LoadedMsg and give them
 // to later pickers.
 type Picker struct {

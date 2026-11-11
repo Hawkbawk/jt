@@ -1,6 +1,6 @@
 // Package filterpicker is a tea.Model that lists a board's quick filters and
 // assignees on separate tabs and reports the one the user picks. It's meant to
-// be hosted by a popup.
+// be hosted by a modal.
 package filterpicker
 
 import (
@@ -23,11 +23,11 @@ type SelectedMsg struct {
 	Filter *jira.Filter
 }
 
-// ForParent marks SelectedMsg for the popup host.
+// ForParent marks SelectedMsg for the modal host.
 func (SelectedMsg) ForParent() {}
 
-// ClosesPopup marks SelectedMsg for the popup host.
-func (SelectedMsg) ClosesPopup() {}
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
 
 // keyMap is the picker's key bindings.
 type keyMap struct {
@@ -182,7 +182,7 @@ func (p *Picker) View() tea.View {
 	return tea.NewView(strings.Join([]string{strings.Join(tabs, ""), "", p.form.View()}, "\n"))
 }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Picker) Footer() (string, help.KeyMap) {
 	return "", p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
 }

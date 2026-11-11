@@ -109,10 +109,10 @@ func (p *Picker) consumesEsc() bool {
 	return p.field != nil && key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.field.KeyBinds()...)
 }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (p *Picker) Title() string { return "Commands" }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Picker) Footer() (string, help.KeyMap) { return "", p.keys }
 
 // View implements tea.Model.

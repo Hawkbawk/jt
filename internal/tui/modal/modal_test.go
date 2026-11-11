@@ -1,4 +1,4 @@
-package popup
+package modal
 
 import (
 	"fmt"
@@ -86,7 +86,7 @@ func TestOpenShowsContentAndRunsInit(t *testing.T) {
 	}
 	m, cmd := m.Update(OpenMsg{Content: &stub{}})
 	if !m.IsOpen() {
-		t.Fatal("OpenMsg did not open the popup")
+		t.Fatal("OpenMsg did not open the modal")
 	}
 	var inits int
 	for _, msg := range flatten(cmd) {
@@ -146,7 +146,7 @@ func TestContentClosesWithResult(t *testing.T) {
 	m, _ := opened(t)
 	m, msg := send(t, m, tea.KeyPressMsg{Code: 'x', Text: "x"})
 	if !m.IsOpen() {
-		t.Fatal("popup closed before the CloseMsg arrived")
+		t.Fatal("modal closed before the CloseMsg arrived")
 	}
 	if c, ok := msg.(contentMsg); !ok || c.msg != (CloseMsg{Then: doneMsg{}}) {
 		t.Fatalf("got %#v, want the content's CloseMsg", msg)
@@ -268,22 +268,22 @@ func returning(t *testing.T, cmd tea.Cmd) (Model, *cmdStub, tea.Cmd) {
 func TestResponseComesBackToContent(t *testing.T) {
 	m, s, cmd := returning(t, func() tea.Msg { return doneMsg{} })
 	msg := cmd()
-	if _, _, ok := m.Route(msg); !ok {
+	if _, _, ok := route(m, msg); !ok {
 		t.Fatalf("Route didn't take the content's message %#v", msg)
 	}
 	if len(s.got) != 1 || s.got[0] != (doneMsg{}) {
 		t.Fatalf("content got %v", s.got)
 	}
-	if _, _, ok := m.Route(doneMsg{}); ok {
-		t.Fatal("Route took a message that isn't the popup's")
+	if _, _, ok := route(m, doneMsg{}); ok {
+		t.Fatal("Route took a message that isn't the modal's")
 	}
 }
 
-func TestResponseForEarlierPopupIsDropped(t *testing.T) {
+func TestResponseForEarlierModalIsDropped(t *testing.T) {
 	m, _, cmd := returning(t, func() tea.Msg { return doneMsg{} })
 	second := &stub{}
 	m, _ = send(t, m, OpenMsg{Content: second})
-	m, out, ok := m.Route(cmd())
+	m, out, ok := route(m, cmd())
 	if !ok || out != nil || len(second.got) != 0 || !m.IsOpen() {
 		t.Fatalf("handled=%v, second got %v", ok, second.got)
 	}
@@ -320,22 +320,22 @@ func (parentMsg) ForParent() {}
 
 type closeMsg struct{}
 
-func (closeMsg) ClosesPopup() {}
+func (closeMsg) ClosesModal() {}
 
 type resultMsg struct{}
 
 func (resultMsg) ForParent()   {}
-func (resultMsg) ClosesPopup() {}
+func (resultMsg) ClosesModal() {}
 
 func TestForParentReachesParent(t *testing.T) {
 	m, s, cmd := returning(t, func() tea.Msg { return parentMsg{} })
 	msg := cmd()
-	if _, _, ok := m.Route(msg); msg != (parentMsg{}) || ok || len(s.got) != 0 {
+	if _, _, ok := route(m, msg); msg != (parentMsg{}) || ok || len(s.got) != 0 {
 		t.Fatalf("got %#v, routed=%v, content got %v", msg, ok, s.got)
 	}
 }
 
-func TestClosesClosesThePopup(t *testing.T) {
+func TestClosesClosesTheModal(t *testing.T) {
 	for name, tc := range map[string]struct {
 		msg  tea.Msg
 		then tea.Msg
@@ -344,7 +344,7 @@ func TestClosesClosesThePopup(t *testing.T) {
 		"result": {resultMsg{}, resultMsg{}},
 	} {
 		m, s, cmd := returning(t, func() tea.Msg { return tc.msg })
-		m, out, ok := m.Route(cmd())
+		m, out, ok := route(m, cmd())
 		if !ok || m.IsOpen() || len(s.got) != 0 {
 			t.Fatalf("%s: routed=%v open=%v content got %v", name, ok, m.IsOpen(), s.got)
 		}
@@ -358,11 +358,11 @@ func TestClosesClosesThePopup(t *testing.T) {
 	}
 }
 
-func TestCloseFromEarlierPopupIsDropped(t *testing.T) {
+func TestCloseFromEarlierModalIsDropped(t *testing.T) {
 	m, _, cmd := returning(t, func() tea.Msg { return closeMsg{} })
 	m, _ = send(t, m, OpenMsg{Content: &stub{}})
-	if m, _, _ = m.Route(cmd()); !m.IsOpen() {
-		t.Fatal("an earlier popup's close closed the new one")
+	if m, _, _ = route(m, cmd()); !m.IsOpen() {
+		t.Fatal("an earlier modal's close closed the new one")
 	}
 }
 
@@ -404,4 +404,13 @@ func TestHostDrawsTitleAndFooter(t *testing.T) {
 			t.Fatalf("%d body lines: title and footer not pinned:\n%s", n, strings.Join(lines, "\n"))
 		}
 	}
+}
+
+// route sends msg through the host only if it belongs to the modal.
+func route(m Model, msg tea.Msg) (Model, tea.Cmd, bool) {
+	if !m.Routes(msg) {
+		return m, nil, false
+	}
+	m, cmd := m.Update(msg)
+	return m, cmd, true
 }

@@ -215,7 +215,7 @@ func TestStylesAreSafeConcurrently(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_ = Card().GetHorizontalFrameSize() + Popup().GetVerticalFrameSize()
+			_ = Card().GetHorizontalFrameSize() + Modal().GetVerticalFrameSize()
 		}()
 	}
 	wg.Wait()

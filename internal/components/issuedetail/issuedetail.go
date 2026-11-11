@@ -1,4 +1,4 @@
-// Package issuedetail is the popup that shows an issue's details.
+// Package issuedetail is the modal that shows an issue's details.
 package issuedetail
 
 import (
@@ -39,10 +39,10 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return p, cmd
 }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (p *Model) Title() string { return p.Issue.Title() }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Model) Footer() (string, help.KeyMap) {
 	if !p.Issue.Ready() {
 		return "", nil

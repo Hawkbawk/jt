@@ -1,9 +1,9 @@
 // Package tuimsg holds messages that the screens and the components they host
 // both handle.
 //
-// Components in a popup reach the screen behind it with messages that have the
-// popup host's marker methods: ForParent sends a message to the screen, and
-// ClosesPopup closes the popup first.
+// Components in a modal reach the screen behind it with messages that have the
+// modal host's marker methods: ForParent sends a message to the screen, and
+// ClosesModal closes the modal first.
 package tuimsg
 
 import (
@@ -17,13 +17,13 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 )
 
-// Closed closes the popup a component is in.
+// Closed closes the modal a component is in.
 type Closed struct{}
 
-// ClosesPopup marks Closed for the popup host.
-func (Closed) ClosesPopup() {}
+// ClosesModal marks Closed for the modal host.
+func (Closed) ClosesModal() {}
 
-// Close returns the command that closes the popup a component is in.
+// Close returns the command that closes the modal a component is in.
 func Close() tea.Cmd { return Send(Closed{}) }
 
 // Send returns the command that produces msg.
@@ -41,11 +41,11 @@ type CommandSelected struct {
 	Board   string
 }
 
-// ForParent marks CommandSelected for the popup host.
+// ForParent marks CommandSelected for the modal host.
 func (CommandSelected) ForParent() {}
 
-// ClosesPopup marks CommandSelected for the popup host.
-func (CommandSelected) ClosesPopup() {}
+// ClosesModal marks CommandSelected for the modal host.
+func (CommandSelected) ClosesModal() {}
 
 // CommandLoaded carries the complete ticket context for a command.
 type CommandLoaded struct {
@@ -74,7 +74,7 @@ func (m CommandFinished) Status() string {
 }
 
 // Finished is implemented by the message a component sends after it changed an
-// issue. The screen behind the popup reloads the issue and shows the status.
+// issue. The screen behind the modal reloads the issue and shows the status.
 type Finished interface {
 	// ForParent sends the message to the screen.
 	ForParent()

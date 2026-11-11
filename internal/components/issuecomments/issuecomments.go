@@ -1,4 +1,4 @@
-// Package issuecomments is the popup that shows an issue's comments above a
+// Package issuecomments is the modal that shows an issue's comments above a
 // box for writing a new one. It reports a posted comment with Sent and stays
 // open.
 package issuecomments
@@ -35,7 +35,7 @@ type Sent struct {
 	Key string
 }
 
-// ForParent marks Sent for the popup host.
+// ForParent marks Sent for the modal host.
 func (Sent) ForParent() {}
 
 var _ tuimsg.Finished = Sent{}
@@ -46,7 +46,7 @@ func (s Sent) IssueKey() string { return s.Key }
 // Status implements tuimsg.Finished.
 func (s Sent) Status() string { return "Commented on " + s.Key }
 
-// keyMap is the popup's key bindings. Its help depends on whether the input
+// keyMap is the modal's key bindings. Its help depends on whether the input
 // has focus.
 type keyMap struct {
 	scroll, topBottom, write, close key.Binding
@@ -194,10 +194,10 @@ func (m *Model) send() tea.Cmd {
 	})
 }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (m *Model) Title() string { return m.issue.Title() }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (m *Model) Footer() (string, help.KeyMap) {
 	switch {
 	case !m.issue.Ready():

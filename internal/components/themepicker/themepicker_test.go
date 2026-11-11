@@ -29,7 +29,7 @@ func TestApplyClosesWithSelection(t *testing.T) {
 	p := New()
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
-		t.Fatal("enter should close the popup with the tint")
+		t.Fatal("enter should close the modal with the tint")
 	}
 }
 
@@ -40,6 +40,6 @@ func TestResetReadsTerminalThemeInCommand(t *testing.T) {
 		t.Fatal("r should return a command to read the terminal's theme")
 	}
 	if _, cmd := p.Update(resetMsg{tint: tint.TintNord}); cmd == nil {
-		t.Fatal("the terminal's answer should close the popup")
+		t.Fatal("the terminal's answer should close the modal")
 	}
 }

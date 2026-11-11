@@ -10,7 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
@@ -82,7 +82,7 @@ func run(m *Model, cmd tea.Cmd) []tea.Msg {
 		switch msg := msg.(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case popup.ForParent, popup.Closes:
+		case modal.ForParent, modal.Closes:
 			out = append(out, msg)
 		default:
 			_, next := m.Update(msg)
@@ -109,7 +109,7 @@ func open(t *testing.T, b *fakeBackend) *Model {
 	return m
 }
 
-func view(m *Model) string { return tuitest.PopupView(m, m.issue.Width()) }
+func view(m *Model) string { return tuitest.ModalView(m, m.issue.Width()) }
 
 func TestComposeAndSend(t *testing.T) {
 	b := newBackend()

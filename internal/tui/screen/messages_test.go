@@ -9,19 +9,19 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
-// The popup host finds these by their marker methods, so a misspelled one
+// The modal host finds these by their marker methods, so a misspelled one
 // would leave the message with the content. These fail to compile instead.
 type result interface {
-	popup.ForParent
-	popup.Closes
+	modal.ForParent
+	modal.Closes
 }
 
 var (
-	_ popup.Closes = tuimsg.Closed{}
+	_ modal.Closes = tuimsg.Closed{}
 
 	_ result = tuimsg.CommandSelected{}
 	_ result = boardpicker.SelectedMsg{}
@@ -32,8 +32,8 @@ var (
 	_ result = projectpicker.SelectedMsg{}
 	_ result = themepicker.SelectedMsg{}
 
-	_ popup.ForParent = boardpicker.FavoriteMsg{}
-	_ popup.ForParent = issuecomments.Sent{}
-	_ popup.ForParent = projectpicker.FavoriteMsg{}
-	_ popup.ForParent = projectpicker.LoadedMsg{}
+	_ modal.ForParent = boardpicker.FavoriteMsg{}
+	_ modal.ForParent = issuecomments.Sent{}
+	_ modal.ForParent = projectpicker.FavoriteMsg{}
+	_ modal.ForParent = projectpicker.LoadedMsg{}
 )

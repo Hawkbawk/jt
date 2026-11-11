@@ -1,4 +1,4 @@
-// Package issueassign is the popup that assigns an issue to someone. It
+// Package issueassign is the modal that assigns an issue to someone. It
 // searches for people and closes with an Assigned message once applied.
 package issueassign
 
@@ -25,7 +25,7 @@ type Backend interface {
 	Assign(key, assigneeID string) error
 }
 
-// Assigned is what the popup closes with after an assignment. It's a
+// Assigned is what the modal closes with after an assignment. It's a
 // tuimsg.Finished.
 type Assigned struct {
 	Key string
@@ -34,11 +34,11 @@ type Assigned struct {
 	Cleared bool
 }
 
-// ForParent marks Assigned for the popup host.
+// ForParent marks Assigned for the modal host.
 func (Assigned) ForParent() {}
 
-// ClosesPopup marks Assigned for the popup host.
-func (Assigned) ClosesPopup() {}
+// ClosesModal marks Assigned for the modal host.
+func (Assigned) ClosesModal() {}
 
 var _ tuimsg.Finished = Assigned{}
 
@@ -128,10 +128,10 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	})
 }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (p *Model) Title() string { return pane.Title("Assign", p.issueKey) }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Model) Footer() (string, help.KeyMap) {
 	return "", p.keys.WithForm(p.form.KeyBinds(), false)
 }

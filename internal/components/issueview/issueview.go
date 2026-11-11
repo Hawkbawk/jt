@@ -1,4 +1,4 @@
-// Package issueview is a popup model that loads an issue and shows its details
+// Package issueview is a modal model that loads an issue and shows its details
 // or its comments as scrollable text under a title. It leaves everything below
 // the text to its owner: the owner sizes it for the room its own footer leaves,
 // draws the footer under View, and decides when to hide it.
@@ -167,7 +167,7 @@ func (m *Model) refresh() {
 
 // Update shows the issue once it loads and handles sizing, the spinner and
 // scroll keys. It ignores everything else, including the keys that close the
-// popup. The title takes one line of the height it's sized for. Images in the
+// modal. The title takes one line of the height it's sized for. Images in the
 // text load after it, and replace the text that stood in for them.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)

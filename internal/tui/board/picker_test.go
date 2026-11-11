@@ -17,9 +17,9 @@ func pickerBackend() *tuitest.Backend {
 
 func projects(t *testing.T, m Model) *projectpicker.Picker {
 	t.Helper()
-	p, ok := m.Popup.Content().(*projectpicker.Picker)
+	p, ok := m.Modal.Content().(*projectpicker.Picker)
 	if !ok {
-		t.Fatalf("project popup not open, got %T", m.Popup.Content())
+		t.Fatalf("project modal not open, got %T", m.Modal.Content())
 	}
 	return p
 }
@@ -46,8 +46,8 @@ func TestEnterOpensProjectForSessionOnly(t *testing.T) {
 
 	m, cmd := press(t, m, "j", "enter")
 	m = tuitest.Drain(t, m, cmd)
-	if m.Popup.IsOpen() || m.board.project != "BETA" || m.board.nav == nil {
-		t.Fatalf("project not opened: open=%v project=%s", m.Popup.IsOpen(), m.board.project)
+	if m.Modal.IsOpen() || m.board.project != "BETA" || m.board.nav == nil {
+		t.Fatalf("project not opened: open=%v project=%s", m.Modal.IsOpen(), m.board.project)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 		t.Fatal("ctrl+p should open a cancellable picker")
 	}
 	m = tuitest.PressDrain(t, m, "esc")
-	if m.Popup.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
+	if m.Modal.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
@@ -85,7 +85,7 @@ func TestFilterThenOpen(t *testing.T) {
 	m = tuitest.Drain(t, m, m.Init())
 
 	m = tuitest.PressDrain(t, m, "/", "b", "e", "t", "enter", "enter")
-	if m.Popup.IsOpen() || m.board.project != "BETA" {
+	if m.Modal.IsOpen() || m.board.project != "BETA" {
 		t.Fatalf("expected BETA to open from the filtered list, project=%q", m.board.project)
 	}
 }

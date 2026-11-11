@@ -6,12 +6,12 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// KeyMap is the help footer most popups share: the bindings the popup leads
+// KeyMap is the help footer most modals share: the bindings the modal leads
 // with, then the focused field's own, then the close binding. It leaves the
-// close binding out while the field uses its key. Popups with their own
+// close binding out while the field uses its key. Modals with their own
 // bindings to match embed it.
 //
-// The With methods return a changed copy, so a popup keeps one KeyMap and
+// The With methods return a changed copy, so a modal keeps one KeyMap and
 // configures a copy of it for each render.
 type KeyMap struct {
 	closeKey   key.Binding
@@ -22,7 +22,7 @@ type KeyMap struct {
 // NewKeyMap returns a KeyMap whose close binding is closeKey.
 func NewKeyMap(closeKey key.Binding) KeyMap { return KeyMap{closeKey: closeKey} }
 
-// Close is the binding that dismisses the popup.
+// Close is the binding that dismisses the modal.
 func (k KeyMap) Close() key.Binding { return k.closeKey }
 
 // WithLead sets the bindings shown before the field's own.
@@ -39,7 +39,7 @@ func (k KeyMap) WithForm(binds []key.Binding, consumesClose bool) KeyMap {
 	return k
 }
 
-// WithCloseShown sets whether the close binding shows, for popups that can't
+// WithCloseShown sets whether the close binding shows, for modals that can't
 // always be closed.
 func (k KeyMap) WithCloseShown(shown bool) KeyMap {
 	k.hideClose = !shown

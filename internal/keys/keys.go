@@ -1,5 +1,5 @@
 // Package keys holds every key binding jt matches against or shows in a help
-// footer, in one Map. Screens and popups build their own key maps from it, so
+// footer, in one Map. Screens and modals build their own key maps from it, so
 // the same key means the same thing everywhere, and rebinding a key means
 // changing it here.
 package keys

@@ -1,31 +1,31 @@
-// Package popup hosts any tea.Model as a modal drawn over the screen behind it.
+// Package modal hosts any tea.Model as a modal drawn over the screen behind it.
 //
 // A parent embeds a Model and routes messages through its Update. Everything
-// that changes the popup happens in that Update, so there are no Open or Close
-// methods. Anything under the host asks for a popup by returning a command:
+// that changes the modal happens in that Update, so there are no Open or Close
+// methods. Anything under the host asks for a modal by returning a command:
 //
-//	return m, popup.Open(newConfirm())
+//	return m, modal.Open(newConfirm())
 //
 // Content doesn't have to import this package. The host addresses every
 // command its content returns, so the message the command produces comes back
 // to that content and nothing else. A response that arrives after the content
-// closed, or after another popup replaced it, is dropped. Content reaches past
+// closed, or after another modal replaced it, is dropped. Content reaches past
 // itself with messages that have marker methods:
 //
 //   - A message with a ForParent method goes to the parent instead.
-//   - A message with a ClosesPopup method closes the popup. If it also has a
-//     ForParent method, the parent gets it once the popup is closed.
+//   - A message with a ClosesModal method closes the modal. If it also has a
+//     ForParent method, the parent gets it once the modal is closed.
 //
 // For example, a picker that reports its choice declares:
 //
 //	type pickedMsg struct{ choice string }
 //
 //	func (pickedMsg) ForParent()  {}
-//	func (pickedMsg) ClosesPopup() {}
+//	func (pickedMsg) ClosesModal() {}
 //
 // Messages from bubbletea itself, such as tea.QuitMsg, aren't addressed, so the
 // program still sees them. The parent passes everything to Route first, which
-// takes the popup's own messages and the input while it's open.
+// takes the modal's own messages and the input while it's open.
 //
 // The host sizes its content by sending it a tea.WindowSizeMsg for the area
 // inside the frame, so any model that sizes itself from that message works
@@ -33,7 +33,7 @@
 // drawn by the host, which leaves those lines out of the size it sends.
 // Content must use virtual cursors, since the host ignores the tea.View cursor
 // the content returns.
-package popup
+package modal
 
 import (
 	"reflect"
@@ -45,28 +45,28 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// OpenMsg shows Content, replacing any popup that's already open.
+// OpenMsg shows Content, replacing any modal that's already open.
 type OpenMsg struct {
 	Content tea.Model
 }
 
-// CloseMsg closes the popup. If Then is set, it's sent to the parent once the
-// popup is closed.
+// CloseMsg closes the modal. If Then is set, it's sent to the parent once the
+// modal is closed.
 type CloseMsg struct {
 	Then tea.Msg
 }
 
-// Open returns the command that opens a popup with content.
+// Open returns the command that opens a modal with content.
 func Open(content tea.Model) tea.Cmd {
 	return func() tea.Msg { return OpenMsg{Content: content} }
 }
 
-// Close returns the command that closes the popup.
+// Close returns the command that closes the modal.
 func Close() tea.Cmd {
 	return func() tea.Msg { return CloseMsg{} }
 }
 
-// CloseWith returns the command that closes the popup and then sends msg.
+// CloseWith returns the command that closes the modal and then sends msg.
 func CloseWith(msg tea.Msg) tea.Cmd {
 	return func() tea.Msg { return CloseMsg{Then: msg} }
 }
@@ -77,9 +77,9 @@ type ForParent interface {
 	ForParent()
 }
 
-// Closes is a message from the content that closes the popup.
+// Closes is a message from the content that closes the modal.
 type Closes interface {
-	ClosesPopup()
+	ClosesModal()
 }
 
 // contentMsg is a message produced by a command of the content opened as gen.
@@ -143,19 +143,19 @@ type Footed interface {
 	Footer() (status string, keys help.KeyMap)
 }
 
-// DefaultSize is the outer size of a popup in an area: most of it, but never
+// DefaultSize is the outer size of a modal in an area: most of it, but never
 // too small to use.
 func DefaultSize(width, height int) (int, int) {
 	return max(20, width*4/5), max(6, height*4/5)
 }
 
-// Model is the popup host. The zero value isn't usable; build one with New.
+// Model is the modal host. The zero value isn't usable; build one with New.
 type Model struct {
 	content tea.Model
-	// gen counts the popups opened, so messages for an earlier one are
+	// gen counts the modals opened, so messages for an earlier one are
 	// dropped.
 	gen uint64
-	// areaW and areaH are the area the popup is drawn in, as last reported by
+	// areaW and areaH are the area the modal is drawn in, as last reported by
 	// a tea.WindowSizeMsg.
 	areaW, areaH int
 
@@ -169,31 +169,31 @@ type Model struct {
 // Option configures a Model.
 type Option func(*Model)
 
-// WithSize sets the outer size of the popup, frame included, for an area. The
+// WithSize sets the outer size of the modal, frame included, for an area. The
 // default is DefaultSize.
 func WithSize(f func(width, height int) (int, int)) Option {
 	return func(m *Model) { m.size = f }
 }
 
 // WithStyle sets the style of the frame around the content. It's called each
-// time the popup is drawn or sized, so a style can follow a changing theme.
+// time the modal is drawn or sized, so a style can follow a changing theme.
 func WithStyle(f func() lipgloss.Style) Option {
 	return func(m *Model) { m.style = f }
 }
 
 // WithTitleStyle sets the style of a Titled content's title. It's called each
-// time the popup is drawn.
+// time the modal is drawn.
 func WithTitleStyle(f func() lipgloss.Style) Option {
 	return func(m *Model) { m.title = f }
 }
 
 // WithHelp sets the help model that draws a Footed content's keys. It's called
-// each time the popup is drawn.
+// each time the modal is drawn.
 func WithHelp(f func() help.Model) Option {
 	return func(m *Model) { m.help = f }
 }
 
-// WithDismiss closes the popup when a key matches b, before the content sees
+// WithDismiss closes the modal when a key matches b, before the content sees
 // it. Use it for content you can't change. Content that uses the key itself
 // should close with Close.
 func WithDismiss(b key.Binding) Option {
@@ -214,13 +214,13 @@ func New(opts ...Option) Model {
 	return m
 }
 
-// IsOpen reports whether a popup is showing.
+// IsOpen reports whether a modal is showing.
 func (m Model) IsOpen() bool { return m.content != nil }
 
-// Content returns the model in the popup, or nil when closed.
+// Content returns the model in the modal, or nil when closed.
 func (m Model) Content() tea.Model { return m.content }
 
-// Captures reports whether msg is input the open popup takes for itself, so
+// Captures reports whether msg is input the open modal takes for itself, so
 // the parent shouldn't act on it.
 func (m Model) Captures(msg tea.Msg) bool {
 	if m.content == nil {
@@ -233,19 +233,15 @@ func (m Model) Captures(msg tea.Msg) bool {
 	return false
 }
 
-// Route handles msg when it belongs to the popup: opening and closing, the
-// messages the content's commands produced, and input while it's open. It
-// reports false for anything else, which the parent handles itself.
-func (m Model) Route(msg tea.Msg) (Model, tea.Cmd, bool) {
+// Routes reports whether msg belongs to the modal: opening and closing, the
+// messages the content's commands produced, and input while it's open. The
+// parent passes those to Update and handles everything else itself.
+func (m Model) Routes(msg tea.Msg) bool {
 	switch msg.(type) {
 	case OpenMsg, CloseMsg, contentMsg:
-	default:
-		if !m.Captures(msg) {
-			return m, nil, false
-		}
+		return true
 	}
-	m, cmd := m.Update(msg)
-	return m, cmd, true
+	return m.Captures(msg)
 }
 
 // inner is the size of the area inside the frame.
@@ -268,7 +264,7 @@ func (m Model) body() (int, int) {
 	return w, max(0, h)
 }
 
-// Update handles the messages that open, close and size the popup, delivers
+// Update handles the messages that open, close and size the modal, delivers
 // the content's own messages, and passes the rest to the content, so the
 // parent can send it anything it should hear, such as a theme change. While
 // closed, it ignores everything else.
@@ -334,7 +330,7 @@ func (m Model) resize() (Model, tea.Cmd) {
 }
 
 // View returns the framed content, or "" when closed. The content is clipped or
-// padded to the size the host gave it, so the popup never changes size.
+// padded to the size the host gave it, so the modal never changes size.
 func (m Model) View() string {
 	if m.content == nil {
 		return ""
@@ -351,7 +347,7 @@ func (m Model) View() string {
 
 // Chrome returns content's view with the title and footer that a host built
 // with opts draws around it, width wide and without the frame. It shows
-// content as a popup would without opening one.
+// content as a modal would without opening one.
 func Chrome(content tea.Model, width int, opts ...Option) string {
 	m := New(opts...)
 	m.content = content
@@ -383,7 +379,7 @@ func (m Model) footer(status string, keys help.KeyMap, width int) string {
 	return status + h.View(keys)
 }
 
-// Overlay draws the popup centered on bg, the area's rendered screen. It
+// Overlay draws the modal centered on bg, the area's rendered screen. It
 // returns bg unchanged when closed.
 func (m Model) Overlay(bg string) string {
 	if m.content == nil {

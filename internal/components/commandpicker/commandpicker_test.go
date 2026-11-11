@@ -11,7 +11,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
@@ -75,7 +75,7 @@ func TestPickerListsAndSelectsCommand(t *testing.T) {
 		{Name: "Open ticket", Command: "code"},
 		{Command: "gh"},
 	})
-	if v := tuitest.PopupView(p, p.width); !strings.Contains(v, "Open ticket") || !strings.Contains(v, "gh") ||
+	if v := tuitest.ModalView(p, p.width); !strings.Contains(v, "Open ticket") || !strings.Contains(v, "gh") ||
 		!strings.Contains(v, "enter run") || !strings.Contains(v, "esc close") {
 		t.Fatalf("picker view = %q", v)
 	}
@@ -84,7 +84,7 @@ func TestPickerListsAndSelectsCommand(t *testing.T) {
 		t.Fatal("enter did not select a command")
 	}
 	_, messages := tuitest.DrainUntil(t, next, cmd, func(msg tea.Msg) bool {
-		_, ok := msg.(popup.Closes)
+		_, ok := msg.(modal.Closes)
 		return ok
 	})
 	if len(messages) == 0 {
@@ -107,13 +107,13 @@ func TestPickerExplainsWhenNoCommandsAreConfigured(t *testing.T) {
 		t.Fatal("esc should close the empty picker")
 	}
 	_, messages := tuitest.DrainUntil(t, next, cmd, func(msg tea.Msg) bool {
-		_, ok := msg.(popup.Closes)
+		_, ok := msg.(modal.Closes)
 		return ok
 	})
 	if len(messages) == 0 {
-		t.Fatal("esc returned no message, want one that closes the popup")
+		t.Fatal("esc returned no message, want one that closes the modal")
 	}
-	if _, ok := messages[0].(popup.Closes); !ok {
-		t.Fatalf("esc returned %T, want one that closes the popup", messages[0])
+	if _, ok := messages[0].(modal.Closes); !ok {
+		t.Fatalf("esc returned %T, want one that closes the modal", messages[0])
 	}
 }

@@ -1,5 +1,5 @@
 // Package boardpicker is a tea.Model that lists a project's boards and reports
-// the one the user picks. It's meant to be hosted by a popup.
+// the one the user picks. It's meant to be hosted by a modal.
 package boardpicker
 
 import (
@@ -34,18 +34,18 @@ type SelectedMsg struct {
 	Board   jira.BoardSummary
 }
 
-// ForParent marks SelectedMsg for the popup host.
+// ForParent marks SelectedMsg for the modal host.
 func (SelectedMsg) ForParent() {}
 
-// ClosesPopup marks SelectedMsg for the popup host.
-func (SelectedMsg) ClosesPopup() {}
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
 
 // FavoriteMsg asks the host to make a board the default. The picker stays open.
 type FavoriteMsg struct {
 	ID int
 }
 
-// ForParent marks FavoriteMsg for the popup host.
+// ForParent marks FavoriteMsg for the modal host.
 func (FavoriteMsg) ForParent() {}
 
 // keyMap is the picker's key bindings.
@@ -83,7 +83,7 @@ func load(src Source, project string) tea.Cmd {
 	}
 }
 
-// Picker lists a project's boards and closes its popup with a SelectedMsg when
+// Picker lists a project's boards and closes its modal with a SelectedMsg when
 // one is picked.
 type Picker struct {
 	keys    keyMap

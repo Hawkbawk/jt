@@ -145,7 +145,7 @@ func (m *Model) imageLoaded(msg imageMsg) {
 		st.failed = true
 	} else {
 		st.img = msg.img
-		// Whichever popup gets the image first sends it, even if the one that
+		// Whichever modal gets the image first sends it, even if the one that
 		// asked for it has closed since.
 		if up := msg.img.TakeUpload(); up != "" {
 			m.pending = append(m.pending, up)
@@ -196,7 +196,7 @@ func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	case st.img == nil:
 		return styles.Dim().Render("Loading image…")
 	}
-	// Each model places images under an ID of its own, so another popup
+	// Each model places images under an ID of its own, so another modal
 	// showing the same image at another size doesn't change this one's.
 	p := st.img.Fit(m.placement, width*4/5, m.vp.Height()*4/5)
 	if m.placed[media] != p {

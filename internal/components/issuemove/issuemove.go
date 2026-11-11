@@ -1,4 +1,4 @@
-// Package issuemove is the popup that moves an issue to another status. It
+// Package issuemove is the modal that moves an issue to another status. It
 // lists the transitions the issue allows in a select and applies the chosen
 // one. When the move succeeds it closes with a Moved message.
 package issuemove
@@ -25,17 +25,17 @@ type Backend interface {
 	Transition(key, transitionID string) error
 }
 
-// Moved is what the popup closes with after a move. It's a tuimsg.Finished.
+// Moved is what the modal closes with after a move. It's a tuimsg.Finished.
 type Moved struct {
 	Key string
 	To  string
 }
 
-// ForParent marks Moved for the popup host.
+// ForParent marks Moved for the modal host.
 func (Moved) ForParent() {}
 
-// ClosesPopup marks Moved for the popup host.
-func (Moved) ClosesPopup() {}
+// ClosesModal marks Moved for the modal host.
+func (Moved) ClosesModal() {}
 
 var _ tuimsg.Finished = Moved{}
 
@@ -85,7 +85,7 @@ type Model struct {
 	err           error
 }
 
-// New returns a popup that moves iss.
+// New returns a modal that moves iss.
 func New(b Backend, iss jira.Issue) *Model {
 	return &Model{issue: iss, backend: b, spin: pane.NewSpinner(), keys: newKeyMap()}
 }
@@ -171,10 +171,10 @@ func (p *Model) consumesEsc() bool {
 	return p.selectField != nil && key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.selectField.KeyBinds()...)
 }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (p *Model) Title() string { return pane.Title("Move", p.issue.Key) }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Model) Footer() (string, help.KeyMap) {
 	if p.form == nil {
 		return "", p.keys

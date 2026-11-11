@@ -1,4 +1,4 @@
-// Package pane holds what popups that act on an issue share: the spinner, the
+// Package pane holds what modals that act on an issue share: the spinner, the
 // form theme, the title and the status line.
 package pane
 

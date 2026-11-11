@@ -34,62 +34,62 @@ func loadedDetailModel(t *testing.T) Model {
 	return tuitest.Drain(t, m, m.Init())
 }
 
-func TestViewPopupLoadsAndScrolls(t *testing.T) {
+func TestViewModalLoadsAndScrolls(t *testing.T) {
 	m := loadedDetailModel(t)
 	m, cmd := pressOpen(t, m, "v")
-	p, ok := m.Popup.Content().(*issuedetail.Model)
+	p, ok := m.Modal.Content().(*issuedetail.Model)
 	if !ok || !p.Issue.Loading() {
-		t.Fatal("v should open a loading detail popup")
+		t.Fatal("v should open a loading detail modal")
 	}
 	m = tuitest.Drain(t, m, cmd)
-	p = m.Popup.Content().(*issuedetail.Model)
+	p = m.Modal.Content().(*issuedetail.Model)
 	if p.Issue.Loading() || !strings.Contains(m.View().Content, "T-1") {
-		t.Fatal("detail not loaded into popup")
+		t.Fatal("detail not loaded into modal")
 	}
 
 	m, _ = press(t, m, "down", "down")
-	if p := m.Popup.Content().(*issuedetail.Model); p.Issue.ScrollPercent() == 0 {
+	if p := m.Modal.Content().(*issuedetail.Model); p.Issue.ScrollPercent() == 0 {
 		t.Fatalf("down arrow should scroll, scrolled to %v", p.Issue.ScrollPercent())
 	}
 
 	m, _ = press(t, m, "j")
 	if m.board.nav.row != 0 {
-		t.Fatal("board moved while popup was open")
+		t.Fatal("board moved while modal was open")
 	}
 	m = tuitest.PressDrain(t, m, "esc")
-	if m.Popup.IsOpen() {
-		t.Fatal("esc should close the popup")
+	if m.Modal.IsOpen() {
+		t.Fatal("esc should close the modal")
 	}
 }
 
-func TestViewPopupTopAndBottom(t *testing.T) {
+func TestViewModalTopAndBottom(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = tuitest.PressDrain(t, m, "v")
 
 	m, _ = press(t, m, "G")
-	p := m.Popup.Content().(*issuedetail.Model)
+	p := m.Modal.Content().(*issuedetail.Model)
 	if p.Issue.ScrollPercent() != 1 {
 		t.Fatalf("G should jump to the bottom, scrolled to %v", p.Issue.ScrollPercent())
 	}
 	if m.board.nav.row != 0 {
-		t.Fatal("G moved the board while the popup was open")
+		t.Fatal("G moved the board while the modal was open")
 	}
 
 	m, _ = press(t, m, "g")
-	if p := m.Popup.Content().(*issuedetail.Model); p.Issue.ScrollPercent() != 0 {
+	if p := m.Modal.Content().(*issuedetail.Model); p.Issue.ScrollPercent() != 0 {
 		t.Fatalf("g should jump to the top, scrolled to %v", p.Issue.ScrollPercent())
 	}
-	if v := ansi.Strip(m.Popup.View()); !strings.Contains(v, "g/G top/bottom") {
+	if v := ansi.Strip(m.Modal.View()); !strings.Contains(v, "g/G top/bottom") {
 		t.Fatalf("footer is missing g/G:\n%s", v)
 	}
 }
 
-func TestViewPopupHorizontalScroll(t *testing.T) {
+func TestViewModalHorizontalScroll(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = tuitest.PressDrain(t, m, "v")
-	before := m.Popup.Content().(*issuedetail.Model).View().Content
+	before := m.Modal.Content().(*issuedetail.Model).View().Content
 	m, _ = press(t, m, "right")
-	if m.Popup.Content().(*issuedetail.Model).View().Content == before {
+	if m.Modal.Content().(*issuedetail.Model).View().Content == before {
 		t.Fatal("right arrow should scroll wide content horizontally")
 	}
 }
@@ -97,34 +97,34 @@ func TestViewPopupHorizontalScroll(t *testing.T) {
 func TestViewIgnoredOnEmptyColumn(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = tuitest.PressDrain(t, m, "l", "v")
-	if m.Popup.IsOpen() {
-		t.Fatal("popup opened without a selected issue")
+	if m.Modal.IsOpen() {
+		t.Fatal("modal opened without a selected issue")
 	}
 }
 
-func TestCtrlPIgnoredWhilePopupOpen(t *testing.T) {
+func TestCtrlPIgnoredWhileModalOpen(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = tuitest.PressDrain(t, m, "v", "ctrl+p")
-	if _, ok := m.Popup.Content().(*issuedetail.Model); !ok {
-		t.Fatal("ctrl+p should do nothing while a popup is open")
+	if _, ok := m.Modal.Content().(*issuedetail.Model); !ok {
+		t.Fatal("ctrl+p should do nothing while a modal is open")
 	}
 }
 
-func TestCommentsPopupShowsAllComments(t *testing.T) {
+func TestCommentsModalShowsAllComments(t *testing.T) {
 	m := loadedDetailModel(t)
 	m = tuitest.PressDrain(t, m, "c")
-	_, ok := m.Popup.Content().(*issuecomments.Model)
+	_, ok := m.Modal.Content().(*issuecomments.Model)
 	if !ok {
-		t.Fatal("c should open the comments popup")
+		t.Fatal("c should open the comments modal")
 	}
-	content := ansi.Strip(m.Popup.View())
+	content := ansi.Strip(m.Modal.View())
 	for _, want := range []string{"Ada", "first comment", "Grace", "second comment"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("comments missing %q", want)
 		}
 	}
 	m = tuitest.PressDrain(t, m, "q")
-	if m.Popup.IsOpen() {
-		t.Fatal("q should close the popup")
+	if m.Modal.IsOpen() {
+		t.Fatal("q should close the modal")
 	}
 }

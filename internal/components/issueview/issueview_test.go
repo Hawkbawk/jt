@@ -277,7 +277,7 @@ func TestImagesLoadWhenScrolledNear(t *testing.T) {
 	}
 }
 
-func TestPopupsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
+func TestModalsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
 	supported(t, true)
 	t.Cleanup(func() { imageStore.reset() })
 	files := map[string][]byte{"img-1": pngFile(t)}
@@ -294,7 +294,7 @@ func TestPopupsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
 	}
 }
 
-func TestImageLoadedForAClosedPopupIsSentByTheNext(t *testing.T) {
+func TestImageLoadedForAClosedModalIsSentByTheNext(t *testing.T) {
 	supported(t, true)
 	t.Cleanup(func() { imageStore.reset() })
 	files := map[string][]byte{"img-1": pngFile(t)}
@@ -306,6 +306,6 @@ func TestImageLoadedForAClosedPopupIsSentByTheNext(t *testing.T) {
 	next.images["img-1"] = &imageState{}
 	next.imageLoaded(next.loadImage("img-1")().(imageMsg))
 	if len(next.pending) != 2 || !strings.HasPrefix(next.pending[0], "\x1b_G") {
-		t.Errorf("image wasn't uploaded by the popup that showed it: %q", next.pending)
+		t.Errorf("image wasn't uploaded by the modal that showed it: %q", next.pending)
 	}
 }

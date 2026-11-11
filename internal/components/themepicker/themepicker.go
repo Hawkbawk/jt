@@ -1,5 +1,5 @@
 // Package themepicker is a tea.Model that lists every registered tint and
-// reports the one the user picks. It's meant to be hosted by a popup.
+// reports the one the user picks. It's meant to be hosted by a modal.
 package themepicker
 
 import (
@@ -25,11 +25,11 @@ type SelectedMsg struct {
 	ID   string
 }
 
-// ForParent marks SelectedMsg for the popup host.
+// ForParent marks SelectedMsg for the modal host.
 func (SelectedMsg) ForParent() {}
 
-// ClosesPopup marks SelectedMsg for the popup host.
-func (SelectedMsg) ClosesPopup() {}
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
 
 // resetMsg carries the terminal's own theme, once it has answered.
 type resetMsg struct{ tint *tint.Tint }
@@ -67,7 +67,7 @@ func (i item) Description() string {
 
 func (i item) FilterValue() string { return i.DisplayName + " " + i.ID }
 
-// Picker lists every registered tint and closes its popup with a SelectedMsg
+// Picker lists every registered tint and closes its modal with a SelectedMsg
 // when one is chosen.
 type Picker struct {
 	keys  keyMap

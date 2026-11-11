@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
@@ -25,7 +25,7 @@ func keyMsg(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
 
-// newPicker returns a sized picker that has started, as a popup host does.
+// newPicker returns a sized picker that has started, as a modal host does.
 func newPicker(quick, assignees []jira.Filter, active *jira.Filter) *Picker {
 	p := New(quick, assignees, active)
 	p.Init()
@@ -46,7 +46,7 @@ func press(t *testing.T, p *Picker, keys ...string) tea.Cmd {
 }
 
 // settle runs cmd and the commands it leads to, feeding their messages back to
-// p, until the popup closes. Forms finish a step after the key that completes
+// p, until the modal closes. Forms finish a step after the key that completes
 // them, so the close can arrive a message or two later. ok is false if nothing
 // closed.
 func settle(p *Picker, cmd tea.Cmd) (tea.Msg, bool) {
@@ -60,7 +60,7 @@ func settle(p *Picker, cmd tea.Cmd) (tea.Msg, bool) {
 		switch msg := c().(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case popup.Closes:
+		case modal.Closes:
 			return msg, true
 		default:
 			_, next := p.Update(msg)
@@ -70,7 +70,7 @@ func settle(p *Picker, cmd tea.Cmd) (tea.Msg, bool) {
 	return nil, false
 }
 
-func view(p *Picker) string { return tuitest.PopupView(p, p.width) }
+func view(p *Picker) string { return tuitest.ModalView(p, p.width) }
 
 func testFilters() ([]jira.Filter, []jira.Filter) {
 	quick := []jira.Filter{{Name: "Only Bugs", JQL: "type = Bug"}, {Name: "Recent", JQL: "updated >= -7d"}}
@@ -121,7 +121,7 @@ func TestApplyReportsFilterAndClears(t *testing.T) {
 	p := newPicker(quick, assignees, nil)
 	closed, ok := settle(p, press(t, p, "tab", "j", "enter"))
 	if !ok {
-		t.Fatal("enter should close the popup with the selection")
+		t.Fatal("enter should close the modal with the selection")
 	}
 	msg := closed.(SelectedMsg)
 	if msg.Filter == nil || *msg.Filter != assignees[0] {
@@ -183,7 +183,7 @@ func TestSearchNoMatchesAndCancel(t *testing.T) {
 	}
 	press(t, p, "esc")
 	if p.Filtering() {
-		t.Fatal("esc should stop searching without closing the popup")
+		t.Fatal("esc should stop searching without closing the modal")
 	}
 	if _, ok := settle(p, press(t, p, "esc")); !ok {
 		t.Fatal("esc after an unmatched search should close")

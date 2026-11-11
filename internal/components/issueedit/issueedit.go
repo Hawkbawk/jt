@@ -1,4 +1,4 @@
-// Package issueedit is the popup that edits an issue's fields. It lists the
+// Package issueedit is the modal that edits an issue's fields. It lists the
 // fields the issue allows, edits one at a time in a form, and saves the changes
 // together. When a save succeeds it closes with an Edited message.
 package issueedit
@@ -33,17 +33,17 @@ type Backend interface {
 	SearchUsers(issueKey, query string) ([]jira.Option, error)
 }
 
-// Edited is what the popup closes with after saving. It's a tuimsg.Finished.
+// Edited is what the modal closes with after saving. It's a tuimsg.Finished.
 type Edited struct {
 	Key   string
 	Count int
 }
 
-// ForParent marks Edited for the popup host.
+// ForParent marks Edited for the modal host.
 func (Edited) ForParent() {}
 
-// ClosesPopup marks Edited for the popup host.
-func (Edited) ClosesPopup() {}
+// ClosesModal marks Edited for the modal host.
+func (Edited) ClosesModal() {}
 
 var _ tuimsg.Finished = Edited{}
 
@@ -264,7 +264,7 @@ func listHeight(n int) int {
 	return min(n, 6) + 1
 }
 
-// helpMode picks which of the popup's help footers keyMap shows.
+// helpMode picks which of the modal's help footers keyMap shows.
 type helpMode int
 
 const (
@@ -276,7 +276,7 @@ const (
 	helpSave
 )
 
-// keyMap is the popup's key bindings. mode picks the help it shows.
+// keyMap is the modal's key bindings. mode picks the help it shows.
 type keyMap struct {
 	close, blur, confirm, deny, accept, send, undo key.Binding
 	choose, apply, cancel                          key.Binding
@@ -306,7 +306,7 @@ func newKeyMap() keyMap {
 	}
 }
 
-// helpPane is the mode of the footer under the popup's list and forms.
+// helpPane is the mode of the footer under the modal's list and forms.
 const helpPane helpMode = -1
 
 func (k keyMap) withMode(m helpMode) keyMap {
@@ -367,7 +367,7 @@ type Model struct {
 	formH int
 }
 
-// New returns the popup that edits iss, which loads the fields when it opens.
+// New returns the modal that edits iss, which loads the fields when it opens.
 func New(b Backend, iss jira.Issue) *Model {
 	return &Model{key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
 }
@@ -569,10 +569,10 @@ func (p *Model) changed() []jira.EditField {
 // holding is true while a field's form is open, which blocks saving.
 func (p *Model) holding() bool { return p.form != nil }
 
-// Title implements popup.Titled.
+// Title implements modal.Titled.
 func (p *Model) Title() string { return pane.Title("Edit", p.key) }
 
-// Footer implements popup.Footed.
+// Footer implements modal.Footed.
 func (p *Model) Footer() (string, help.KeyMap) {
 	if n := p.unsaved(); n > 0 && p.confirmClose {
 		return styles.Warn().Render("Discard " + changes(n) + "? "), p.keys.withMode(helpDiscard)

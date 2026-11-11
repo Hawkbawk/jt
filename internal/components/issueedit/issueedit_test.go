@@ -15,7 +15,7 @@ import (
 
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
@@ -71,7 +71,7 @@ func testFields() []jira.EditField {
 	}
 }
 
-// host stands in for the popup host: it sizes the model, feeds back the
+// host stands in for the modal host: it sizes the model, feeds back the
 // messages its commands produce, and notes when it closes.
 type host struct {
 	t      *testing.T
@@ -98,7 +98,7 @@ func fieldsHost(t *testing.T) (*host, *fakeBackend) {
 
 func (h *host) open() bool { return !h.closed }
 
-func (h *host) view() string { return tuitest.PopupView(h.m, h.m.width) }
+func (h *host) view() string { return tuitest.ModalView(h.m, h.m.width) }
 
 func (h *host) send(msg tea.Msg) {
 	h.t.Helper()
@@ -132,9 +132,9 @@ func (h *host) drain(cmd tea.Cmd) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
 		case spinner.TickMsg:
-		case popup.Closes:
+		case modal.Closes:
 			h.closed = true
-			if _, ok := msg.(popup.ForParent); ok {
+			if _, ok := msg.(modal.ForParent); ok {
 				h.then = msg
 			}
 		default:
@@ -232,7 +232,7 @@ func TestFieldsSaveChangesTogether(t *testing.T) {
 	}
 	done, ok := h.then.(tuimsg.Finished)
 	if h.open() || !ok || done.IssueKey() != "T-2" || done.Status() != "Updated 4 fields on T-2" {
-		t.Fatalf("popup should close with a finished message, got open=%v then=%v", h.open(), h.then)
+		t.Fatalf("modal should close with a finished message, got open=%v then=%v", h.open(), h.then)
 	}
 }
 
@@ -288,7 +288,7 @@ func TestFieldsEscGoesBackToListThenCloses(t *testing.T) {
 		t.Fatal("esc should go back to the list of fields")
 	}
 	if h.press("esc"); h.open() {
-		t.Fatal("esc on the list should close the popup")
+		t.Fatal("esc on the list should close the modal")
 	}
 }
 
@@ -338,7 +338,7 @@ func TestFieldsEscClearsFilterBeforeClosing(t *testing.T) {
 	h.typeText("q")
 	h.press("esc")
 	if !h.open() || !strings.Contains(h.view(), "Summary") {
-		t.Fatal("esc should clear the filter and keep the popup open")
+		t.Fatal("esc should clear the filter and keep the modal open")
 	}
 }
 
@@ -379,7 +379,7 @@ func TestFieldsSaveErrorKeepsChangesForRetry(t *testing.T) {
 	h.typeText("!")
 	h.press("enter", "ctrl+s")
 	if !h.open() || !strings.Contains(h.view(), "summary: too long") || len(fb.edited) != 0 {
-		t.Fatal("failed save should leave the popup open with the error")
+		t.Fatal("failed save should leave the modal open with the error")
 	}
 	fb.editErr = nil
 	h.press("ctrl+s")
@@ -406,7 +406,7 @@ func TestFieldsListScrolls(t *testing.T) {
 func TestFieldsCloseWithoutChangesNeedsNoConfirm(t *testing.T) {
 	h, _ := fieldsHost(t)
 	if h.press("esc"); h.open() {
-		t.Fatal("esc should close a popup with nothing to save")
+		t.Fatal("esc should close a modal with nothing to save")
 	}
 }
 

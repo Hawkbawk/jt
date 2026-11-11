@@ -245,7 +245,7 @@ type Placement struct {
 
 // Fit picks the largest size that keeps the image's shape within maxCols by
 // maxRows cells, enlarging it if need be. owner is any number that's the same
-// for everything that shows the image together, like a popup's ID. It's folded
+// for everything that shows the image together, like a modal's ID. It's folded
 // into the range placement IDs allow, so owners far enough apart can share an
 // ID.
 func (im *Image) Fit(owner uint64, maxCols, maxRows int) Placement {

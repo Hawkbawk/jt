@@ -1,5 +1,5 @@
 // Package board is the board screen: the kanban view of a project's board, its
-// pickers and the issue popups opened from it.
+// pickers and the issue modals opened from it.
 package board
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/screen"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
@@ -33,7 +33,7 @@ type Backend interface {
 }
 
 // Model is the board's root bubbletea model. It routes input and messages to the
-// board and at most one popup, and controls high-level or broadly used state.
+// board and at most one modal, and controls high-level or broadly used state.
 type Model struct {
 	screen.Layout
 
@@ -44,7 +44,7 @@ type Model struct {
 	commands []config.Command
 	keys     boardKeyMap
 
-	// projects is the list the project popup loaded, kept for the session.
+	// projects is the list the project modal loaded, kept for the session.
 	projects []jira.Project
 }
 
@@ -71,7 +71,7 @@ func (m Model) WithWarning(text string) Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	if m.board.project == "" {
-		return popup.Open(m.newProjectPopup(false))
+		return modal.Open(m.newProjectModal(false))
 	}
 	return m.RunWithSpinner(m.board.fetch(m.board.project, ""))
 }
@@ -90,8 +90,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(k)
 	}
-	if cmd, ok := m.RoutePopup(msg); ok {
-		return m, cmd
+	if m.Modal.Routes(msg) {
+		return m, m.UpdateModal(msg)
 	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
@@ -103,7 +103,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuimsg.ThemeChanged:
 		m.Restyle()
-		return m, m.UpdatePopup(msg)
+		return m, m.UpdateModal(msg)
 
 	case themepicker.SelectedMsg:
 		return m, m.SelectTheme(msg)
@@ -154,7 +154,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.board.backend.SetDefaultProject(msg.key)
 		m.Status = styles.Dim().Render("Saved " + msg.key + " as the default project")
-		return m, m.UpdatePopup(projectpicker.DefaultChanged{})
+		return m, m.UpdateModal(projectpicker.DefaultChanged{})
 
 	case boardLoadedMsg:
 		m.board.update(msg)
@@ -179,7 +179,7 @@ func (m Model) selectBoard(msg boardpicker.SelectedMsg) (tea.Model, tea.Cmd) {
 	return m, m.RunWithSpinner(m.board.openBoard(msg.Board.ID))
 }
 
-func (m Model) newProjectPopup(cancellable bool) *projectpicker.Picker {
+func (m Model) newProjectModal(cancellable bool) *projectpicker.Picker {
 	return projectpicker.New(m.board.backend, m.projects, cancellable)
 }
 
@@ -193,13 +193,13 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, keys.Get().Projects):
-		// A popup may hold unsaved work, so it has to be closed first.
-		if m.Popup.IsOpen() {
+		// A modal may hold unsaved work, so it has to be closed first.
+		if m.Modal.IsOpen() {
 			return m, nil
 		}
-		return m, popup.Open(m.newProjectPopup(m.board.nav != nil))
-	case m.Popup.Captures(msg):
-		return m, m.UpdatePopup(msg)
+		return m, modal.Open(m.newProjectModal(m.board.nav != nil))
+	case m.Modal.Captures(msg):
+		return m, m.UpdateModal(msg)
 	}
 	return m.handleBoardKey(msg)
 }
@@ -220,7 +220,7 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if sel == nil {
 			return m, nil
 		}
-		return m, popup.Open(commandpicker.New(m.commands, *sel, m.board.nav.board.Project, m.board.nav.board.Name))
+		return m, modal.Open(commandpicker.New(m.commands, *sel, m.board.nav.board.Project, m.board.nav.board.Name))
 	}
 	if key.Matches(msg, keys.Get().Refresh) && m.board.project != "" && !m.board.loading {
 		focusKey := ""
@@ -231,13 +231,13 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.RunWithSpinner(m.board.reload(focusKey))
 	}
 	if key.Matches(msg, keys.Get().Theme) {
-		return m, popup.Open(themepicker.New())
+		return m, modal.Open(themepicker.New())
 	}
 	if key.Matches(msg, keys.Get().Boards) && m.board.nav != nil {
-		return m, popup.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
+		return m, modal.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))
 	}
 	if key.Matches(msg, keys.Get().Filter) && m.board.nav != nil {
-		return m, popup.Open(filterpicker.New(m.board.quick, m.board.assignees, m.board.filter))
+		return m, modal.Open(filterpicker.New(m.board.quick, m.board.assignees, m.board.filter))
 	}
 	if sel == nil {
 		return m, nil
