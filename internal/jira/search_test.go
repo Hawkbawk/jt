@@ -68,3 +68,24 @@ func TestParseSearchText(t *testing.T) {
 		}
 	}
 }
+
+func TestParseKey(t *testing.T) {
+	tests := []struct {
+		in, project, want string
+		wantErr           bool
+	}{
+		{in: "demo-12", want: "DEMO-12"},
+		{in: " 12 ", project: "ops", want: "OPS-12"},
+		{in: "12", wantErr: true},
+		{in: "0", project: "OPS", wantErr: true},
+		{in: "DEMO-1 DEMO-2", wantErr: true},
+		{in: "nope", wantErr: true},
+		{in: "", wantErr: true},
+	}
+	for _, tt := range tests {
+		got, err := ParseKey(tt.in, tt.project)
+		if (err != nil) != tt.wantErr || got != tt.want {
+			t.Errorf("ParseKey(%q, %q) = %q, %v", tt.in, tt.project, got, err)
+		}
+	}
+}

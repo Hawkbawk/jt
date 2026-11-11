@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/components/issueview"
+	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
@@ -22,6 +23,11 @@ type Model struct {
 // New returns a model that loads issueKey and renders its description with md.
 func New(b issueview.Backend, issueKey string, md issueview.Markdown) *Model {
 	return &Model{Issue: issueview.Details(b, issueKey, md)}
+}
+
+// NewLoaded returns a model that shows detail, which the caller already loaded.
+func NewLoaded(b issueview.Backend, detail *jira.IssueDetail, md issueview.Markdown) *Model {
+	return &Model{Issue: issueview.LoadedDetails(b, detail, md)}
 }
 
 // Init implements tea.Model.
