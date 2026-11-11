@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -97,25 +96,6 @@ func ParseKeys(s string) ([]string, error) {
 		keys = append(keys, strings.ToUpper(k))
 	}
 	return keys, nil
-}
-
-// ParseKey reads one issue key. A bare number is an issue in project.
-func ParseKey(s, project string) (string, error) {
-	s = strings.TrimSpace(s)
-	if n, err := strconv.Atoi(s); err == nil && n > 0 {
-		if project == "" {
-			return "", fmt.Errorf("%q has no project: use a key like ABC-%d or set a default project with 'jt init'", s, n)
-		}
-		s = fmt.Sprintf("%s-%d", project, n)
-	}
-	keys, err := ParseKeys(s)
-	if err != nil {
-		return "", err
-	}
-	if len(keys) != 1 {
-		return "", fmt.Errorf("expected one issue key like ABC-123, got %q", s)
-	}
-	return keys[0], nil
 }
 
 // String renders the query as JQL.
