@@ -88,6 +88,14 @@ func Details(b Backend, issueKey string, md Markdown) *Model {
 		func(m *Model, width int, md Markdown) string { return renderDetail(m.issue, width, md) })
 }
 
+// LoadedDetails shows an issue the caller already loaded. Init doesn't fetch
+// it again, and Reload still does.
+func LoadedDetails(b Backend, detail *jira.IssueDetail, md Markdown) *Model {
+	m := Details(b, detail.Key, md)
+	m.issue, m.loading = detail, false
+	return m
+}
+
 // Comments shows an issue's comments, which load only when it opens.
 func Comments(b Backend, issueKey string, md Markdown) *Model {
 	return newModel(b, "Comments", issueKey, md,
@@ -110,8 +118,14 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 	}
 }
 
-// Init loads the issue and starts the spinner.
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Tick) }
+// Init loads the issue and starts the spinner, unless the issue was already
+// loaded.
+func (m *Model) Init() tea.Cmd {
+	if !m.loading {
+		return nil
+	}
+	return tea.Batch(m.Reload(), m.spin.Tick)
+}
 
 // Reload fetches the issue again and swaps in the new text when it arrives,
 // keeping the old text meanwhile.
