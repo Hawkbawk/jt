@@ -5,9 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hawkbawk/jt/internal/components/issuedetail"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/view"
+	"github.com/hawkbawk/jt/internal/tui/standalone"
 )
 
 var viewCmd = &cobra.Command{
@@ -41,5 +42,5 @@ func runView(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("couldn't load %s: %w", issueKey, err)
 	}
-	return run(view.New(backend, detail, styles.Markdown))
+	return run(standalone.New(issuedetail.NewLoaded(backend, detail, styles.Markdown)))
 }

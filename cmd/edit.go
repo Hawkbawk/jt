@@ -5,8 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/jira"
-	"github.com/hawkbawk/jt/internal/tui/edit"
+	"github.com/hawkbawk/jt/internal/tui/standalone"
 )
 
 var editCmd = &cobra.Command{
@@ -40,5 +41,5 @@ func runEdit(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("couldn't load %s: %w", issueKey, err)
 	}
-	return run(edit.New(backend, detail.Issue))
+	return run(standalone.New(issueedit.New(backend, detail.Issue)))
 }
