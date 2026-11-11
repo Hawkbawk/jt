@@ -1,21 +1,19 @@
 // Package boardpicker is a tea.Model that lists a project's boards and reports
-// the one the user picks. It's meant to be hosted by a popup.
+// the one the user picks. It's meant to be hosted by a modal.
 package boardpicker
 
 import (
-	"sync/atomic"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -24,10 +22,8 @@ type Source interface {
 	Boards(project string) ([]jira.BoardSummary, error)
 }
 
-// LoadedMsg carries the result of Load. A picker ignores the ones that carry
-// another picker's ID.
-type LoadedMsg struct {
-	ID     int64
+// loadedMsg carries the result of load.
+type loadedMsg struct {
 	Boards []jira.BoardSummary
 	Err    error
 }
@@ -38,24 +34,31 @@ type SelectedMsg struct {
 	Board   jira.BoardSummary
 }
 
+// ForParent marks SelectedMsg for the modal host.
+func (SelectedMsg) ForParent() {}
+
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
+
 // FavoriteMsg asks the host to make a board the default. The picker stays open.
 type FavoriteMsg struct {
 	ID int
 }
 
+// ForParent marks FavoriteMsg for the modal host.
+func (FavoriteMsg) ForParent() {}
+
 // keyMap is the picker's key bindings.
 type keyMap struct {
-	popup.KeyMap
+	pane.KeyMap
 	open, favorite key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	open := keys.Describe(k.Accept, "open")
-	return keyMap{KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite), open: open, favorite: k.Favorite}
+	return keyMap{KeyMap: pane.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite), open: open, favorite: k.Favorite}
 }
-
-var lastID atomic.Int64
 
 type item struct {
 	jira.BoardSummary
@@ -72,20 +75,18 @@ func (i item) Title() string {
 func (i item) Description() string { return i.Type }
 func (i item) FilterValue() string { return i.Name }
 
-// Load fetches the project's boards and returns them in a LoadedMsg tagged
-// with id.
-func Load(src Source, project string, id int64) tea.Cmd {
+// load fetches the project's boards and returns them in a loadedMsg.
+func load(src Source, project string) tea.Cmd {
 	return func() tea.Msg {
 		bs, err := src.Boards(project)
-		return LoadedMsg{ID: id, Boards: bs, Err: err}
+		return loadedMsg{Boards: bs, Err: err}
 	}
 }
 
-// Picker lists a project's boards and closes its popup with a SelectedMsg when
+// Picker lists a project's boards and closes its modal with a SelectedMsg when
 // one is picked.
 type Picker struct {
 	keys    keyMap
-	id      int64
 	src     Source
 	project string
 	current int
@@ -109,7 +110,6 @@ func New(src Source, project string, current int) *Picker {
 		return km.ShortHelp()
 	}
 	return &Picker{
-		id:      lastID.Add(1),
 		src:     src,
 		project: project,
 		current: current,
@@ -130,7 +130,7 @@ func (p *Picker) Filtering() bool { return p.list.FilterState() == list.Filterin
 
 // Init implements tea.Model.
 func (p *Picker) Init() tea.Cmd {
-	return tea.Batch(Load(p.src, p.project, p.id), p.spin.Tick)
+	return tea.Batch(load(p.src, p.project), p.spin.Tick)
 }
 
 func (p *Picker) setBoards(boards []jira.BoardSummary) tea.Cmd {
@@ -170,10 +170,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.list.Styles.Title = styles.Title()
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
-	case LoadedMsg:
-		if msg.ID != p.id {
-			return p, nil
-		}
+	case loadedMsg:
 		if msg.Err != nil {
 			p.err = msg.Err
 			return p, nil
@@ -188,7 +185,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
 		if key.Matches(msg, p.keys.Close()) {
-			return popup.Close()
+			return tuimsg.Close()
 		}
 		return nil
 	}
@@ -198,20 +195,20 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, p.keys.Close()):
 		if !p.list.IsFiltered() {
-			return popup.Close()
+			return tuimsg.Close()
 		}
 	case key.Matches(msg, p.keys.favorite):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil
 		}
-		return func() tea.Msg { return FavoriteMsg{ID: sel.ID} }
+		return tuimsg.Send(FavoriteMsg{ID: sel.ID})
 	case key.Matches(msg, p.keys.open):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil
 		}
-		return popup.CloseWith(SelectedMsg{Project: p.project, Board: sel.BoardSummary})
+		return tuimsg.Send(SelectedMsg{Project: p.project, Board: sel.BoardSummary})
 	}
 	return p.forward(msg)
 }

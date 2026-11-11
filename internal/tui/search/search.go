@@ -13,14 +13,13 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
-	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/screen"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
@@ -47,7 +46,7 @@ func loadIssueTypes(b Backend) tea.Cmd {
 }
 
 // Model is the search screen: a huh form, the results table and the
-// board's issue popups. Only one search runs at a time.
+// board's issue modals. Only one search runs at a time.
 type Model struct {
 	screen.Layout
 	backend  Backend
@@ -90,7 +89,7 @@ func (m Model) WithWarning(text string) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend, 0), m.form.form.Init())
+	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend), m.form.form.Init())
 }
 
 func (m Model) busy() bool { return m.searching }
@@ -135,6 +134,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = status
 		return m, cmd
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		return m.handleKey(k)
+	}
+	wasOpen := m.Modal.IsOpen()
+	if m.Modal.Routes(msg) {
+		cmd := m.UpdateModal(msg)
+		if m.Modal.IsOpen() != wasOpen {
+			m.fit()
+		}
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -142,13 +152,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.search(m.lastJQL)
 
 	case tea.WindowSizeMsg:
-		popupCmd := m.Resize(msg, m.helpView())
+		modalCmd := m.Resize(msg, m.helpView())
 		m.fit()
-		return m, tea.Batch(popupCmd, m.form.update(msg))
+		return m, tea.Batch(modalCmd, m.form.update(msg))
 
 	case tuimsg.ThemeChanged:
 		cmd := m.restyle()
-		return m, cmd
+		return m, tea.Batch(cmd, m.UpdateModal(msg))
 
 	case themepicker.SelectedMsg:
 		cmd := m.SelectTheme(msg)
@@ -160,18 +170,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
-
-	case issuecomments.Closed:
-		return m, popup.Close()
-
-	case popup.OpenMsg, popup.CloseMsg:
-		cmd := m.UpdatePopup(msg)
-		m.fit()
-		return m, cmd
-
-	case tea.KeyPressMsg:
-		return m.handleKey(msg)
+		return m, m.Tick(msg, m.busy())
 
 	case issueTypesLoadedMsg:
 		if msg.err != nil {
@@ -199,15 +198,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = msg.Display()
 		return m, nil
 	}
-	cmd := m.forwardMsg(msg)
+	cmd := m.updateForm(msg)
 	return m, cmd
-}
-
-func (m *Model) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.Popup.IsOpen() {
-		return m.UpdatePopup(msg)
-	}
-	return m.updateForm(msg)
 }
 
 func (m Model) currentJQL() (string, error) {
@@ -323,8 +315,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.Popup.Captures(msg) {
-		return m, m.UpdatePopup(msg)
+	if m.Modal.Captures(msg) {
+		return m, m.UpdateModal(msg)
 	}
 	switch {
 	case key.Matches(msg, keys.Get().SwitchMode):
@@ -388,13 +380,13 @@ func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.search(m.lastJQL)
 		return m, cmd
 	case key.Matches(msg, keys.Get().Theme):
-		return m, popup.Open(themepicker.New())
+		return m, modal.Open(themepicker.New())
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {
 		if key.Matches(msg, keys.Get().Commands) {
 			project, _, _ := strings.Cut(sel.Key, "-")
-			return m, popup.Open(commandpicker.New(m.commands, *sel, project, ""))
+			return m, modal.Open(commandpicker.New(m.commands, *sel, project, ""))
 		}
 		if key.Matches(msg, keys.Get().Accept) {
 			msg = tea.KeyPressMsg{Code: 'v', Text: "v"}
@@ -440,7 +432,7 @@ func (m Model) render() string {
 		return ""
 	}
 	body := m.bodyView()
-	body = m.Popup.Overlay(body)
+	body = m.Modal.Overlay(body)
 	mode := "basic"
 	switch {
 	case m.form.advanced:

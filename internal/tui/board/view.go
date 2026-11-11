@@ -15,6 +15,6 @@ func (m Model) render() string {
 		return ""
 	}
 	body := m.board.view(m.Width, m.BodyHeight(m.keys), m.Spinner.View())
-	body = m.Popup.Overlay(body)
+	body = m.Modal.Overlay(body)
 	return lipgloss.JoinVertical(lipgloss.Left, m.HeaderView(m.board.headerParts(m.Spinner.View())), body, m.FooterView(m.keys))
 }

@@ -39,14 +39,14 @@ func press(t *testing.T, m Model, keys ...string) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// pressOpen presses k, which opens a popup, and applies the message that opens
-// it. It returns the model with the popup showing and the popup's own commands,
+// pressOpen presses k, which opens a modal, and applies the message that opens
+// it. It returns the model with the modal showing and the modal's own commands,
 // which haven't run yet.
 func pressOpen(t *testing.T, m Model, k string) (Model, tea.Cmd) {
 	t.Helper()
 	m, cmd := press(t, m, k)
 	if cmd == nil {
-		t.Fatalf("%s should open a popup", k)
+		t.Fatalf("%s should open a modal", k)
 	}
 	next, cmd := m.Update(cmd())
 	return next.(Model), cmd
@@ -73,18 +73,18 @@ func TestQQuitsFromBoard(t *testing.T) {
 	}
 }
 
-func TestQClosesPopupInsteadOfQuitting(t *testing.T) {
+func TestQClosesModalInsteadOfQuitting(t *testing.T) {
 	m, _ := loadedModel(t)
 	m = tuitest.PressDrain(t, m, "v")
-	if !m.Popup.IsOpen() {
-		t.Fatal("v should open a popup")
+	if !m.Modal.IsOpen() {
+		t.Fatal("v should open a modal")
 	}
 	m, cmd := press(t, m, "q")
 	if tuitest.IsQuit(cmd) {
-		t.Fatal("q in a popup should not quit")
+		t.Fatal("q in a modal should not quit")
 	}
-	if m = tuitest.Drain(t, m, cmd); m.Popup.IsOpen() {
-		t.Fatal("q in a popup should close it")
+	if m = tuitest.Drain(t, m, cmd); m.Modal.IsOpen() {
+		t.Fatal("q in a modal should close it")
 	}
 }
 
@@ -182,8 +182,8 @@ func TestCommandsKeyOpensConfiguredCommandPicker(t *testing.T) {
 	m, _ := loadedModel(t)
 	m.commands = []config.Command{{Name: "Open issue", Command: "code"}}
 	m = tuitest.PressDrain(t, m, "C")
-	if !m.Popup.IsOpen() || !strings.Contains(m.Popup.View(), "Open issue") {
-		t.Fatalf("C should open the configured command picker: %s", m.Popup.View())
+	if !m.Modal.IsOpen() || !strings.Contains(m.Modal.View(), "Open issue") {
+		t.Fatalf("C should open the configured command picker: %s", m.Modal.View())
 	}
 }
 
@@ -191,7 +191,7 @@ func TestCommandsKeyDoesNothingWithoutSelectedIssue(t *testing.T) {
 	m, _ := loadedModel(t)
 	m.commands = []config.Command{{Name: "Open issue", Command: "code"}}
 	m, cmd := press(t, m, "l", "C")
-	if m.Popup.IsOpen() || cmd != nil {
+	if m.Modal.IsOpen() || cmd != nil {
 		t.Fatal("C opened a command picker without a selected issue")
 	}
 }

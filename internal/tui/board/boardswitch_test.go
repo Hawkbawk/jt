@@ -33,8 +33,8 @@ func TestPickingABoardOpensItWithoutSaving(t *testing.T) {
 	m := newSettingsModel(t, "TEST", fb, fs)
 
 	m = tuitest.PressDrain(t, m, "ctrl+b")
-	if _, ok := m.Popup.Content().(*boardpicker.Picker); !ok {
-		t.Fatalf("board popup not open, got %T", m.Popup.Content())
+	if _, ok := m.Modal.Content().(*boardpicker.Picker); !ok {
+		t.Fatalf("board modal not open, got %T", m.Modal.Content())
 	}
 	m = tuitest.PressDrain(t, m, "j", "enter")
 
@@ -44,7 +44,7 @@ func TestPickingABoardOpensItWithoutSaving(t *testing.T) {
 	if len(fs.Boards) != 0 {
 		t.Fatalf("saved boards = %v, want none", fs.Boards)
 	}
-	if m.Popup.IsOpen() || m.board.nav == nil {
+	if m.Modal.IsOpen() || m.board.nav == nil {
 		t.Fatal("the board should show once it loads")
 	}
 }

@@ -22,57 +22,57 @@ func useTint(t *testing.T, tt *tint.Tint) {
 	tint.SetTint(tt)
 }
 
-func openThemePopup(t *testing.T, fs *tuitest.Settings) Model {
+func openThemeModal(t *testing.T, fs *tuitest.Settings) Model {
 	t.Helper()
 	m := newTestModel(t, "TEST", &tuitest.Backend{})
 	m.Settings = fs
 	m = tuitest.Drain(t, m, m.Init())
 	m = tuitest.PressDrain(t, m, "t")
-	if _, ok := m.Popup.Content().(*themepicker.Picker); !ok {
-		t.Fatalf("t should open the theme popup, got %T", m.Popup.Content())
+	if _, ok := m.Modal.Content().(*themepicker.Picker); !ok {
+		t.Fatalf("t should open the theme modal, got %T", m.Modal.Content())
 	}
 	return m
 }
 
-func TestThemePopupFiltersAppliesAndSaves(t *testing.T) {
+func TestThemeModalFiltersAppliesAndSaves(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &tuitest.Settings{}
-	m := openThemePopup(t, fs)
+	m := openThemeModal(t, fs)
 	m = tuitest.PressDrain(t, m, append(append([]string{"/"}, strings.Split("catppuccin_mocha", "")...), "enter", "enter")...)
 
-	if m.Popup.IsOpen() || styles.Current() != tint.TintCatppuccinMocha {
-		t.Fatalf("popup=%v current=%v, want closed with Catppuccin Mocha applied", m.Popup.Content(), styles.Current().ID)
+	if m.Modal.IsOpen() || styles.Current() != tint.TintCatppuccinMocha {
+		t.Fatalf("modal=%v current=%v, want closed with Catppuccin Mocha applied", m.Modal.Content(), styles.Current().ID)
 	}
 	if len(fs.Saved) != 1 || fs.Saved[0] != "catppuccin_mocha" {
 		t.Fatalf("saved = %v", fs.Saved)
 	}
 }
 
-func TestThemePopupEscClearsFilterBeforeClosing(t *testing.T) {
+func TestThemeModalEscClearsFilterBeforeClosing(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &tuitest.Settings{}
-	m := openThemePopup(t, fs)
+	m := openThemeModal(t, fs)
 	m = tuitest.PressDrain(t, m, "/", "x", "enter", "esc")
-	p, ok := m.Popup.Content().(*themepicker.Picker)
+	p, ok := m.Modal.Content().(*themepicker.Picker)
 	if !ok || p.Filtered() {
-		t.Fatalf("the first esc should clear the filter and keep the popup open, popup=%T", m.Popup.Content())
+		t.Fatalf("the first esc should clear the filter and keep the modal open, modal=%T", m.Modal.Content())
 	}
 	m = tuitest.PressDrain(t, m, "esc")
-	if m.Popup.IsOpen() || styles.Current() != tint.TintNord || len(fs.Saved) != 0 {
-		t.Fatalf("esc should close without changing the theme, popup=%T saved=%v", m.Popup.Content(), fs.Saved)
+	if m.Modal.IsOpen() || styles.Current() != tint.TintNord || len(fs.Saved) != 0 {
+		t.Fatalf("esc should close without changing the theme, modal=%T saved=%v", m.Modal.Content(), fs.Saved)
 	}
 }
 
-func TestThemePopupResetsToTerminal(t *testing.T) {
+func TestThemeModalResetsToTerminal(t *testing.T) {
 	useTint(t, tint.TintNord)
 
 	fs := &tuitest.Settings{}
-	m := openThemePopup(t, fs)
+	m := openThemeModal(t, fs)
 	m = tuitest.PressDrain(t, m, "/", "r")
-	if p, ok := m.Popup.Content().(*themepicker.Picker); !ok || !p.Filtering() {
-		t.Fatalf("r while filtering should type into the filter, popup=%T", m.Popup.Content())
+	if p, ok := m.Modal.Content().(*themepicker.Picker); !ok || !p.Filtering() {
+		t.Fatalf("r while filtering should type into the filter, modal=%T", m.Modal.Content())
 	}
 
 	m = tuitest.PressDrain(t, m, "esc")
@@ -81,8 +81,8 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 		t.Fatal("r should read the terminal's theme in a command, not in Update")
 	}
 	m = tuitest.Drain(t, m, cmd)
-	if m.Popup.IsOpen() {
-		t.Fatal("r should close the popup")
+	if m.Modal.IsOpen() {
+		t.Fatal("r should close the modal")
 	}
 	if styles.Current() != styles.Default(context.Background()) {
 		t.Fatalf("current = %v, want the default tint", styles.Current().ID)
@@ -95,7 +95,7 @@ func TestThemePopupResetsToTerminal(t *testing.T) {
 func TestThemeSaveErrorShowsInStatus(t *testing.T) {
 	useTint(t, tint.TintNord)
 
-	m := openThemePopup(t, &tuitest.Settings{Err: errors.New("read-only")})
+	m := openThemeModal(t, &tuitest.Settings{Err: errors.New("read-only")})
 	m = tuitest.PressDrain(t, m, "j", "enter")
 	if m.Status == "" {
 		t.Fatal("expected the save error in the status line")

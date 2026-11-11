@@ -1,21 +1,19 @@
 // Package projectpicker is a tea.Model that lists the Jira projects and
-// reports the one the user picks. It's meant to be hosted by a popup.
+// reports the one the user picks. It's meant to be hosted by a modal.
 package projectpicker
 
 import (
-	"sync/atomic"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -25,29 +23,44 @@ type Source interface {
 	DefaultProject() string
 }
 
-// LoadedMsg carries the result of Load. A picker ignores the ones that carry
-// another picker's ID.
+// LoadedMsg carries the result of Load. A picker sends the projects it loaded
+// to the screen in one, so the screen can keep them for later pickers.
 type LoadedMsg struct {
-	ID       int64
 	Projects []jira.Project
 	Err      error
 }
 
+// ForParent marks LoadedMsg for the modal host.
+func (LoadedMsg) ForParent() {}
+
 // FavoriteMsg asks the host to make a project the default. The picker stays
-// open, and the host calls Refresh once the default has changed.
+// open, and the host sends it DefaultChanged once the default has changed.
 type FavoriteMsg struct {
 	Key string
 }
+
+// ForParent marks FavoriteMsg for the modal host.
+func (FavoriteMsg) ForParent() {}
+
+// DefaultChanged tells the picker to mark the source's current default
+// project.
+type DefaultChanged struct{}
 
 // SelectedMsg reports the project the user picked.
 type SelectedMsg struct {
 	Key string
 }
 
+// ForParent marks SelectedMsg for the modal host.
+func (SelectedMsg) ForParent() {}
+
+// ClosesModal marks SelectedMsg for the modal host.
+func (SelectedMsg) ClosesModal() {}
+
 // keyMap is the picker's key bindings. The close binding only shows when the
 // picker can be cancelled.
 type keyMap struct {
-	popup.KeyMap
+	pane.KeyMap
 	open, favorite key.Binding
 }
 
@@ -55,12 +68,10 @@ func newKeyMap(cancellable bool) keyMap {
 	k := keys.Get()
 	open := keys.Describe(k.Accept, "open")
 	return keyMap{
-		KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite).WithCloseShown(cancellable),
+		KeyMap: pane.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite).WithCloseShown(cancellable),
 		open:   open, favorite: k.Favorite,
 	}
 }
-
-var lastID atomic.Int64
 
 type item struct {
 	jira.Project
@@ -77,20 +88,22 @@ func (i item) Title() string {
 func (i item) Description() string { return i.Name }
 func (i item) FilterValue() string { return i.Key + " " + i.Name }
 
-// Load fetches the projects and returns them in a LoadedMsg tagged with id.
-func Load(src Source, id int64) tea.Cmd {
+// loadedMsg is the picker's own load, which comes back to the picker.
+type loadedMsg LoadedMsg
+
+// Load fetches the projects and returns them in a LoadedMsg.
+func Load(src Source) tea.Cmd {
 	return func() tea.Msg {
 		ps, err := src.Projects()
-		return LoadedMsg{ID: id, Projects: ps, Err: err}
+		return LoadedMsg{Projects: ps, Err: err}
 	}
 }
 
-// Picker lists the projects and closes its popup with a SelectedMsg when one
+// Picker lists the projects and closes its modal with a SelectedMsg when one
 // is picked. The caller can keep the projects from the LoadedMsg and give them
 // to later pickers.
 type Picker struct {
 	keys        keyMap
-	id          int64
 	src         Source
 	spin        spinner.Model
 	cancellable bool
@@ -107,7 +120,6 @@ func New(src Source, projects []jira.Project, cancellable bool) *Picker {
 	km := newKeyMap(cancellable)
 	return &Picker{
 		keys:        km,
-		id:          lastID.Add(1),
 		src:         src,
 		spin:        spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
 		cancellable: cancellable,
@@ -142,17 +154,20 @@ func (p *Picker) Filtering() bool { return p.list.FilterState() == list.Filterin
 // Len is how many projects are listed.
 func (p *Picker) Len() int { return len(p.list.Items()) }
 
+func (p *Picker) load() tea.Cmd {
+	src := p.src
+	return func() tea.Msg {
+		ps, err := src.Projects()
+		return loadedMsg{Projects: ps, Err: err}
+	}
+}
+
 // Init implements tea.Model.
 func (p *Picker) Init() tea.Cmd {
 	if p.projects != nil {
 		return p.setProjects(p.projects)
 	}
-	return tea.Batch(Load(p.src, p.id), p.spin.Tick)
-}
-
-// Refresh marks the source's current default project.
-func (p *Picker) Refresh() tea.Cmd {
-	return p.setProjects(p.projects)
+	return tea.Batch(p.load(), p.spin.Tick)
 }
 
 func (p *Picker) setProjects(projects []jira.Project) tea.Cmd {
@@ -188,15 +203,14 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.list.Styles.Title = styles.Title()
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
-	case LoadedMsg:
-		if msg.ID != p.id {
-			return p, nil
-		}
+	case DefaultChanged:
+		return p, p.setProjects(p.projects)
+	case loadedMsg:
 		if msg.Err != nil {
 			p.err = msg.Err
 			return p, nil
 		}
-		return p, p.setProjects(msg.Projects)
+		return p, tea.Batch(p.setProjects(msg.Projects), tuimsg.Send(LoadedMsg(msg)))
 	case tea.KeyPressMsg:
 		return p, p.handleKey(msg)
 	}
@@ -206,7 +220,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !p.loaded {
 		if key.Matches(msg, p.keys.Close()) && p.cancellable {
-			return popup.Close()
+			return tuimsg.Close()
 		}
 		return nil
 	}
@@ -219,7 +233,7 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			break
 		}
 		if p.cancellable {
-			return popup.Close()
+			return tuimsg.Close()
 		}
 		return nil
 	case key.Matches(msg, p.keys.favorite):
@@ -227,13 +241,13 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if !ok {
 			return nil
 		}
-		return func() tea.Msg { return FavoriteMsg{Key: sel.Key} }
+		return tuimsg.Send(FavoriteMsg{Key: sel.Key})
 	case key.Matches(msg, p.keys.open):
 		sel, ok := p.list.SelectedItem().(item)
 		if !ok {
 			return nil
 		}
-		return popup.CloseWith(SelectedMsg{Key: sel.Key})
+		return tuimsg.Send(SelectedMsg{Key: sel.Key})
 	}
 	return p.forward(msg)
 }

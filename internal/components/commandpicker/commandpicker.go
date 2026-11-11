@@ -8,17 +8,17 @@ import (
 	"os/exec"
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/command"
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/config"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -38,7 +38,7 @@ type Picker struct {
 	choice   int
 	field    *huh.Select[int]
 	form     *huh.Form
-	keys     popup.KeyMap
+	keys     pane.KeyMap
 	width    int
 	height   int
 }
@@ -48,7 +48,7 @@ func New(commands []config.Command, issue jira.Issue, project, board string) *Pi
 	k := keys.Get()
 	p := &Picker{
 		commands: commands, issue: issue, project: project, board: board,
-		keys: popup.NewKeyMap(k.Close).WithLead(keys.Describe(k.Accept, "run")),
+		keys: pane.NewKeyMap(k.Close).WithLead(keys.Describe(k.Accept, "run")),
 	}
 	if len(commands) > 0 {
 		opts := make([]huh.Option[int], 0, len(commands))
@@ -80,14 +80,14 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if p.form == nil {
 		if km, ok := msg.(tea.KeyPressMsg); ok && key.Matches(km, p.keys.Close()) {
-			return p, popup.Close()
+			return p, tuimsg.Close()
 		}
 		return p, nil
 	}
 	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch {
 		case key.Matches(km, p.keys.Close()) && !p.consumesEsc():
-			return p, popup.Close()
+			return p, tuimsg.Close()
 		case key.Matches(km, keys.Get().Dismiss) && p.consumesEsc():
 			_, cmd := p.form.Update(msg)
 			return p, cmd
@@ -98,7 +98,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	_, cmd := p.form.Update(msg)
 	if p.form.State == huh.StateCompleted {
-		return p, popup.CloseWith(tuimsg.CommandSelected{
+		return p, tuimsg.Send(tuimsg.CommandSelected{
 			Command: p.commands[p.choice], Issue: p.issue, Project: p.project, Board: p.board,
 		})
 	}
@@ -109,20 +109,19 @@ func (p *Picker) consumesEsc() bool {
 	return p.field != nil && key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.field.KeyBinds()...)
 }
 
+// Title implements modal.Titled.
+func (p *Picker) Title() string { return "Commands" }
+
+// Footer implements modal.Footed.
+func (p *Picker) Footer() (string, help.KeyMap) { return "", p.keys }
+
 // View implements tea.Model.
 func (p *Picker) View() tea.View {
-	var body string
 	if p.form == nil {
-		body = styles.Dim().Render("No commands configured.")
-	} else {
-		p.form.WithWidth(p.width).WithHeight(max(1, p.height-2))
-		body = p.form.View()
+		return tea.NewView("\n" + styles.Dim().Render("No commands configured."))
 	}
-	km := p.keys.WithForm(nil, false)
-	h := styles.Help()
-	h.SetWidth(max(0, p.width))
-	help := h.View(km)
-	return tea.NewView(popup.Stack(p.height, []string{"Commands", ""}, strings.Split(body, "\n"), help))
+	p.form.WithWidth(p.width).WithHeight(max(1, p.height-1))
+	return tea.NewView("\n" + p.form.View())
 }
 
 // Load fetches ticket details and comments before rendering the selected command.

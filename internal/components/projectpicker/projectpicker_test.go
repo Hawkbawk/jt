@@ -20,7 +20,7 @@ func loaded(t *testing.T, src Source) *Picker {
 	t.Helper()
 	p := New(src, nil, true)
 	p.Init()
-	msg := Load(src, p.id)()
+	msg := p.load()()
 	p.Update(msg)
 	return p
 }
@@ -36,21 +36,13 @@ func TestMarksDefaultProject(t *testing.T) {
 	}
 }
 
-func TestIgnoresOtherPickersResponses(t *testing.T) {
-	p := New(fakeSource{}, nil, true)
-	p.Update(LoadedMsg{ID: p.id + 1, Projects: []jira.Project{{Key: "X"}}})
-	if p.Loaded() {
-		t.Fatal("picker used a response meant for another")
-	}
-}
-
 func TestFavoriteReportsHighlightedProject(t *testing.T) {
 	p := loaded(t, fakeSource{})
 	_, cmd := p.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	if cmd == nil {
 		t.Fatal("f did nothing")
 	}
-	if got, ok := cmd().(FavoriteMsg); !ok || got.Key != "ALPHA" {
+	if got := cmd(); got != (FavoriteMsg{Key: "ALPHA"}) {
 		t.Fatalf("got %#v, want FavoriteMsg for ALPHA", got)
 	}
 }

@@ -11,12 +11,12 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuedetail"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
+	"github.com/hawkbawk/jt/internal/components/issueview"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/system"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 )
 
 // ActionDoneMsg reports the result of a yank or open.
@@ -53,20 +53,20 @@ func NewIssueActions(b IssueBackend) IssueActions {
 }
 
 // Handle returns the command for msg on the given issue, which for some keys
-// opens a popup. It returns nil for keys that aren't actions.
+// opens a modal. It returns nil for keys that aren't actions.
 func (a IssueActions) Handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.Get().View):
-		return popup.Open(issuedetail.New(b, iss.Key, a.MD))
+		return modal.Open(issuedetail.New(b, iss.Key, a.MD))
 	case key.Matches(msg, keys.Get().Comments):
-		return popup.Open(issuecomments.New(b, iss.Key, a.MD))
+		return modal.Open(issuecomments.New(b, iss.Key, a.MD))
 	case key.Matches(msg, keys.Get().Move):
-		return popup.Open(issuemove.New(b, iss))
+		return modal.Open(issuemove.New(b, iss))
 	case key.Matches(msg, keys.Get().Assign):
-		return popup.Open(issueassign.New(b, iss))
+		return modal.Open(issueassign.New(b, iss))
 	case key.Matches(msg, keys.Get().Edit):
-		return popup.Open(issueedit.New(b, iss))
+		return modal.Open(issueedit.New(b, iss))
 	case key.Matches(msg, keys.Get().Yank):
 		return runAction(a.CopyText, b.IssueURL(iss.Key), "Copied URL for "+iss.Key, "copying URL")
 	case key.Matches(msg, keys.Get().Open):

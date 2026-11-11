@@ -1,4 +1,4 @@
-// Package screen holds the chrome that jt's screens share: the window and popup
+// Package screen holds the chrome that jt's screens share: the window and modal
 // host, the quit prompt, issue actions and the theme setting.
 package screen
 
@@ -11,15 +11,15 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 )
 
 // Layout is the state and behavior the jt screens share: the window size,
-// spinner, status line, help footer, quit confirmation and the popup host.
+// spinner, status line, help footer, quit confirmation and the modal host.
 // Screens embed it.
 type Layout struct {
 	Settings      Settings
@@ -28,7 +28,7 @@ type Layout struct {
 	Status        string
 	Help          help.Model
 
-	Popup popup.Model
+	Modal modal.Model
 	Quit  QuitGuard
 }
 
@@ -38,7 +38,7 @@ func NewLayout(settings Settings) Layout {
 		Settings: settings,
 		Spinner:  pane.NewSpinner(),
 		Help:     styles.Help(),
-		Popup:    popup.New(popup.WithStyle(styles.Popup)),
+		Modal:    modal.New(modal.WithStyle(styles.Modal), modal.WithTitleStyle(styles.Title), modal.WithHelp(styles.Help)),
 	}
 }
 
@@ -56,10 +56,10 @@ func (c Layout) BodyHeight(km help.KeyMap) int {
 	return max(0, c.Height-1-lipgloss.Height(c.FooterView(km)))
 }
 
-// Resize applies a new window size and refits the popup.
+// Resize applies a new window size and refits the modal.
 func (c *Layout) Resize(msg tea.WindowSizeMsg, km help.KeyMap) tea.Cmd {
 	c.Width, c.Height = msg.Width, msg.Height
-	return c.UpdatePopup(tea.WindowSizeMsg{Width: c.Width, Height: c.BodyHeight(km)})
+	return c.UpdateModal(tea.WindowSizeMsg{Width: c.Width, Height: c.BodyHeight(km)})
 }
 
 // Restyle rebuilds what the layout copied from the styles when it was built.
@@ -68,7 +68,7 @@ func (c *Layout) Restyle() {
 	c.Help = styles.Help()
 }
 
-// SelectTheme applies the tint picked in the theme popup and saves it.
+// SelectTheme applies the tint picked in the theme modal and saves it.
 func (c *Layout) SelectTheme(msg themepicker.SelectedMsg) tea.Cmd {
 	tint.SetTint(msg.Tint)
 	c.Restyle()
@@ -82,14 +82,23 @@ func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) {
 	}
 }
 
-// UpdatePopup passes msg to the popup host.
-func (c *Layout) UpdatePopup(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(popup.OpenMsg); ok {
+// UpdateModal passes msg to the modal host, which gives the content anything
+// that isn't the host's own. Screens call it for messages the modal owns
+// (check with Modal.Routes) and to broadcast to the content.
+func (c *Layout) UpdateModal(msg tea.Msg) tea.Cmd {
+	was := c.Modal.IsOpen()
+	var cmd tea.Cmd
+	c.Modal, cmd = c.Modal.Update(msg)
+	c.collapseOnOpen(was)
+	return cmd
+}
+
+// collapseOnOpen collapses the help when a modal opened, since the modal's
+// own help replaces it.
+func (c *Layout) collapseOnOpen(was bool) {
+	if !was && c.Modal.IsOpen() {
 		c.CollapseHelp()
 	}
-	var cmd tea.Cmd
-	c.Popup, cmd = c.Popup.Update(msg)
-	return cmd
 }
 
 // Tick advances the spinner while busy. The tick chain ends once nothing is

@@ -1,4 +1,4 @@
-// Package issueview is a popup model that loads an issue and shows its details
+// Package issueview is a modal model that loads an issue and shows its details
 // or its comments as scrollable text under a title. It leaves everything below
 // the text to its owner: the owner sizes it for the room its own footer leaves,
 // draws the footer under View, and decides when to hide it.
@@ -13,7 +13,6 @@
 package issueview
 
 import (
-	"strings"
 	"sync/atomic"
 
 	"charm.land/bubbles/v2/key"
@@ -41,29 +40,27 @@ type Markdown = func(md string, width int) string
 // loadedMsg carries what a model loaded: the issue for Details, the comments
 // for Comments.
 type loadedMsg struct {
-	id       int64
 	issue    *jira.IssueDetail
 	comments *jira.CommentList
 	err      error
 }
 
-var lastID atomic.Int64
+var lastPlacement atomic.Uint64
 
 // Model shows part of an issue as scrollable text under a title. Build one with
 // Details or Comments.
 type Model struct {
 	top, bottom key.Binding
-	// id tags the model's loads, so a late response that reaches a newer model
-	// for the same issue is ignored.
-	id      int64
-	backend Backend
-	key     string
-	title   string
-	fetch   func(b Backend, key string) loadedMsg
-	render  func(m *Model, width int, md Markdown) string
-	md      Markdown
-	issue   *jira.IssueDetail
-	list    *jira.CommentList
+	// placement is the ID the model places its images under.
+	placement uint64
+	backend   Backend
+	key       string
+	title     string
+	fetch     func(b Backend, key string) loadedMsg
+	render    func(m *Model, width int, md Markdown) string
+	md        Markdown
+	issue     *jira.IssueDetail
+	list      *jira.CommentList
 	// images is the state of each image asked for, by attachment ID. placed is
 	// the size each is placed at. imageRows is where the images not asked for
 	// yet are in the text. pending is what the terminal still has to be sent
@@ -107,7 +104,7 @@ func newModel(b Backend, title, issueKey string, md Markdown, fetch func(Backend
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title()))
 	return &Model{
 		top: keys.Get().Top, bottom: keys.Get().Bottom,
-		id: lastID.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
+		placement: lastPlacement.Add(1), backend: b, key: issueKey, title: title + " · " + issueKey,
 		fetch: fetch, render: render, md: md, vp: vp, spin: sp, loading: true,
 		images: map[string]*imageState{}, placed: map[string]termimage.Placement{},
 	}
@@ -119,12 +116,8 @@ func (m *Model) Init() tea.Cmd { return tea.Batch(m.Reload(), m.spin.Tick) }
 // Reload fetches the issue again and swaps in the new text when it arrives,
 // keeping the old text meanwhile.
 func (m *Model) Reload() tea.Cmd {
-	b, id, issueKey, fetch := m.backend, m.id, m.key, m.fetch
-	return func() tea.Msg {
-		msg := fetch(b, issueKey)
-		msg.id = id
-		return msg
-	}
+	b, issueKey, fetch := m.backend, m.key, m.fetch
+	return func() tea.Msg { return fetch(b, issueKey) }
 }
 
 // SetBusy keeps the spinner running while the owner waits on something that
@@ -174,7 +167,7 @@ func (m *Model) refresh() {
 
 // Update shows the issue once it loads and handles sizing, the spinner and
 // scroll keys. It ignores everything else, including the keys that close the
-// popup. The title takes one line of the height it's sized for. Images in the
+// modal. The title takes one line of the height it's sized for. Images in the
 // text load after it, and replace the text that stood in for them.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
@@ -185,7 +178,6 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		switch {
-		case msg.id != m.id:
 		case msg.err != nil:
 			m.err, m.loading = msg.err, false
 		case msg.issue != nil || msg.comments != nil:
@@ -198,7 +190,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.vp.SetWidth(msg.Width)
-		m.vp.SetHeight(max(1, msg.Height-1))
+		m.vp.SetHeight(max(1, msg.Height))
 		m.refresh()
 		return m, nil
 	case spinner.TickMsg:
@@ -223,7 +215,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// View draws the title and the text, or the error or loading state in its place.
+// Title is what the model shows and the issue's key, for its owner to draw.
+func (m *Model) Title() string { return m.title }
+
+// View draws the text, or the error or loading state in its place.
 func (m *Model) View() tea.View {
 	var body string
 	h := m.vp.Height()
@@ -235,10 +230,7 @@ func (m *Model) View() tea.View {
 	default:
 		// The viewport pads itself to its size, and measuring a screen of
 		// image placeholders a second time is slow.
-		return tea.NewView(styles.Title().Render(m.title) + "\n" + m.vp.View())
+		return tea.NewView(m.vp.View())
 	}
-	return tea.NewView(strings.Join([]string{
-		styles.Title().Render(m.title),
-		lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body),
-	}, "\n"))
+	return tea.NewView(lipgloss.NewStyle().Height(h).MaxHeight(h).Render(body))
 }

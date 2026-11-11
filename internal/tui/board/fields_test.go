@@ -32,8 +32,8 @@ func TestEditSaveClosesAndReloadsBoard(t *testing.T) {
 	m = tuitest.PressDrain(t, m, "e", "enter")
 	m = typeText(t, m, "!")
 	m = tuitest.PressDrain(t, m, "enter", "ctrl+s")
-	if len(fb.Edited) != 1 || m.Popup.IsOpen() || len(fb.BoardCalls) != 2 || !strings.Contains(m.Status, "Updated 1 field on T-2") {
-		t.Fatalf("popup should close and the board reload, status = %q", m.Status)
+	if len(fb.Edited) != 1 || m.Modal.IsOpen() || len(fb.BoardCalls) != 2 || !strings.Contains(m.Status, "Updated 1 field on T-2") {
+		t.Fatalf("modal should close and the board reload, status = %q", m.Status)
 	}
 }
 

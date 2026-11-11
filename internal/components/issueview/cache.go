@@ -10,7 +10,7 @@ import (
 )
 
 // imageCache keeps decoded images by attachment ID, since an attachment's
-// content doesn't change. However many popups ask for an image at once, it's
+// content doesn't change. However many modals ask for an image at once, it's
 // loaded once, and only a few loads run at a time. An image holds its upload
 // sequence only until it's sent to the terminal, so entries stay small and
 // nothing is evicted.
@@ -28,7 +28,7 @@ type flight struct {
 	err  error
 }
 
-// imageStore is the cache every popup shares.
+// imageStore is the cache every modal shares.
 var imageStore = newImageCache(parallelLoads)
 
 func newImageCache(parallel int64) *imageCache {

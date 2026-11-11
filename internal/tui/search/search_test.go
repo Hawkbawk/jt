@@ -65,7 +65,7 @@ func typeInto(t *testing.T, m Model, field, text string) Model {
 
 func searchType(t *testing.T, m Model, text string) Model {
 	t.Helper()
-	if m.Popup.IsOpen() {
+	if m.Modal.IsOpen() {
 		for _, r := range text {
 			next, cmd := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 			m = tuitest.Drain(t, next.(Model), cmd)
@@ -471,12 +471,12 @@ func TestSearchIssueActions(t *testing.T) {
 	fb.TransitionList = []jira.Transition{{ID: "31", Name: "Done", To: "Done"}}
 
 	m = tuitest.PressDrain(t, m, "v")
-	if !m.Popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Details here") {
-		t.Fatalf("details popup didn't open:\n%s", ansi.Strip(m.render()))
+	if !m.Modal.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Details here") {
+		t.Fatalf("details modal didn't open:\n%s", ansi.Strip(m.render()))
 	}
 	m = tuitest.PressDrain(t, m, "esc")
-	if m.Popup.IsOpen() {
-		t.Fatal("esc should close the popup")
+	if m.Modal.IsOpen() {
+		t.Fatal("esc should close the modal")
 	}
 
 	// Moving an issue searches again.
@@ -485,8 +485,8 @@ func TestSearchIssueActions(t *testing.T) {
 	if len(fb.Moved) != 1 || fb.Moved[0] != "DEMO-2:31" {
 		t.Fatalf("moved = %q", fb.Moved)
 	}
-	if m.Popup.IsOpen() || len(fb.FindCalls) != 2 {
-		t.Errorf("popup = %v, searches = %q, selected = %v", m.Popup.Content(), fb.FindCalls, m.results.selected())
+	if m.Modal.IsOpen() || len(fb.FindCalls) != 2 {
+		t.Errorf("modal = %v, searches = %q, selected = %v", m.Modal.Content(), fb.FindCalls, m.results.selected())
 	}
 	if !strings.Contains(m.Status, "Moved DEMO-2 to Done") {
 		t.Errorf("status = %q", m.Status)
@@ -511,7 +511,7 @@ func TestSearchSelectPreviewsAndRestoresFocus(t *testing.T) {
 	m, fb := searched(t)
 	fb.Detail = &jira.IssueDetail{Issue: foundIssues()[1], Description: "Selected issue preview"}
 	m = tuitest.PressDrain(t, m, "j", "enter")
-	if !m.Popup.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
+	if !m.Modal.IsOpen() || !strings.Contains(ansi.Strip(m.render()), "Selected issue preview") {
 		t.Fatal("selecting a result should open its preview")
 	}
 	m = tuitest.PressDrain(t, m, "esc")
@@ -531,8 +531,8 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 		t.Fatalf("comments = %q", fb.Commented)
 	}
 	m = tuitest.PressDrain(t, m, "esc", "e")
-	if !m.Popup.IsOpen() || !strings.Contains(m.View().Content, "Edit · DEMO-2") {
-		t.Fatalf("edit shortcut should use the hovered result: %T", m.Popup.Content())
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Edit · DEMO-2") {
+		t.Fatalf("edit shortcut should use the hovered result: %T", m.Modal.Content())
 	}
 }
 
@@ -541,9 +541,9 @@ func TestSearchRunsConfiguredCommandForHoveredIssue(t *testing.T) {
 	m, _ := searched(t)
 	m.commands = []config.Command{{Name: "Open ticket", Command: "code"}}
 	m = tuitest.PressDrain(t, m, "j", "C")
-	p, ok := m.Popup.Content().(*commandpicker.Picker)
+	p, ok := m.Modal.Content().(*commandpicker.Picker)
 	if !ok || !strings.Contains(p.View().Content, "Open ticket") {
-		t.Fatalf("C should open the command picker for the hovered issue: %T", m.Popup.Content())
+		t.Fatalf("C should open the command picker for the hovered issue: %T", m.Modal.Content())
 	}
 	if m.results.selected().Key != "DEMO-2" {
 		t.Fatalf("selected issue = %q, want DEMO-2", m.results.selected().Key)

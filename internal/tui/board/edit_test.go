@@ -25,12 +25,12 @@ func issueModel(t *testing.T) (Model, *tuitest.Backend) {
 	return m, fb
 }
 
-func TestIssueKeysOpenSeparatePopups(t *testing.T) {
+func TestIssueKeysOpenSeparateModals(t *testing.T) {
 	m, _ := issueModel(t)
 	for key, title := range map[string]string{"m": "Move · T-2", "a": "Assign · T-2", "e": "Edit · T-2"} {
 		opened := tuitest.PressDrain(t, m, key)
-		if !opened.Popup.IsOpen() || !strings.Contains(opened.View().Content, title) {
-			t.Errorf("%s should open the %q popup", key, title)
+		if !opened.Modal.IsOpen() || !strings.Contains(opened.View().Content, title) {
+			t.Errorf("%s should open the %q modal", key, title)
 		}
 	}
 }
@@ -39,20 +39,20 @@ func TestMove(t *testing.T) {
 	m, fb := issueModel(t)
 	m = tuitest.PressDrain(t, m, "m")
 	if !strings.Contains(m.View().Content, "Move to In Progress") {
-		t.Fatal("move popup should list transitions")
+		t.Fatal("move modal should list transitions")
 	}
 	m = tuitest.PressDrain(t, m, "enter")
-	if len(fb.Moved) != 1 || fb.Moved[0] != "T-2:11" || m.Popup.IsOpen() {
-		t.Fatalf("moved = %v, popup = %v", fb.Moved, m.Popup.Content())
+	if len(fb.Moved) != 1 || fb.Moved[0] != "T-2:11" || m.Modal.IsOpen() {
+		t.Fatalf("moved = %v, modal = %v", fb.Moved, m.Modal.Content())
 	}
 }
 
-func TestMoveErrorKeepsPopupOpen(t *testing.T) {
+func TestMoveErrorKeepsModalOpen(t *testing.T) {
 	m, fb := issueModel(t)
 	fb.MoveErr = errors.New("workflow says no")
 	m = tuitest.PressDrain(t, m, "m", "enter")
-	if !m.Popup.IsOpen() || !strings.Contains(m.View().Content, "workflow says no") || len(fb.BoardCalls) != 1 {
-		t.Fatal("failed move should leave the popup open with the error and skip the reload")
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "workflow says no") || len(fb.BoardCalls) != 1 {
+		t.Fatal("failed move should leave the modal open with the error and skip the reload")
 	}
 }
 
@@ -71,8 +71,8 @@ func TestAssignSearchesForPeople(t *testing.T) {
 	if len(fb.Assigned) != 1 || fb.Assigned[0] != "T-2:a" {
 		t.Fatalf("assigned = %v", fb.Assigned)
 	}
-	if m.Popup.IsOpen() || len(fb.BoardCalls) != 2 {
-		t.Fatal("popup should close and the board reload")
+	if m.Modal.IsOpen() || len(fb.BoardCalls) != 2 {
+		t.Fatal("modal should close and the board reload")
 	}
 	if !strings.Contains(m.Status, "Assigned T-2 to Alice") {
 		t.Fatalf("status = %q", m.Status)
@@ -83,7 +83,7 @@ func TestAssignKeysTypeIntoSearch(t *testing.T) {
 	m, fb := issueModel(t)
 	m = tuitest.PressDrain(t, m, "a")
 	m = typeText(t, m, "qjk")
-	if !m.Popup.IsOpen() || fb.UserQueries[len(fb.UserQueries)-1] != "qjk" {
+	if !m.Modal.IsOpen() || fb.UserQueries[len(fb.UserQueries)-1] != "qjk" {
 		t.Fatalf("typing should go to the search, searches = %v", fb.UserQueries)
 	}
 }
@@ -96,16 +96,16 @@ func TestUnassign(t *testing.T) {
 	}
 }
 
-func TestAssignErrorKeepsPopupOpenForRetry(t *testing.T) {
+func TestAssignErrorKeepsModalOpenForRetry(t *testing.T) {
 	m, fb := issueModel(t)
 	fb.AssignErr = errors.New("no permission")
 	m = tuitest.PressDrain(t, m, "a", "enter", "enter")
-	if !m.Popup.IsOpen() || !strings.Contains(m.View().Content, "no permission") {
-		t.Fatal("failed assign should leave the popup open with the error")
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "no permission") {
+		t.Fatal("failed assign should leave the modal open with the error")
 	}
 	fb.AssignErr = nil
 	m = tuitest.PressDrain(t, m, "enter", "enter")
-	if len(fb.Assigned) != 1 || fb.Assigned[0] != "T-2:b" || m.Popup.IsOpen() {
+	if len(fb.Assigned) != 1 || fb.Assigned[0] != "T-2:b" || m.Modal.IsOpen() {
 		t.Fatalf("retry should assign, got %v", fb.Assigned)
 	}
 }

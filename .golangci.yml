@@ -2,6 +2,7 @@ version: "2"
 
 linters:
   enable:
+    - depguard
     - errorlint
     - misspell
     - modernize
@@ -9,6 +10,14 @@ linters:
     - unconvert
     - unparam
   settings:
+    depguard:
+      rules:
+        modal:
+          files:
+            - "**/internal/tui/modal/**"
+          deny:
+            - pkg: github.com/hawkbawk/jt
+              desc: modal is a standalone bubble, so it can't depend on the rest of jt
     govet:
       # Same analyzers gopls runs by default (plus a few extras), minus the
       # noisy opt-in ones.

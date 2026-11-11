@@ -85,7 +85,7 @@ func TestLoadShowsDetailsAndRerendersOnResize(t *testing.T) {
 	if m.Loading() || !m.Ready() || len(widths) != 2 || widths[0] != 40 || widths[1] != 30 {
 		t.Fatalf("text should render at each width, got %v", widths)
 	}
-	if v := view(m); !strings.Contains(v, "Details · T-1") || !strings.Contains(v, "one") {
+	if v := view(m); m.Title() != "Details · T-1" || !strings.Contains(v, "one") {
 		t.Fatalf("missing title or summary:\n%s", v)
 	}
 }
@@ -94,7 +94,10 @@ func TestCommentsShowEveryComment(t *testing.T) {
 	m := sized(Comments(fakeBackend{comments: comments()}, "T-1", plain), 60, 20)
 	loaded(m)
 	v := view(m)
-	for _, want := range []string{"Comments · T-1", "Ada", "first comment", "Grace", "second comment"} {
+	if m.Title() != "Comments · T-1" {
+		t.Errorf("title = %q", m.Title())
+	}
+	for _, want := range []string{"Ada", "first comment", "Grace", "second comment"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("comments missing %q:\n%s", want, v)
 		}
@@ -112,15 +115,6 @@ func TestLoadErrorIsShown(t *testing.T) {
 	loaded(m)
 	if v := view(m); m.Ready() || !strings.Contains(v, "Error: boom") {
 		t.Fatalf("unexpected error view:\n%s", v)
-	}
-}
-
-func TestLoadForAnotherModelIsIgnored(t *testing.T) {
-	m := sized(Details(fakeBackend{detail: detail()}, "T-1", plain), 40, 10)
-	m.Update(loadedMsg{id: m.id - 1, issue: &jira.IssueDetail{}})
-	m.Update(loadedMsg{id: m.id - 1, err: errors.New("boom")})
-	if !m.Loading() || m.err != nil {
-		t.Fatal("model accepted an issue it did not request")
 	}
 }
 
@@ -283,7 +277,7 @@ func TestImagesLoadWhenScrolledNear(t *testing.T) {
 	}
 }
 
-func TestPopupsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
+func TestModalsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
 	supported(t, true)
 	t.Cleanup(func() { imageStore.reset() })
 	files := map[string][]byte{"img-1": pngFile(t)}
@@ -300,7 +294,7 @@ func TestPopupsPlaceTheSameImageUnderTheirOwnIDs(t *testing.T) {
 	}
 }
 
-func TestImageLoadedForAClosedPopupIsSentByTheNext(t *testing.T) {
+func TestImageLoadedForAClosedModalIsSentByTheNext(t *testing.T) {
 	supported(t, true)
 	t.Cleanup(func() { imageStore.reset() })
 	files := map[string][]byte{"img-1": pngFile(t)}
@@ -312,6 +306,6 @@ func TestImageLoadedForAClosedPopupIsSentByTheNext(t *testing.T) {
 	next.images["img-1"] = &imageState{}
 	next.imageLoaded(next.loadImage("img-1")().(imageMsg))
 	if len(next.pending) != 2 || !strings.HasPrefix(next.pending[0], "\x1b_G") {
-		t.Errorf("image wasn't uploaded by the popup that showed it: %q", next.pending)
+		t.Errorf("image wasn't uploaded by the modal that showed it: %q", next.pending)
 	}
 }

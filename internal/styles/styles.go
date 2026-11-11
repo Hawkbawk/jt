@@ -28,7 +28,7 @@ type set struct {
 
 	title, brand, dim, errStyle, warn, key, header lipgloss.Style
 	columnHeader, focusedColumnHeader              lipgloss.Style
-	card, selectedCard, popup, input               lipgloss.Style
+	card, selectedCard, modal, input               lipgloss.Style
 
 	highlight, muted, grid, accent color.Color
 	markdown                       ansi.StyleConfig
@@ -85,7 +85,7 @@ func build(t *tint.Tint) *set {
 		focusedColumnHeader: columnHeader.Foreground(highlight),
 		card:                card,
 		selectedCard:        card.Border(lipgloss.ThickBorder()).BorderForeground(highlight),
-		popup: lipgloss.NewStyle().
+		modal: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accent).
 			Padding(0, 1),
@@ -145,8 +145,8 @@ func Card() lipgloss.Style { return get().card }
 // SelectedCard styles the focused issue card.
 func SelectedCard() lipgloss.Style { return get().selectedCard }
 
-// Popup styles the frame around popups.
-func Popup() lipgloss.Style { return get().popup }
+// Modal styles the frame around modals.
+func Modal() lipgloss.Style { return get().modal }
 
 // Input styles the border around text inputs.
 func Input() lipgloss.Style { return get().input }
