@@ -6,16 +6,16 @@ package issuemove
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -31,6 +31,12 @@ type Moved struct {
 	To  string
 }
 
+// ForParent marks Moved for the popup host.
+func (Moved) ForParent() {}
+
+// ClosesPopup marks Moved for the popup host.
+func (Moved) ClosesPopup() {}
+
 var _ tuimsg.Finished = Moved{}
 
 // IssueKey implements tuimsg.Finished.
@@ -39,35 +45,32 @@ func (m Moved) IssueKey() string { return m.Key }
 // Status implements tuimsg.Finished.
 func (m Moved) Status() string { return "Moved " + m.Key + " to " + m.To }
 
-func newKeyMap() popup.KeyMap {
-	return popup.NewKeyMap(keys.Describe(keys.Get().Close, "cancel"))
+func newKeyMap() pane.KeyMap {
+	return pane.NewKeyMap(keys.Describe(keys.Get().Close, "cancel"))
 }
 
 type transitionsLoadedMsg struct {
-	id          int64
 	key         string
 	transitions []jira.Transition
 	err         error
 }
 
 type transitionDoneMsg struct {
-	id  int64
 	key string
 	to  string
 	err error
 }
 
-func loadTransitions(b Backend, id int64, iss jira.Issue) tea.Cmd {
+func loadTransitions(b Backend, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
 		ts, err := b.Transitions(iss)
-		return transitionsLoadedMsg{id: id, key: iss.Key, transitions: ts, err: err}
+		return transitionsLoadedMsg{key: iss.Key, transitions: ts, err: err}
 	}
 }
 
 // Model lists the transitions available for an issue.
 type Model struct {
-	keys    popup.KeyMap
-	id      int64
+	keys    pane.KeyMap
 	issue   jira.Issue
 	backend Backend
 	spin    spinner.Model
@@ -84,12 +87,12 @@ type Model struct {
 
 // New returns a popup that moves iss.
 func New(b Backend, iss jira.Issue) *Model {
-	return &Model{id: pane.NewID(), issue: iss, backend: b, spin: pane.NewSpinner(), keys: newKeyMap()}
+	return &Model{issue: iss, backend: b, spin: pane.NewSpinner(), keys: newKeyMap()}
 }
 
 // Init implements tea.Model.
 func (p *Model) Init() tea.Cmd {
-	return tea.Batch(loadTransitions(p.backend, p.id, p.issue), p.spin.Tick)
+	return tea.Batch(loadTransitions(p.backend, p.issue), p.spin.Tick)
 }
 
 func (p *Model) loading() bool {
@@ -127,9 +130,6 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 	case spinner.TickMsg:
 		return pane.Tick(&p.spin, msg, p.loading())
 	case transitionsLoadedMsg:
-		if msg.id != p.id {
-			return nil
-		}
 		p.transitions, p.err, p.loaded = msg.transitions, msg.err, true
 		if len(p.transitions) == 0 {
 			return nil
@@ -137,12 +137,9 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		p.buildForm()
 		return p.form.Init()
 	case transitionDoneMsg:
-		if msg.id != p.id {
-			return nil
-		}
 		p.applying, p.err = false, msg.err
 		if msg.err == nil {
-			return popup.CloseWith(Moved{Key: msg.key, To: msg.to})
+			return tuimsg.Send(Moved{Key: msg.key, To: msg.to})
 		}
 		// The form finished to send the move, so a retry needs a new one.
 		p.buildForm()
@@ -150,7 +147,7 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 	case tea.KeyPressMsg:
 		if p.form == nil || (!p.consumesEsc() && key.Matches(msg, p.keys.Close())) {
 			if key.Matches(msg, p.keys.Close()) {
-				return popup.Close()
+				return tuimsg.Close()
 			}
 			return nil
 		}
@@ -164,9 +161,9 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 	}
 	p.applying, p.err = true, nil
 	t := p.transitions[p.choice]
-	b, id, issueKey := p.backend, p.id, p.issue.Key
+	b, issueKey := p.backend, p.issue.Key
 	return func() tea.Msg {
-		return transitionDoneMsg{id: id, key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
+		return transitionDoneMsg{key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
 	}
 }
 
@@ -174,26 +171,29 @@ func (p *Model) consumesEsc() bool {
 	return p.selectField != nil && key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.selectField.KeyBinds()...)
 }
 
+// Title implements popup.Titled.
+func (p *Model) Title() string { return pane.Title("Move", p.issue.Key) }
+
+// Footer implements popup.Footed.
+func (p *Model) Footer() (string, help.KeyMap) {
+	if p.form == nil {
+		return "", p.keys
+	}
+	return "", p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
+}
+
 // View implements tea.Model.
 func (p *Model) View() tea.View {
-	var body []string
-	km := p.keys
+	body := []string{""}
 	switch {
 	case !p.loaded && p.err == nil:
 		body = append(body, p.spin.View()+" Loading transitions…")
 	case p.form == nil && p.err == nil:
 		body = append(body, styles.Dim().Render("No transitions available."))
 	case p.form != nil:
-		p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.ChromeLines-2))
-		body = strings.Split(p.form.View(), "\n")
-		km = km.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
+		p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.BodyLines))
+		body = append(body, p.form.View())
 	}
 	body = append(body, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
-	return tea.NewView(popup.Stack(p.height, pane.Header("Move", p.issue.Key), body, p.footer(km)))
-}
-
-func (p *Model) footer(km popup.KeyMap) string {
-	h := styles.Help()
-	h.SetWidth(max(0, p.width))
-	return h.View(km)
+	return tea.NewView(strings.Join(body, "\n"))
 }

@@ -11,10 +11,10 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -25,19 +25,25 @@ type SelectedMsg struct {
 	ID   string
 }
 
+// ForParent marks SelectedMsg for the popup host.
+func (SelectedMsg) ForParent() {}
+
+// ClosesPopup marks SelectedMsg for the popup host.
+func (SelectedMsg) ClosesPopup() {}
+
 // resetMsg carries the terminal's own theme, once it has answered.
 type resetMsg struct{ tint *tint.Tint }
 
 // keyMap is the picker's key bindings.
 type keyMap struct {
-	popup.KeyMap
+	pane.KeyMap
 	apply, reset key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	apply, reset := keys.Describe(k.Accept, "apply"), keys.Describe(k.Reset, "reset to terminal")
-	return keyMap{KeyMap: popup.NewKeyMap(k.Dismiss).WithLead(apply, reset), apply: apply, reset: reset}
+	return keyMap{KeyMap: pane.NewKeyMap(k.Dismiss).WithLead(apply, reset), apply: apply, reset: reset}
 }
 
 type item struct {
@@ -128,7 +134,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
 	case resetMsg:
-		return p, popup.CloseWith(SelectedMsg{Tint: msg.tint})
+		return p, tuimsg.Send(SelectedMsg{Tint: msg.tint})
 	case tea.KeyPressMsg:
 		if cmd, ok := p.handleKey(msg); ok {
 			return p, cmd
@@ -146,13 +152,13 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 	switch {
 	case key.Matches(msg, p.keys.Close()) && !p.list.IsFiltered():
-		return popup.Close(), true
+		return tuimsg.Close(), true
 	case key.Matches(msg, p.keys.apply):
 		t := p.Selected()
 		if t == nil {
 			return nil, true
 		}
-		return popup.CloseWith(SelectedMsg{Tint: t, ID: t.ID}), true
+		return tuimsg.Send(SelectedMsg{Tint: t, ID: t.ID}), true
 	case key.Matches(msg, p.keys.reset):
 		// Reading the terminal's theme waits on it, so it happens in a command.
 		return func() tea.Msg { return resetMsg{tint: styles.Default(context.Background())} }, true

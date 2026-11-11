@@ -5,18 +5,17 @@ package issueassign
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/components/userselect"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
-	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -35,6 +34,12 @@ type Assigned struct {
 	Cleared bool
 }
 
+// ForParent marks Assigned for the popup host.
+func (Assigned) ForParent() {}
+
+// ClosesPopup marks Assigned for the popup host.
+func (Assigned) ClosesPopup() {}
+
 var _ tuimsg.Finished = Assigned{}
 
 // IssueKey implements tuimsg.Finished.
@@ -48,12 +53,11 @@ func (a Assigned) Status() string {
 	return "Assigned " + a.Key + " to " + a.To
 }
 
-func newKeyMap() popup.KeyMap {
-	return popup.NewKeyMap(keys.Describe(keys.Get().Dismiss, "cancel"))
+func newKeyMap() pane.KeyMap {
+	return pane.NewKeyMap(keys.Describe(keys.Get().Dismiss, "cancel"))
 }
 
 type assignDoneMsg struct {
-	id       int64
 	issueKey string
 	to       string
 	// cleared is set when the issue was unassigned.
@@ -63,8 +67,7 @@ type assignDoneMsg struct {
 
 // Model searches for the person to assign an issue to.
 type Model struct {
-	keys     popup.KeyMap
-	id       int64
+	keys     pane.KeyMap
 	issueKey string
 	backend  Backend
 	assignee jira.Option
@@ -79,7 +82,7 @@ type Model struct {
 
 // New starts on the issue's current assignee.
 func New(b Backend, iss jira.Issue) *Model {
-	p := &Model{id: pane.NewID(), issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: pane.NewSpinner(), keys: newKeyMap()}
+	p := &Model{issueKey: iss.Key, backend: b, assignee: iss.Assignee, spin: pane.NewSpinner(), keys: newKeyMap()}
 	p.picker = userselect.New("Assignee", searchUsers(b, iss.Key)).Value(&p.assignee)
 	p.form = pane.NewForm(p.picker.Field())
 	return p
@@ -97,12 +100,9 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		return p, pane.Tick(&p.spin, msg, p.applying)
 	case assignDoneMsg:
-		if msg.id != p.id {
-			return p, nil
-		}
 		p.applying, p.err = false, msg.err
 		if msg.err == nil {
-			return p, popup.CloseWith(Assigned{Key: msg.issueKey, To: msg.to, Cleared: msg.cleared})
+			return p, tuimsg.Send(Assigned{Key: msg.issueKey, To: msg.to, Cleared: msg.cleared})
 		}
 		// The form finished to send the assignment, so a retry needs a new one.
 		p.form = pane.NewForm(p.picker.Field())
@@ -110,7 +110,7 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		// Typed text always goes to the form, so only esc closes.
 		if key.Matches(msg, p.keys.Close()) {
-			return p, popup.Close()
+			return p, tuimsg.Close()
 		}
 	}
 	if p.applying {
@@ -122,25 +122,25 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	p.applying, p.err = true, nil
 	who := p.assignee
-	b, id, issueKey := p.backend, p.id, p.issueKey
+	b, issueKey := p.backend, p.issueKey
 	return p, tea.Batch(p.spin.Tick, func() tea.Msg {
-		return assignDoneMsg{id: id, issueKey: issueKey, to: who.Name, cleared: who.ID == "", err: b.Assign(issueKey, who.ID)}
+		return assignDoneMsg{issueKey: issueKey, to: who.Name, cleared: who.ID == "", err: b.Assign(issueKey, who.ID)}
 	})
+}
+
+// Title implements popup.Titled.
+func (p *Model) Title() string { return pane.Title("Assign", p.issueKey) }
+
+// Footer implements popup.Footed.
+func (p *Model) Footer() (string, help.KeyMap) {
+	return "", p.keys.WithForm(p.form.KeyBinds(), false)
 }
 
 // View implements tea.Model.
 func (p *Model) View() tea.View {
-	p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.ChromeLines-2))
-	lines := strings.Split(p.form.View(), "\n")
-	lines = append(lines, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Assigning…", ""))
-	return tea.NewView(popup.Stack(p.height, pane.Header("Assign", p.issueKey), lines, p.footer()))
-}
-
-func (p *Model) footer() string {
-	h := styles.Help()
-	h.SetWidth(max(0, p.width))
-	km := p.keys.WithForm(p.form.KeyBinds(), false)
-	return h.View(km)
+	p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.BodyLines))
+	status := pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Assigning…", "")
+	return tea.NewView(strings.Join([]string{"", p.form.View(), "", status}, "\n"))
 }
 
 // searchUsers looks up people who can be put on the issue.

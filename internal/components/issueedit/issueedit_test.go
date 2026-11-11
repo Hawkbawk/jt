@@ -17,6 +17,7 @@ import (
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/popup"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
 func TestMain(m *testing.M) {
@@ -97,7 +98,7 @@ func fieldsHost(t *testing.T) (*host, *fakeBackend) {
 
 func (h *host) open() bool { return !h.closed }
 
-func (h *host) view() string { return h.m.View().Content }
+func (h *host) view() string { return tuitest.PopupView(h.m, h.m.width) }
 
 func (h *host) send(msg tea.Msg) {
 	h.t.Helper()
@@ -131,8 +132,11 @@ func (h *host) drain(cmd tea.Cmd) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
 		case spinner.TickMsg:
-		case popup.CloseMsg:
-			h.closed, h.then = true, msg.Then
+		case popup.Closes:
+			h.closed = true
+			if _, ok := msg.(popup.ForParent); ok {
+				h.then = msg
+			}
 		default:
 			_, next := h.m.Update(msg)
 			queue = append(queue, next)

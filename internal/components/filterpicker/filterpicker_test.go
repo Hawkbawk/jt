@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
 func keyMsg(s string) tea.KeyPressMsg {
@@ -49,7 +49,7 @@ func press(t *testing.T, p *Picker, keys ...string) tea.Cmd {
 // p, until the popup closes. Forms finish a step after the key that completes
 // them, so the close can arrive a message or two later. ok is false if nothing
 // closed.
-func settle(p *Picker, cmd tea.Cmd) (popup.CloseMsg, bool) {
+func settle(p *Picker, cmd tea.Cmd) (tea.Msg, bool) {
 	queue := []tea.Cmd{cmd}
 	for steps := 0; len(queue) > 0 && steps < 100; steps++ {
 		c := queue[0]
@@ -60,19 +60,17 @@ func settle(p *Picker, cmd tea.Cmd) (popup.CloseMsg, bool) {
 		switch msg := c().(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case popup.CloseMsg:
+		case popup.Closes:
 			return msg, true
 		default:
 			_, next := p.Update(msg)
 			queue = append(queue, next)
 		}
 	}
-	return popup.CloseMsg{}, false
+	return nil, false
 }
 
-func view(p *Picker) string {
-	return ansi.Strip(p.View().Content)
-}
+func view(p *Picker) string { return tuitest.PopupView(p, p.width) }
 
 func testFilters() ([]jira.Filter, []jira.Filter) {
 	quick := []jira.Filter{{Name: "Only Bugs", JQL: "type = Bug"}, {Name: "Recent", JQL: "updated >= -7d"}}
@@ -125,14 +123,14 @@ func TestApplyReportsFilterAndClears(t *testing.T) {
 	if !ok {
 		t.Fatal("enter should close the popup with the selection")
 	}
-	msg := closed.Then.(SelectedMsg)
+	msg := closed.(SelectedMsg)
 	if msg.Filter == nil || *msg.Filter != assignees[0] {
 		t.Fatalf("selected = %+v, want Alice", msg.Filter)
 	}
 
 	p = newPicker(quick, assignees, &assignees[0])
 	closed, _ = settle(p, press(t, p, "k", "enter"))
-	if msg := closed.Then.(SelectedMsg); msg.Filter != nil {
+	if msg := closed.(SelectedMsg); msg.Filter != nil {
 		t.Fatalf("All issues should clear the filter, got %+v", msg.Filter)
 	}
 }
@@ -168,7 +166,7 @@ func TestSearchesBothLists(t *testing.T) {
 			if !ok {
 				t.Fatal("enter should apply the matching filter and close")
 			}
-			if msg := closed.Then.(SelectedMsg); msg.Filter == nil || *msg.Filter != want {
+			if msg := closed.(SelectedMsg); msg.Filter == nil || *msg.Filter != want {
 				t.Fatalf("selected = %+v, want %+v", msg.Filter, want)
 			}
 		})

@@ -1,10 +1,8 @@
-// Package pane holds what popups that act on an issue share: the spinner and
-// request IDs, the form theme, the title and the status line.
+// Package pane holds what popups that act on an issue share: the spinner, the
+// form theme, the title and the status line.
 package pane
 
 import (
-	"sync/atomic"
-
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
@@ -13,14 +11,12 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 )
 
-// ChromeLines is what a pane draws around its body: a title and a blank line
-// above it, and the help footer below.
-const ChromeLines = 3
+// BodyLines is what a pane draws around its form: a blank line above it, and a
+// blank line and the status line below.
+const BodyLines = 3
 
-// Header is the title a pane draws above its body.
-func Header(title, issueKey string) []string {
-	return []string{styles.Title().Render(title + " · " + issueKey), ""}
-}
+// Title is a pane's title for the issue with issueKey.
+func Title(title, issueKey string) string { return title + " · " + issueKey }
 
 // NewSpinner returns a themed spinner.
 func NewSpinner() spinner.Model {
@@ -46,13 +42,6 @@ func Restart(s spinner.Model, wasBusy, busy bool, cmd tea.Cmd) tea.Cmd {
 	}
 	return cmd
 }
-
-var lastID atomic.Int64
-
-// NewID returns an ID for a pane to put on the requests it makes. A response
-// that arrives after the pane closed, perhaps with another pane open for the
-// same issue by then, carries the old ID and gets ignored.
-func NewID() int64 { return lastID.Add(1) }
 
 // StatusLine shows the error, the in-progress text or the hint, in that order.
 func StatusLine(spin string, innerW int, err error, applying bool, progress, hint string) string {

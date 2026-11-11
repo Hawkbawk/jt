@@ -6,15 +6,16 @@ package filterpicker
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // SelectedMsg reports the filter the user picked. A nil Filter clears it.
@@ -22,25 +23,24 @@ type SelectedMsg struct {
 	Filter *jira.Filter
 }
 
+// ForParent marks SelectedMsg for the popup host.
+func (SelectedMsg) ForParent() {}
+
+// ClosesPopup marks SelectedMsg for the popup host.
+func (SelectedMsg) ClosesPopup() {}
+
 // keyMap is the picker's key bindings.
 type keyMap struct {
-	popup.KeyMap
+	pane.KeyMap
 	nextTab, prevTab, left, right, blur key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	return keyMap{
-		KeyMap:  popup.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
+		KeyMap:  pane.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
 		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right, blur: k.Dismiss,
 	}
-}
-
-// helpView renders a help footer in the given width.
-func helpView(km popup.KeyMap, width int) string {
-	h := styles.Help()
-	h.SetWidth(max(0, width))
-	return h.View(km)
 }
 
 type tab struct {
@@ -144,7 +144,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_, cmd := p.form.Update(msg)
 			return p, cmd
 		case !p.Filtering() && key.Matches(km, p.keys.Close()):
-			return p, popup.Close()
+			return p, tuimsg.Close()
 		case key.Matches(km, p.keys.nextTab) || (!p.Filtering() && key.Matches(km, p.keys.right)):
 			p.switchTab(1)
 			return p, p.form.Init()
@@ -159,7 +159,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p.cursor > 0 {
 			sel = &p.tabs[p.tab].filters[p.cursor-1]
 		}
-		return p, popup.CloseWith(SelectedMsg{Filter: sel})
+		return p, tuimsg.Send(SelectedMsg{Filter: sel})
 	}
 	return p, cmd
 }
@@ -178,9 +178,11 @@ func (p *Picker) View() tea.View {
 		}
 		tabs[i] = style.Render(t.name)
 	}
-	header := []string{strings.Join(tabs, ""), ""}
-	p.form.WithWidth(p.width).WithHeight(max(1, p.height-len(header)-1))
-	body := strings.Split(p.form.View(), "\n")
-	km := p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
-	return tea.NewView(popup.Stack(p.height, header, body, helpView(km, p.width)))
+	p.form.WithWidth(p.width).WithHeight(max(1, p.height-2))
+	return tea.NewView(strings.Join([]string{strings.Join(tabs, ""), "", p.form.View()}, "\n"))
+}
+
+// Footer implements popup.Footed.
+func (p *Picker) Footer() (string, help.KeyMap) {
+	return "", p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
 }

@@ -11,12 +11,12 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuedetail"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
+	"github.com/hawkbawk/jt/internal/components/issueview"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/system"
 	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
 )
 
 // ActionDoneMsg reports the result of a yank or open.

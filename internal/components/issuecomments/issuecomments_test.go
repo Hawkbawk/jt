@@ -8,9 +8,11 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/popup"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
+	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
 type fakeBackend struct {
@@ -80,7 +82,7 @@ func run(m *Model, cmd tea.Cmd) []tea.Msg {
 		switch msg := msg.(type) {
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case Closed, Sent:
+		case popup.ForParent, popup.Closes:
 			out = append(out, msg)
 		default:
 			_, next := m.Update(msg)
@@ -107,7 +109,7 @@ func open(t *testing.T, b *fakeBackend) *Model {
 	return m
 }
 
-func view(m *Model) string { return ansi.Strip(m.View().Content) }
+func view(m *Model) string { return tuitest.PopupView(m, m.issue.Width()) }
 
 func TestComposeAndSend(t *testing.T) {
 	b := newBackend()
@@ -211,7 +213,7 @@ func TestSendErrorKeepsDraft(t *testing.T) {
 
 func TestEscClosesOnlyWhenNotWriting(t *testing.T) {
 	m := open(t, newBackend())
-	if out := press(m, "q"); len(out) != 1 || out[0] != (Closed{}) {
+	if out := press(m, "q"); len(out) != 1 || out[0] != (tuimsg.Closed{}) {
 		t.Fatalf("q should ask to close, got %v", out)
 	}
 }

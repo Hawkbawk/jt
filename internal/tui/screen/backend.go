@@ -5,7 +5,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
-	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
+	"github.com/hawkbawk/jt/internal/components/issueview"
 )
 
 // IssueBackend is the Jira functionality the issue actions and their popups

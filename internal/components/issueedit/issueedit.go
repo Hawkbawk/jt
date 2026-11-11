@@ -18,12 +18,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/components/usersearch"
 	"github.com/hawkbawk/jt/internal/jira"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
@@ -40,6 +39,12 @@ type Edited struct {
 	Count int
 }
 
+// ForParent marks Edited for the popup host.
+func (Edited) ForParent() {}
+
+// ClosesPopup marks Edited for the popup host.
+func (Edited) ClosesPopup() {}
+
 var _ tuimsg.Finished = Edited{}
 
 // IssueKey implements tuimsg.Finished.
@@ -51,23 +56,21 @@ func (e Edited) Status() string {
 }
 
 type fieldsLoadedMsg struct {
-	id     int64
 	key    string
 	fields []jira.EditField
 	err    error
 }
 
 type fieldsSavedMsg struct {
-	id    int64
 	key   string
 	count int
 	err   error
 }
 
-func loadFields(b Backend, id int64, iss jira.Issue) tea.Cmd {
+func loadFields(b Backend, iss jira.Issue) tea.Cmd {
 	return func() tea.Msg {
 		fs, err := b.EditFields(iss)
-		return fieldsLoadedMsg{id: id, key: iss.Key, fields: fs, err: err}
+		return fieldsLoadedMsg{key: iss.Key, fields: fs, err: err}
 	}
 }
 
@@ -343,7 +346,6 @@ func (k keyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp(
 // form. Changes are kept until they're all saved together.
 type Model struct {
 	keys    keyMap
-	id      int64
 	key     string
 	issue   jira.Issue
 	backend Backend
@@ -367,12 +369,12 @@ type Model struct {
 
 // New returns the popup that edits iss, which loads the fields when it opens.
 func New(b Backend, iss jira.Issue) *Model {
-	return &Model{id: pane.NewID(), key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
+	return &Model{key: iss.Key, issue: iss, backend: b, spin: pane.NewSpinner(), help: styles.Help(), keys: newKeyMap()}
 }
 
 // Init implements tea.Model.
 func (p *Model) Init() tea.Cmd {
-	return tea.Batch(loadFields(p.backend, p.id, p.issue), p.spin.Tick)
+	return tea.Batch(loadFields(p.backend, p.issue), p.spin.Tick)
 }
 
 func (p *Model) loading() bool {
@@ -464,7 +466,7 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 			p.confirmClose = true
 			return nil
 		}
-		return popup.Close()
+		return tuimsg.Close()
 	}
 	return p.update(km)
 }
@@ -472,7 +474,7 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(km, p.keys.confirm):
-		return popup.Close()
+		return tuimsg.Close()
 	case key.Matches(km, p.keys.deny):
 		p.confirmClose = false
 	case key.Matches(km, p.keys.send):
@@ -485,9 +487,6 @@ func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case fieldsLoadedMsg:
-		if msg.id != p.id {
-			break
-		}
 		p.loaded, p.err = true, msg.err
 		for _, f := range msg.fields {
 			p.vals = append(p.vals, newFieldValue(f, searchUsers(p.backend, p.key)))
@@ -495,12 +494,9 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		p.list = newFieldList(p.vals)
 		return nil
 	case fieldsSavedMsg:
-		if msg.id != p.id {
-			return nil
-		}
 		p.saving, p.err = false, msg.err
 		if msg.err == nil {
-			return popup.CloseWith(Edited{Key: msg.key, Count: msg.count})
+			return tuimsg.Send(Edited{Key: msg.key, Count: msg.count})
 		}
 		return nil
 	}
@@ -548,9 +544,9 @@ func (p *Model) save() tea.Cmd {
 		return nil
 	}
 	p.saving, p.err = true, nil
-	b, id, issueKey := p.backend, p.id, p.key
+	b, issueKey := p.backend, p.key
 	return func() tea.Msg {
-		return fieldsSavedMsg{id: id, key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
+		return fieldsSavedMsg{key: issueKey, count: len(changed), err: b.Edit(issueKey, changed)}
 	}
 }
 
@@ -573,25 +569,32 @@ func (p *Model) changed() []jira.EditField {
 // holding is true while a field's form is open, which blocks saving.
 func (p *Model) holding() bool { return p.form != nil }
 
+// Title implements popup.Titled.
+func (p *Model) Title() string { return pane.Title("Edit", p.key) }
+
+// Footer implements popup.Footed.
+func (p *Model) Footer() (string, help.KeyMap) {
+	if n := p.unsaved(); n > 0 && p.confirmClose {
+		return styles.Warn().Render("Discard " + changes(n) + "? "), p.keys.withMode(helpDiscard)
+	}
+	return "", p.keys.withMode(helpPane)
+}
+
+func changes(n int) string { return fmt.Sprintf("%d unsaved %s", n, plural(n, "change")) }
+
 // View implements tea.Model.
 func (p *Model) View() tea.View {
 	p.help.SetWidth(p.width)
-	title := styles.Title().Render("Edit · " + p.key)
-	footer := p.help.View(p.keys.withMode(helpPane))
+	var warn string
 	if n := p.unsaved(); n > 0 {
-		changes := fmt.Sprintf("%d unsaved %s", n, plural(n, "change"))
-		warn := styles.Warn().Render("● " + changes)
+		warn = styles.Warn().Render("● " + changes(n))
 		if !p.holding() {
 			warn += styles.Dim().Render(" · ") + p.help.View(p.keys.withMode(helpSave))
 		}
-		title += "  " + warn
-		if p.confirmClose {
-			footer = styles.Warn().Render("Discard "+changes+"? ") + p.help.View(p.keys.withMode(helpDiscard))
-		}
 	}
 	spin := p.spin.View()
-	var lines []string
-	formH := max(1, p.height-pane.ChromeLines-2)
+	lines := []string{warn}
+	formH := max(1, p.height-pane.BodyLines)
 	switch {
 	case !p.loaded && p.err == nil:
 		lines = append(lines, spin+" Loading fields…")
@@ -604,13 +607,13 @@ func (p *Model) View() tea.View {
 		if resized {
 			p.growText()
 		}
-		lines = strings.Split(p.form.View(), "\n")
+		lines = append(lines, p.form.View())
 	case p.loaded:
 		p.list.SetSize(p.width, formH)
-		lines = strings.Split(p.list.View(), "\n")
+		lines = append(lines, p.list.View())
 	}
 	lines = append(lines, "", pane.StatusLine(spin, p.width, p.err, p.saving, "Saving…", p.hint()))
-	return tea.NewView(popup.Stack(p.height, []string{title, ""}, lines, footer))
+	return tea.NewView(strings.Join(lines, "\n"))
 }
 
 // refreshMsg makes the form redraw its content, which it only does on updates.

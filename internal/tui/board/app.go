@@ -10,7 +10,6 @@ import (
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
-	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -88,6 +87,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = status
 		return m, cmd
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		return m.handleKey(k)
+	}
+	if cmd, ok := m.RoutePopup(msg); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -107,17 +112,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.OnThemeSaved(msg)
 		return m, nil
 
-	case tea.KeyPressMsg:
-		return m.handleKey(msg)
-
 	case spinner.TickMsg:
-		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
-
-	case issuecomments.Closed:
-		return m, popup.Close()
-
-	case popup.OpenMsg, popup.CloseMsg:
-		return m, m.UpdatePopup(msg)
+		return m, m.Tick(msg, m.busy())
 
 	case projectpicker.SelectedMsg:
 		m.Status = ""
@@ -127,7 +123,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err == nil {
 			m.projects = msg.Projects
 		}
-		return m, m.UpdatePopup(msg)
+		return m, nil
 
 	case boardpicker.SelectedMsg:
 		return m.selectBoard(msg)
@@ -158,10 +154,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.board.backend.SetDefaultProject(msg.key)
 		m.Status = styles.Dim().Render("Saved " + msg.key + " as the default project")
-		if p, ok := m.Popup.Content().(*projectpicker.Picker); ok {
-			return m, p.Refresh()
-		}
-		return m, nil
+		return m, m.UpdatePopup(projectpicker.DefaultChanged{})
 
 	case boardLoadedMsg:
 		m.board.update(msg)
@@ -173,11 +166,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screen.ActionDoneMsg:
 		m.Status = msg.Display()
-		return m, nil
 	}
-	// A popup's responses and form run on their own messages, so it gets
-	// what's left.
-	return m, m.UpdatePopup(msg)
+	return m, nil
 }
 
 // selectBoard opens the picked board.

@@ -100,7 +100,6 @@ type imageState struct {
 // imageMsg carries an attachment that was downloaded and decoded, or why it
 // wasn't.
 type imageMsg struct {
-	id    int64
 	media string
 	img   *termimage.Image
 	err   error
@@ -124,7 +123,7 @@ func (m *Model) loadVisible() tea.Cmd {
 }
 
 func (m *Model) loadImage(media string) tea.Cmd {
-	b, id := m.backend, m.id
+	b := m.backend
 	return func() tea.Msg {
 		img, err := imageStore.get(media, func() (*termimage.Image, error) {
 			data, err := b.Attachment(media)
@@ -133,13 +132,13 @@ func (m *Model) loadImage(media string) tea.Cmd {
 			}
 			return termimage.Decode(data)
 		})
-		return imageMsg{id: id, media: media, img: img, err: err}
+		return imageMsg{media: media, img: img, err: err}
 	}
 }
 
 func (m *Model) imageLoaded(msg imageMsg) {
 	st := m.images[msg.media]
-	if msg.id != m.id || st == nil {
+	if st == nil {
 		return
 	}
 	if msg.err != nil {
@@ -199,7 +198,7 @@ func (m *Model) imageBlock(media string, width int, md Markdown) string {
 	}
 	// Each model places images under an ID of its own, so another popup
 	// showing the same image at another size doesn't change this one's.
-	p := st.img.Fit(uint64(m.id), width*4/5, m.vp.Height()*4/5)
+	p := st.img.Fit(m.placement, width*4/5, m.vp.Height()*4/5)
 	if m.placed[media] != p {
 		m.placed[media] = p
 		m.pending = append(m.pending, st.img.Sequence(p))

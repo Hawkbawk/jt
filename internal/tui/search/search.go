@@ -13,7 +13,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
-	"github.com/hawkbawk/jt/internal/components/issuecomments"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -90,7 +89,7 @@ func (m Model) WithWarning(text string) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend, 0), m.form.form.Init())
+	return tea.Batch(loadIssueTypes(m.backend), projectpicker.Load(m.backend), m.form.form.Init())
 }
 
 func (m Model) busy() bool { return m.searching }
@@ -135,6 +134,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = status
 		return m, cmd
 	}
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		return m.handleKey(k)
+	}
+	wasOpen := m.Popup.IsOpen()
+	if cmd, ok := m.RoutePopup(msg); ok {
+		if m.Popup.IsOpen() != wasOpen {
+			m.fit()
+		}
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
 		m.Status = msg.Status()
@@ -148,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tuimsg.ThemeChanged:
 		cmd := m.restyle()
-		return m, cmd
+		return m, tea.Batch(cmd, m.UpdatePopup(msg))
 
 	case themepicker.SelectedMsg:
 		cmd := m.SelectTheme(msg)
@@ -160,18 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		return m, tea.Batch(m.Tick(msg, m.busy()), m.UpdatePopup(msg))
-
-	case issuecomments.Closed:
-		return m, popup.Close()
-
-	case popup.OpenMsg, popup.CloseMsg:
-		cmd := m.UpdatePopup(msg)
-		m.fit()
-		return m, cmd
-
-	case tea.KeyPressMsg:
-		return m.handleKey(msg)
+		return m, m.Tick(msg, m.busy())
 
 	case issueTypesLoadedMsg:
 		if msg.err != nil {
@@ -199,15 +197,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = msg.Display()
 		return m, nil
 	}
-	cmd := m.forwardMsg(msg)
+	cmd := m.updateForm(msg)
 	return m, cmd
-}
-
-func (m *Model) forwardMsg(msg tea.Msg) tea.Cmd {
-	if m.Popup.IsOpen() {
-		return m.UpdatePopup(msg)
-	}
-	return m.updateForm(msg)
 }
 
 func (m Model) currentJQL() (string, error) {

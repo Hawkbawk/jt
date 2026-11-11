@@ -1,25 +1,18 @@
-// Package issuedetail is a tea.Model that shows an issue's details above a key
-// hint. It knows nothing about where it's shown: it asks to be dismissed with
-// popup.Close.
+// Package issuedetail is the popup that shows an issue's details.
 package issuedetail
 
 import (
 	"fmt"
-	"strings"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
+	"github.com/hawkbawk/jt/internal/components/issueview"
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
-	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/issueview"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
-
-// hintLines is the height of the key hint under an issue's text.
-const hintLines = 1
 
 // Model shows an issue's details.
 type Model struct {
@@ -37,35 +30,28 @@ func (p *Model) Init() tea.Cmd { return p.Issue.Init() }
 // Update implements tea.Model.
 func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		msg.Height -= hintLines
-		_, cmd := p.Issue.Update(msg)
-		return p, cmd
 	case tea.KeyPressMsg:
 		if key.Matches(msg, keys.Get().Close) {
-			return p, popup.Close()
+			return p, tuimsg.Close()
 		}
 	}
 	_, cmd := p.Issue.Update(msg)
 	return p, cmd
 }
 
-// View implements tea.Model.
-func (p *Model) View() tea.View {
-	var hint string
-	if p.Issue.Ready() {
-		prefix := styles.Dim().Render(fmt.Sprintf("%3.f%% · ", p.Issue.ScrollPercent()*100))
-		hint = prefix + helpView(newViewKeys(), p.Issue.Width()-lipgloss.Width(prefix))
+// Title implements popup.Titled.
+func (p *Model) Title() string { return p.Issue.Title() }
+
+// Footer implements popup.Footed.
+func (p *Model) Footer() (string, help.KeyMap) {
+	if !p.Issue.Ready() {
+		return "", nil
 	}
-	return tea.NewView(strings.Join([]string{p.Issue.View().Content, hint}, "\n"))
+	return styles.Dim().Render(fmt.Sprintf("%3.f%% · ", p.Issue.ScrollPercent()*100)), newViewKeys()
 }
 
-// helpView renders a help footer in the given width.
-func helpView(km help.KeyMap, width int) string {
-	h := styles.Help()
-	h.SetWidth(max(0, width))
-	return h.View(km)
-}
+// View implements tea.Model.
+func (p *Model) View() tea.View { return p.Issue.View() }
 
 // viewKeyMap is the help footer under an issue's details.
 type viewKeyMap struct {

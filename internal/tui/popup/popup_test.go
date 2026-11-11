@@ -1,9 +1,12 @@
 package popup
 
 import (
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -87,8 +90,10 @@ func TestOpenShowsContentAndRunsInit(t *testing.T) {
 	}
 	var inits int
 	for _, msg := range flatten(cmd) {
-		if _, ok := msg.(initMsg); ok {
-			inits++
+		if c, ok := msg.(contentMsg); ok {
+			if _, ok := c.msg.(initMsg); ok {
+				inits++
+			}
 		}
 	}
 	if inits != 1 {
@@ -143,11 +148,10 @@ func TestContentClosesWithResult(t *testing.T) {
 	if !m.IsOpen() {
 		t.Fatal("popup closed before the CloseMsg arrived")
 	}
-	closeMsg, ok := msg.(CloseMsg)
-	if !ok {
-		t.Fatalf("got %T, want CloseMsg", msg)
+	if c, ok := msg.(contentMsg); !ok || c.msg != (CloseMsg{Then: doneMsg{}}) {
+		t.Fatalf("got %#v, want the content's CloseMsg", msg)
 	}
-	m, msg = send(t, m, closeMsg)
+	m, msg = send(t, m, msg)
 	if m.IsOpen() {
 		t.Fatal("CloseMsg did not close")
 	}
@@ -232,5 +236,172 @@ func TestOverlayDrawsOverBackgroundOnlyWhenOpen(t *testing.T) {
 	}
 	if plain().Overlay(bg) != bg {
 		t.Fatal("closed host changed the background")
+	}
+}
+
+// cmdStub returns cmd from its next Update.
+type cmdStub struct {
+	stub
+	cmd tea.Cmd
+}
+
+func (s *cmdStub) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	s.got = append(s.got, msg)
+	cmd := s.cmd
+	s.cmd = nil
+	return s, cmd
+}
+
+// returning opens a cmdStub and returns the host's command for the cmd the
+// stub returns from its next Update.
+func returning(t *testing.T, cmd tea.Cmd) (Model, *cmdStub, tea.Cmd) {
+	t.Helper()
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	s := &cmdStub{}
+	m, _ = send(t, m, OpenMsg{Content: s})
+	s.got, s.cmd = nil, cmd
+	m, out := m.Update(struct{}{})
+	s.got = nil
+	return m, s, out
+}
+
+func TestResponseComesBackToContent(t *testing.T) {
+	m, s, cmd := returning(t, func() tea.Msg { return doneMsg{} })
+	msg := cmd()
+	if _, _, ok := m.Route(msg); !ok {
+		t.Fatalf("Route didn't take the content's message %#v", msg)
+	}
+	if len(s.got) != 1 || s.got[0] != (doneMsg{}) {
+		t.Fatalf("content got %v", s.got)
+	}
+	if _, _, ok := m.Route(doneMsg{}); ok {
+		t.Fatal("Route took a message that isn't the popup's")
+	}
+}
+
+func TestResponseForEarlierPopupIsDropped(t *testing.T) {
+	m, _, cmd := returning(t, func() tea.Msg { return doneMsg{} })
+	second := &stub{}
+	m, _ = send(t, m, OpenMsg{Content: second})
+	m, out, ok := m.Route(cmd())
+	if !ok || out != nil || len(second.got) != 0 || !m.IsOpen() {
+		t.Fatalf("handled=%v, second got %v", ok, second.got)
+	}
+}
+
+func TestBatchAndSequenceAreAddressed(t *testing.T) {
+	for name, combine := range map[string]func(...tea.Cmd) tea.Cmd{"batch": tea.Batch, "sequence": tea.Sequence} {
+		done := func() tea.Msg { return doneMsg{} }
+		init := func() tea.Msg { return initMsg{} }
+		_, _, cmd := returning(t, combine(done, init))
+		msg := cmd()
+		cmds := reflect.ValueOf(msg)
+		if cmds.Kind() != reflect.Slice || cmds.Len() != 2 {
+			t.Fatalf("%s: got %#v", name, msg)
+		}
+		for i := range cmds.Len() {
+			if _, ok := cmds.Index(i).Interface().(tea.Cmd)().(contentMsg); !ok {
+				t.Errorf("%s: cmd %d isn't addressed", name, i)
+			}
+		}
+	}
+}
+
+func TestBubbleteaMessagesPassThrough(t *testing.T) {
+	_, _, cmd := returning(t, tea.Quit)
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("tea.Quit was addressed to the content")
+	}
+}
+
+type parentMsg struct{}
+
+func (parentMsg) ForParent() {}
+
+type closeMsg struct{}
+
+func (closeMsg) ClosesPopup() {}
+
+type resultMsg struct{}
+
+func (resultMsg) ForParent()   {}
+func (resultMsg) ClosesPopup() {}
+
+func TestForParentReachesParent(t *testing.T) {
+	m, s, cmd := returning(t, func() tea.Msg { return parentMsg{} })
+	msg := cmd()
+	if _, _, ok := m.Route(msg); msg != (parentMsg{}) || ok || len(s.got) != 0 {
+		t.Fatalf("got %#v, routed=%v, content got %v", msg, ok, s.got)
+	}
+}
+
+func TestClosesClosesThePopup(t *testing.T) {
+	for name, tc := range map[string]struct {
+		msg  tea.Msg
+		then tea.Msg
+	}{
+		"plain":  {closeMsg{}, nil},
+		"result": {resultMsg{}, resultMsg{}},
+	} {
+		m, s, cmd := returning(t, func() tea.Msg { return tc.msg })
+		m, out, ok := m.Route(cmd())
+		if !ok || m.IsOpen() || len(s.got) != 0 {
+			t.Fatalf("%s: routed=%v open=%v content got %v", name, ok, m.IsOpen(), s.got)
+		}
+		var then tea.Msg
+		if out != nil {
+			then = out()
+		}
+		if then != tc.then {
+			t.Fatalf("%s: parent got %#v, want %#v", name, then, tc.then)
+		}
+	}
+}
+
+func TestCloseFromEarlierPopupIsDropped(t *testing.T) {
+	m, _, cmd := returning(t, func() tea.Msg { return closeMsg{} })
+	m, _ = send(t, m, OpenMsg{Content: &stub{}})
+	if m, _, _ = m.Route(cmd()); !m.IsOpen() {
+		t.Fatal("an earlier popup's close closed the new one")
+	}
+}
+
+// chromed has a title and a footer, and a body of lines.
+type chromed struct {
+	stub
+	lines int
+}
+
+func (c *chromed) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	c.stub.Update(msg)
+	return c, nil
+}
+
+func (c *chromed) Title() string { return "title" }
+
+func (c *chromed) Footer() (string, help.KeyMap) { return "status", nil }
+
+func (c *chromed) View() tea.View {
+	body := make([]string, c.lines)
+	for i := range body {
+		body[i] = fmt.Sprint(i)
+	}
+	return tea.NewView(strings.Join(body, "\n"))
+}
+
+func TestHostDrawsTitleAndFooter(t *testing.T) {
+	m, _ := plain().Update(tea.WindowSizeMsg{Width: 20, Height: 10})
+	for _, n := range []int{1, 20} {
+		c := &chromed{lines: n}
+		m, _ := send(t, m, OpenMsg{Content: c})
+		// 8 of the 10 rows, less the border, then less the title and footer.
+		if c.size.Height != 4 {
+			t.Fatalf("content sized %d rows, want 4", c.size.Height)
+		}
+		lines := strings.Split(ansi.Strip(m.View()), "\n")
+		inner := lines[1 : len(lines)-1]
+		if len(inner) != 6 || !strings.Contains(inner[0], "title") || !strings.Contains(inner[5], "status") {
+			t.Fatalf("%d body lines: title and footer not pinned:\n%s", n, strings.Join(lines, "\n"))
+		}
 	}
 }

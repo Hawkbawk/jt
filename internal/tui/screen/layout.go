@@ -11,11 +11,11 @@ import (
 	"charm.land/lipgloss/v2"
 	tint "github.com/lrstanley/bubbletint/v2"
 
+	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/icons"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/popup"
-	"github.com/hawkbawk/jt/internal/tui/popup/pane"
 )
 
 // Layout is the state and behavior the jt screens share: the window size,
@@ -38,7 +38,7 @@ func NewLayout(settings Settings) Layout {
 		Settings: settings,
 		Spinner:  pane.NewSpinner(),
 		Help:     styles.Help(),
-		Popup:    popup.New(popup.WithStyle(styles.Popup)),
+		Popup:    popup.New(popup.WithStyle(styles.Popup), popup.WithTitleStyle(styles.Title), popup.WithHelp(styles.Help)),
 	}
 }
 
@@ -82,14 +82,33 @@ func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) {
 	}
 }
 
-// UpdatePopup passes msg to the popup host.
+// UpdatePopup passes msg to the popup host, which gives the content anything
+// that isn't the host's own.
 func (c *Layout) UpdatePopup(msg tea.Msg) tea.Cmd {
-	if _, ok := msg.(popup.OpenMsg); ok {
-		c.CollapseHelp()
-	}
+	was := c.Popup.IsOpen()
 	var cmd tea.Cmd
 	c.Popup, cmd = c.Popup.Update(msg)
+	c.collapseOnOpen(was)
 	return cmd
+}
+
+// RoutePopup handles msg when it belongs to the popup, as popup.Model.Route
+// does, and reports whether it did.
+func (c *Layout) RoutePopup(msg tea.Msg) (tea.Cmd, bool) {
+	was := c.Popup.IsOpen()
+	var cmd tea.Cmd
+	var ok bool
+	c.Popup, cmd, ok = c.Popup.Route(msg)
+	c.collapseOnOpen(was)
+	return cmd, ok
+}
+
+// collapseOnOpen collapses the help when a popup opened, since the popup's
+// own help replaces it.
+func (c *Layout) collapseOnOpen(was bool) {
+	if !was && c.Popup.IsOpen() {
+		c.CollapseHelp()
+	}
 }
 
 // Tick advances the spinner while busy. The tick chain ends once nothing is
