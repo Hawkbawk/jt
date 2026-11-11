@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	jqlTextRe    = regexp.MustCompile(`(?i)\btextfields\s*~\s*"((?:[^"\\]|\\.)*)"`)
 	jqlProjectRe = regexp.MustCompile(`(?i)\bproject\s*=\s*"([^"]+)"`)
 	jqlKeyRe     = regexp.MustCompile(`(?i)\bkey\s*=\s*([A-Za-z][A-Za-z0-9_]*-\d+)`)
 	jqlKeysRe    = regexp.MustCompile(`(?i)\bkey\s+in\s*\(([^)]*)\)`)
@@ -44,6 +45,12 @@ func (b *Backend) Search(jql string) ([]jira.Issue, error) {
 
 func searchMatcher(jql string) func(*issue) bool {
 	conds := []func(*issue) bool{jqlMatcher(jql)}
+	if m := jqlTextRe.FindStringSubmatch(jql); m != nil {
+		text := strings.ToLower(strings.NewReplacer(`\"`, `"`, `\\`, `\`).Replace(m[1]))
+		conds = append(conds, func(i *issue) bool {
+			return strings.Contains(strings.ToLower(i.Values["summary"].Text+"\n"+i.Values["description"].Text), text)
+		})
+	}
 	if m := jqlProjectRe.FindStringSubmatch(jql); m != nil {
 		conds = append(conds, func(i *issue) bool { return i.project() == m[1] })
 	}

@@ -72,6 +72,11 @@ func TestSearch(t *testing.T) {
 		t.Errorf("descending starts with %s, want %s", desc[0].Key, all[len(all)-1].Key)
 	}
 
+	word := strings.ToUpper(strings.Fields(all[1].Summary)[0])
+	text, _ := f.Search(`textfields ~ "` + word + `"`)
+	if !slices.ContainsFunc(text, func(i jira.Issue) bool { return i.Key == all[1].Key }) || len(text) == len(all) {
+		t.Errorf("text search for %q found %d of %d issues", word, len(text), len(all))
+	}
 	none, _ := f.Search(`created >= "2999-01-01 00:00"`)
 	if len(none) != 0 {
 		t.Errorf("future search found %d issues", len(none))

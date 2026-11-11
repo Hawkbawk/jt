@@ -25,6 +25,7 @@ func TestSearchQueryJQL(t *testing.T) {
 		},
 		{"not in sprint", SearchQuery{Sprint: SprintNotActive, Keys: []string{"A-1"}}, "sprint not in openSprints() AND key = A-1"},
 		{"quotes", SearchQuery{IssueType: `Sub "task"`}, `issuetype = "Sub \"task\""`},
+		{"text", SearchQuery{Text: `login "bug"`, Project: "DEMO"}, `textfields ~ "login \"bug\"" AND project = "DEMO"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,5 +46,25 @@ func TestParseKeys(t *testing.T) {
 	}
 	if got, err := ParseKeys("  "); err != nil || got != nil {
 		t.Errorf("blank = %v, %v", got, err)
+	}
+}
+
+func TestParseSearchText(t *testing.T) {
+	tests := []struct {
+		in, project, key, text string
+		wantErr                bool
+	}{
+		{" 12345 ", "demo", "DEMO-12345", "", false},
+		{"12345", "", "", "", true},
+		{"ops-7", "DEMO", "OPS-7", "", false},
+		{"login page", "DEMO", "", "login page", false},
+		{"DEMO-1 broken", "DEMO", "", "DEMO-1 broken", false},
+		{"", "DEMO", "", "", false},
+	}
+	for _, tt := range tests {
+		key, text, err := ParseSearchText(tt.in, tt.project)
+		if key != tt.key || text != tt.text || (err != nil) != tt.wantErr {
+			t.Errorf("ParseSearchText(%q, %q) = %q, %q, %v", tt.in, tt.project, key, text, err)
+		}
 	}
 }

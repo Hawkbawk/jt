@@ -18,6 +18,7 @@ import (
 const anyOption = "Any"
 
 const (
+	fieldText    = "text"
 	fieldProject = "project"
 	fieldType    = "type"
 	fieldSprint  = "sprint"
@@ -29,11 +30,8 @@ const (
 	fieldJQL     = "jql"
 )
 
-// maxFormHeight is the form height the columns need, with a blank line between
-// fields and room for an error footer.
-const maxFormHeight = 14
-
 type searchValues struct {
+	text               string
 	project, issueType string
 	sprint             jira.SprintFilter
 	sort               jira.SortField
@@ -42,12 +40,16 @@ type searchValues struct {
 	created, updated   string
 }
 
-// searchForm owns one huh form, laid out in two columns in basic mode.
+// searchForm owns one huh form. Basic mode is a search box, which shows the
+// filters in two columns when they're turned on.
 type searchForm struct {
 	values   searchValues
 	jql      string
 	advanced bool
-	now      func() time.Time
+	filters  bool
+	// defaultProject is the project an issue number in the search box is in.
+	defaultProject string
+	now            func() time.Time
 
 	form       *huh.Form
 	project    *huh.Input
@@ -61,10 +63,11 @@ type searchForm struct {
 
 func newSearchForm(project string) *searchForm {
 	f := &searchForm{
-		values: searchValues{project: project, sort: jira.SortUpdated, descending: true},
-		now:    time.Now,
-		width:  80,
-		height: 24,
+		values:         searchValues{project: project, sort: jira.SortCreated, descending: true},
+		defaultProject: project,
+		now:            time.Now,
+		width:          80,
+		height:         24,
 	}
 	f.build()
 	return f
@@ -82,6 +85,9 @@ func (f *searchForm) build() tea.Cmd {
 			CharLimit(0).ShowLineNumbers(false).Lines(5).Value(&f.jql).Validate(requireJQL)
 		f.fields = []huh.Field{jql}
 		f.form = pane.NewForm(f.fields...)
+	} else if !f.filters {
+		f.fields = []huh.Field{f.searchBox()}
+		f.form = pane.NewForm(f.fields...)
 	} else {
 		left, right := f.basicColumns()
 		f.fields = append(append([]huh.Field{}, left...), right...)
@@ -98,6 +104,28 @@ func requireJQL(s string) error {
 		return errors.New("write some JQL to search with")
 	}
 	return nil
+}
+
+// maxHeight is the form height the mode needs, with a blank line between
+// fields and room for an error footer.
+func (f *searchForm) maxHeight() int {
+	switch {
+	case f.advanced:
+		return 14
+	case f.filters:
+		return 17
+	}
+	return 6
+}
+
+func (f *searchForm) searchBox() *huh.Input {
+	return f.text(fieldText, "Search", &f.values.text, func(s string) error {
+		if !f.filters && strings.TrimSpace(s) == "" {
+			return errors.New("type some text, an issue number or an issue key")
+		}
+		_, _, err := jira.ParseSearchText(s, f.defaultProject)
+		return err
+	}).Placeholder("Text, issue number or key")
 }
 
 func (f *searchForm) text(field, title string, value *string, validate func(string) error) *huh.Input {
@@ -135,6 +163,7 @@ func (f *searchForm) basicColumns() (left, right []huh.Field) {
 		sortOptions[i] = huh.NewOption(s.String(), s)
 	}
 	left = []huh.Field{
+		f.searchBox(),
 		keys,
 		f.project,
 		f.issueType,
@@ -233,7 +262,7 @@ func (f *searchForm) resize(width, height int) {
 	// huh subtracts borders and prompts from these sizes; clip smaller windows in render.
 	f.width, f.height = max(16, width), max(4, height)
 	f.form.WithWidth(f.width)
-	if !f.advanced {
+	if f.filters && !f.advanced {
 		f.form.WithHeight(f.height)
 	}
 }
@@ -243,9 +272,24 @@ func (f *searchForm) update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+// query builds the search from the search box, and from the filters when
+// they're shown. Text is sorted newest first unless the filters say otherwise.
 func (f *searchForm) query(now time.Time) (jira.SearchQuery, error) {
 	v := f.values
-	q := jira.SearchQuery{Sprint: v.sprint, Sort: v.sort, Descending: v.descending}
+	key, text, err := jira.ParseSearchText(v.text, f.defaultProject)
+	if err != nil {
+		return jira.SearchQuery{}, err
+	}
+	if !f.filters {
+		switch {
+		case key != "":
+			return jira.SearchQuery{Keys: []string{key}}, nil
+		case text == "":
+			return jira.SearchQuery{}, errors.New("type some text, an issue number or an issue key")
+		}
+		return jira.SearchQuery{Text: text, Sort: jira.SortCreated, Descending: true}, nil
+	}
+	q := jira.SearchQuery{Text: text, Sprint: v.sprint, Sort: v.sort, Descending: v.descending}
 	var ok bool
 	if q.Project, ok = f.resolveProject(v.project); !ok {
 		return q, fmt.Errorf("project %q isn't a project you can see", v.project)
@@ -253,9 +297,11 @@ func (f *searchForm) query(now time.Time) (jira.SearchQuery, error) {
 	if q.IssueType, ok = f.resolveType(v.issueType); !ok {
 		return q, fmt.Errorf("Issue type: %q isn't an issue type you can use", v.issueType) //nolint:staticcheck // ST1005: "Issue" starts the message as shown in the UI.
 	}
-	var err error
 	if q.Keys, err = jira.ParseKeys(v.keys); err != nil {
 		return q, fmt.Errorf("Issue key: %w", err) //nolint:staticcheck // ST1005: "Issue" starts the message as shown in the UI.
+	}
+	if key != "" {
+		q.Keys = append(q.Keys, key)
 	}
 	if q.Created, err = parseTimeRange(v.created, now); err != nil {
 		return q, fmt.Errorf("created range: %w", err)

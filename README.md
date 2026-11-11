@@ -90,7 +90,9 @@ Press `f` on the board to choose a quick filter or assignee. Use `tab` / `shift+
 
 ### Search
 
-`jt search` (or `jt s`) opens a search screen. Fill in any of the filters and press `ctrl+s` to see matching issues below the form (up to 100). You can filter by issue key, project, issue type, sprint, and created or updated date. Dates can be a relative time like `-2d`, an absolute date like `2026-03-01`, or a range like `2026-01-01..2026-02-01`. Results can be sorted by a field in either direction.
+`jt search` (or `jt s`) opens a search screen with a single search box. Type some text to find issues that mention it, newest first. Type a number to open that issue in your default project (`12345` finds `DEMO-12345`), or a full key like `OPS-7` to find that issue. Press `ctrl+s` to see matching issues below the form (up to 100).
+
+Press `ctrl+f` to show filters alongside the search box. You can filter by issue key, project, issue type, sprint, and created or updated date. Dates can be a relative time like `-2d`, an absolute date like `2026-03-01`, or a range like `2026-01-01..2026-02-01`. Results can be sorted by a field in either direction. Hidden filters don't apply.
 
 If the filters aren't enough, press `ctrl+t` to write JQL directly. Switching with an empty box starts you from the JQL the form would have built.
 
@@ -98,7 +100,8 @@ If the filters aren't enough, press `ctrl+t` to write JQL directly. Switching wi
 | --- | --- |
 | `tab` / `shift+tab` | Next / previous field |
 | `ctrl+s` | Run the search |
-| `ctrl+t` | Switch between basic filters and JQL |
+| `ctrl+f` | Show or hide the filters |
+| `ctrl+t` | Switch between the search box and JQL |
 | `ctrl+o` | Move between the form and the results |
 
 In the results, the same keys as the board work on the selected issue: `enter` or `v` to view it, `c` for comments, `m` to move it, `a` to assign it, `e` to edit it, `y` to copy its URL, `o` to open it in the browser, `C` to run a configured command and `r` to run the search again. `esc` goes back to the form.
