@@ -13,7 +13,7 @@ import (
 type searchKeyMap struct {
 	listNavigate, topBottom, viewResult, comments, commands, move, assign key.Binding
 	edit, yank, open, refresh, theme, back, help, quit                    key.Binding
-	search, jqlSearch, switchMode, focusResults                           key.Binding
+	search, jqlSearch, switchMode, showFilters, focusResults              key.Binding
 
 	form                        []key.Binding
 	results, searched, advanced bool
@@ -28,6 +28,7 @@ func newSearchKeys() searchKeyMap {
 		search:       keys.Describe(k.Send, "search"),
 		jqlSearch:    keys.Describe(k.Accept, "search"),
 		switchMode:   k.SwitchMode,
+		showFilters:  k.ShowFilters,
 		focusResults: k.FocusResults,
 	}
 }
@@ -38,6 +39,9 @@ func (k searchKeyMap) ShortHelp() []key.Binding {
 		return []key.Binding{k.listNavigate, k.viewResult, k.commands, k.back, k.help, k.quit}
 	}
 	binds := append(slices.Clone(k.form), k.search, k.switchMode)
+	if !k.advanced {
+		binds = append(binds, k.showFilters)
+	}
 	if k.searched {
 		binds = append(binds, k.focusResults)
 	}

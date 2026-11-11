@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -49,6 +50,8 @@ type TimeRange struct {
 
 // SearchQuery is the basic search form's criteria. Zero values mean "any".
 type SearchQuery struct {
+	// Text is matched against the issues' text fields.
+	Text      string
 	Project   string
 	IssueType string
 	Sprint    SprintFilter
@@ -61,7 +64,27 @@ type SearchQuery struct {
 	Descending bool
 }
 
-var keyRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*-\d+$`)
+var (
+	keyRe    = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*-\d+$`)
+	numberRe = regexp.MustCompile(`^\d+$`)
+)
+
+// ParseSearchText reads what was typed in the search box. A number is that
+// issue in project, an issue key is that issue, and anything else is text to
+// look for.
+func ParseSearchText(s, project string) (key, text string, err error) {
+	s = strings.TrimSpace(s)
+	switch {
+	case numberRe.MatchString(s):
+		if project == "" {
+			return "", "", errors.New("set a default project to find an issue by its number")
+		}
+		return strings.ToUpper(project) + "-" + s, "", nil
+	case keyRe.MatchString(s):
+		return strings.ToUpper(s), "", nil
+	}
+	return "", s, nil
+}
 
 // ParseKeys reads a comma or space separated list of issue keys.
 func ParseKeys(s string) ([]string, error) {
@@ -78,6 +101,9 @@ func ParseKeys(s string) ([]string, error) {
 // String renders the query as JQL.
 func (q SearchQuery) String() string {
 	var conds []string
+	if q.Text != "" {
+		conds = append(conds, "textfields ~ "+quoteJQL(q.Text))
+	}
 	if q.Project != "" {
 		conds = append(conds, "project = "+quoteJQL(q.Project))
 	}

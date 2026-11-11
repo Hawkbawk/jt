@@ -1,5 +1,5 @@
-// Package search is the search screen: a huh form for basic or JQL searches and
-// the table of the issues they find.
+// Package search is the search screen: a huh form for a search box, optional
+// filters or JQL, and the table of the issues they find.
 package search
 
 import (
@@ -119,7 +119,7 @@ func (m Model) formHeight() int {
 	if !m.searched {
 		return m.mainHeight()
 	}
-	return min(maxFormHeight, m.mainHeight()/2)
+	return min(m.form.maxHeight(), m.mainHeight()/2)
 }
 
 // fit sizes the form and the table to the body.
@@ -308,6 +308,14 @@ func (m *Model) toggleMode() tea.Cmd {
 	return cmd
 }
 
+func (m *Model) toggleFilters() tea.Cmd {
+	m.form.filters = !m.form.filters
+	m.inResults = false
+	cmd := m.form.build()
+	m.fit()
+	return cmd
+}
+
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if consumed, quit := m.Quit.Handle(msg); consumed {
 		if quit {
@@ -321,6 +329,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Get().SwitchMode):
 		cmd := m.toggleMode()
+		return m, cmd
+	case !m.form.advanced && key.Matches(msg, keys.Get().ShowFilters):
+		cmd := m.toggleFilters()
 		return m, cmd
 	case m.searched && !m.inResults && key.Matches(msg, keys.Get().NextTab) && m.form.onLastField():
 		m.focusResults()
@@ -431,8 +442,11 @@ func (m Model) render() string {
 	body := m.bodyView()
 	body = m.Popup.Overlay(body)
 	mode := "basic"
-	if m.form.advanced {
+	switch {
+	case m.form.advanced:
 		mode = "advanced"
+	case m.form.filters:
+		mode = "filters"
 	}
 	parts := []string{"search", styles.Dim().Render(mode)}
 	if m.searching {

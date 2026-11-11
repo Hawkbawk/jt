@@ -27,7 +27,7 @@ type Map struct {
 	Dismiss, ForceQuit, Interrupt, Confirm, Deny key.Binding
 	Accept, Send, Toggle, NewLine                key.Binding
 	NextTab, PrevTab, ListFilter                 key.Binding
-	SwitchMode, FocusResults                     key.Binding
+	SwitchMode, ShowFilters, FocusResults        key.Binding
 
 	// Derived by Derive; changes to them are overwritten.
 	Close                                          key.Binding // Dismiss, plus Quit
@@ -85,6 +85,7 @@ func Default() Map {
 		ListFilter: key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 
 		SwitchMode:   key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "basic/advanced")),
+		ShowFilters:  key.NewBinding(key.WithKeys("ctrl+f"), key.WithHelp("ctrl+f", "filters")),
 		FocusResults: key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "results")),
 
 		Table: table.KeyMap{
@@ -142,7 +143,7 @@ func (m *Map) base() []*key.Binding {
 		&m.Favorite, &m.Reset, &m.Undo, &m.Help,
 		&m.Dismiss, &m.Interrupt, &m.Confirm, &m.Deny, &m.Accept, &m.Send,
 		&m.Toggle, &m.NewLine, &m.NextTab, &m.PrevTab, &m.ListFilter,
-		&m.SwitchMode, &m.FocusResults,
+		&m.SwitchMode, &m.ShowFilters, &m.FocusResults,
 	}
 }
 

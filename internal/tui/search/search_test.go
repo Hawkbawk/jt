@@ -29,6 +29,11 @@ func newTestSearch(t *testing.T, fb *tuitest.Backend) Model {
 	return tuitest.Drain(t, m, m.Init())
 }
 
+func withFilters(t *testing.T, m Model) Model {
+	t.Helper()
+	return tuitest.PressDrain(t, m, "ctrl+f")
+}
+
 // searchSend feeds msgs to the model one at a time, then returns it and the
 // last command.
 func searchSend(m Model, msgs ...tea.Msg) (Model, tea.Cmd) {
@@ -71,27 +76,63 @@ func searchType(t *testing.T, m Model, text string) Model {
 	return tuitest.Drain(t, next.(Model), cmd)
 }
 
-func TestSearchStartsOnDefaultProject(t *testing.T) {
+func TestSearchBox(t *testing.T) {
 	t.Parallel()
-	m := newTestSearch(t, &tuitest.Backend{Project: "DEMO"})
-	q, err := m.form.query(searchNow)
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct{ text, want string }{
+		{"12345", "key = DEMO-12345"},
+		{"ops-7", "key = OPS-7"},
+		{"login page", `textfields ~ "login page" ORDER BY created DESC`},
 	}
-	want := jira.SearchQuery{Project: "DEMO", Sort: jira.SortUpdated, Descending: true}
-	if q.String() != want.String() {
-		t.Errorf("JQL = %q, want %q", q.String(), want.String())
+	for _, tt := range tests {
+		fb := &tuitest.Backend{Project: "DEMO"}
+		m := searchType(t, newTestSearch(t, fb), tt.text)
+		m = tuitest.PressDrain(t, m, "ctrl+s")
+		if len(fb.FindCalls) != 1 || fb.FindCalls[0] != tt.want {
+			t.Errorf("%q: searches = %q, want %q", tt.text, fb.FindCalls, tt.want)
+		}
+		if strings.Contains(m.render(), "ORDER BY") {
+			t.Error("the generated JQL shouldn't be shown")
+		}
 	}
-	if strings.Contains(m.render(), "ORDER BY") {
-		t.Error("the generated JQL shouldn't be shown")
+}
+
+func TestSearchBoxErrors(t *testing.T) {
+	t.Parallel()
+	fb := &tuitest.Backend{}
+	m := tuitest.PressDrain(t, newTestSearch(t, fb), "ctrl+s")
+	if len(fb.FindCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "type some text") {
+		t.Errorf("an empty box shouldn't search:\n%s", ansi.Strip(m.render()))
+	}
+	m = tuitest.PressDrain(t, searchType(t, m, "42"), "ctrl+s")
+	if len(fb.FindCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "set a default project") {
+		t.Errorf("a number needs a default project:\n%s", ansi.Strip(m.render()))
+	}
+}
+
+func TestSearchFiltersToggle(t *testing.T) {
+	t.Parallel()
+	fb := &tuitest.Backend{Project: "DEMO"}
+	m := searchType(t, newTestSearch(t, fb), "login")
+	if strings.Contains(ansi.Strip(m.render()), "Project") {
+		t.Fatal("filters should start hidden")
+	}
+	m = withFilters(t, m)
+	if !strings.Contains(ansi.Strip(m.render()), "Project") || !strings.Contains(m.render(), "filters") {
+		t.Fatalf("ctrl+f should show the filters:\n%s", ansi.Strip(m.render()))
+	}
+	m = tuitest.PressDrain(t, m, "ctrl+s")
+	tuitest.PressDrain(t, m, "esc", "ctrl+f", "ctrl+s")
+	want := []string{`textfields ~ "login" AND project = "DEMO" ORDER BY created DESC`, `textfields ~ "login" ORDER BY created DESC`}
+	if len(fb.FindCalls) != 2 || fb.FindCalls[0] != want[0] || fb.FindCalls[1] != want[1] {
+		t.Errorf("searches = %q, want %q", fb.FindCalls, want)
 	}
 }
 
 func TestSearchFormHasTwoColumns(t *testing.T) {
 	t.Parallel()
-	m := newTestSearch(t, &tuitest.Backend{})
+	m := withFilters(t, newTestSearch(t, &tuitest.Backend{}))
 	for line := range strings.SplitSeq(ansi.Strip(m.render()), "\n") {
-		if strings.Contains(line, "Issue key") && strings.Contains(line, "Order") {
+		if strings.Contains(line, "Search") && strings.Contains(line, "Order") {
 			return
 		}
 	}
@@ -101,7 +142,7 @@ func TestSearchFormHasTwoColumns(t *testing.T) {
 func TestSearchLoadsIssueTypes(t *testing.T) {
 	t.Parallel()
 	fb := &tuitest.Backend{IssueTypeList: []string{"Bug", "Task"}}
-	m := newTestSearch(t, fb)
+	m := withFilters(t, newTestSearch(t, fb))
 	msg := loadIssueTypes(fb)()
 	m, _ = searchSend(m, msg)
 
@@ -123,7 +164,7 @@ func TestSearchLoadsIssueTypes(t *testing.T) {
 
 func TestSearchFormFields(t *testing.T) {
 	t.Parallel()
-	m := newTestSearch(t, &tuitest.Backend{})
+	m := withFilters(t, newTestSearch(t, &tuitest.Backend{}))
 	m = typeInto(t, m, fieldKey, "demo-1, demo-2")
 	m = focusField(t, m, fieldSprint)
 	m = tuitest.PressDrain(t, m, "right")
@@ -136,7 +177,7 @@ func TestSearchFormFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `sprint in openSprints() AND key in (DEMO-1, DEMO-2) AND created >= "2026-03-01 00:00" AND created <= "2026-03-02 23:59" AND updated >= "2026-03-09 12:00" ORDER BY updated ASC`
+	want := `sprint in openSprints() AND key in (DEMO-1, DEMO-2) AND created >= "2026-03-01 00:00" AND created <= "2026-03-02 23:59" AND updated >= "2026-03-09 12:00" ORDER BY created ASC`
 	if q.String() != want {
 		t.Errorf("JQL = %q, want %q", q.String(), want)
 	}
@@ -144,7 +185,7 @@ func TestSearchFormFields(t *testing.T) {
 
 func TestSearchFormErrors(t *testing.T) {
 	t.Parallel()
-	m := newTestSearch(t, &tuitest.Backend{})
+	m := withFilters(t, newTestSearch(t, &tuitest.Backend{}))
 	m = typeInto(t, m, fieldKey, "nope")
 	m = tuitest.PressDrain(t, m, "tab")
 	if m.form.focused() != fieldKey || !strings.Contains(ansi.Strip(m.render()), "isn't an issue key") {
@@ -152,7 +193,7 @@ func TestSearchFormErrors(t *testing.T) {
 	}
 
 	fb := &tuitest.Backend{}
-	m = newTestSearch(t, fb)
+	m = withFilters(t, newTestSearch(t, fb))
 	m = typeInto(t, m, fieldUpdated, "soon")
 	m = tuitest.PressDrain(t, m, "ctrl+s")
 	if len(fb.FindCalls) != 0 || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
@@ -163,7 +204,7 @@ func TestSearchFormErrors(t *testing.T) {
 func TestSearchCtrlSValidatesFocusedField(t *testing.T) {
 	t.Parallel()
 	fb := &tuitest.Backend{}
-	m := typeInto(t, newTestSearch(t, fb), fieldCreated, "soon")
+	m := typeInto(t, withFilters(t, newTestSearch(t, fb)), fieldCreated, "soon")
 	m = tuitest.PressDrain(t, m, "ctrl+s")
 	if len(fb.FindCalls) != 0 || m.form.focused() != fieldCreated || !strings.Contains(ansi.Strip(m.render()), "must be a date") {
 		t.Errorf("searches = %q, view:\n%s", fb.FindCalls, ansi.Strip(m.render()))
@@ -173,7 +214,7 @@ func TestSearchCtrlSValidatesFocusedField(t *testing.T) {
 func TestSearchPicksProjectInForm(t *testing.T) {
 	t.Parallel()
 	fb := &tuitest.Backend{Project: "DEMO", ProjectList: []jira.Project{{Key: "DEMO"}, {Key: "OPS", Name: "Operations"}}}
-	m := newTestSearch(t, fb)
+	m := withFilters(t, newTestSearch(t, fb))
 
 	m = typeInto(t, m, fieldProject, "")
 	m = tuitest.PressDrain(t, m, "ctrl+a", "ctrl+k")
@@ -241,17 +282,17 @@ func TestSearchQuitKeys(t *testing.T) {
 	}
 	// Typing q in a text field must not quit.
 	m = newTestSearch(t, &tuitest.Backend{})
-	m = typeInto(t, m, fieldKey, "q")
-	if m.Quit.Confirming || m.form.values.keys != "q" {
+	m = typeInto(t, m, fieldText, "q")
+	if m.Quit.Confirming || m.form.values.text != "q" {
 		t.Error("q should be typed into the field")
 	}
 }
 
 func TestSearchAdvancedMode(t *testing.T) {
 	t.Parallel()
-	m := newTestSearch(t, &tuitest.Backend{Project: "DEMO"})
+	m := searchType(t, newTestSearch(t, &tuitest.Backend{Project: "DEMO"}), "login")
 	m = tuitest.PressDrain(t, m, "ctrl+t")
-	if !m.form.advanced || m.form.jql != `project = "DEMO" ORDER BY updated DESC` {
+	if !m.form.advanced || m.form.jql != `textfields ~ "login" ORDER BY created DESC` {
 		t.Fatalf("advanced = %v, jql = %q", m.form.advanced, m.form.jql)
 	}
 	if !strings.Contains(m.render(), "advanced") {
@@ -266,7 +307,7 @@ func TestSearchAdvancedMode(t *testing.T) {
 
 	// What was written survives a trip through the form.
 	m = tuitest.PressDrain(t, m, "ctrl+t", "ctrl+t")
-	if m.form.jql != `project = "DEMO" ORDER BY updated DESC q` {
+	if m.form.jql != `textfields ~ "login" ORDER BY created DESC q` {
 		t.Errorf("jql = %q after switching back", m.form.jql)
 	}
 	m = tuitest.PressDrain(t, m, "ctrl+t")
@@ -278,7 +319,6 @@ func TestSearchAdvancedMode(t *testing.T) {
 func TestSearchAdvancedStartsEmptyWhenFormInvalid(t *testing.T) {
 	t.Parallel()
 	m := newTestSearch(t, &tuitest.Backend{})
-	m = typeInto(t, m, fieldKey, "nope")
 	m = tuitest.PressDrain(t, m, "ctrl+t")
 	if m.form.jql != "" {
 		t.Errorf("jql = %q, want empty", m.form.jql)
@@ -296,14 +336,14 @@ func foundIssues() []jira.Issue {
 func searched(t *testing.T) (Model, *tuitest.Backend) {
 	t.Helper()
 	fb := &tuitest.Backend{Project: "DEMO", Found: foundIssues()}
-	m := newTestSearch(t, fb)
+	m := searchType(t, newTestSearch(t, fb), "demo")
 	return tuitest.PressDrain(t, m, "ctrl+s"), fb
 }
 
 func TestSearchRunsFormAndFocusesResults(t *testing.T) {
 	t.Parallel()
 	m, fb := searched(t)
-	if len(fb.FindCalls) != 1 || fb.FindCalls[0] != `project = "DEMO" ORDER BY updated DESC` {
+	if len(fb.FindCalls) != 1 || fb.FindCalls[0] != `textfields ~ "demo" ORDER BY created DESC` {
 		t.Fatalf("searches = %q", fb.FindCalls)
 	}
 	if !m.resultsFocused() || len(m.results.issues) != 3 {
@@ -343,7 +383,7 @@ func TestSearchShowsResultsBelowForm(t *testing.T) {
 	t.Parallel()
 	m, _ := searched(t)
 	view := ansi.Strip(m.render())
-	if form, results := strings.Index(view, "Project"), strings.Index(view, "Results (3)"); form < 0 || results < form {
+	if form, results := strings.Index(view, "Search"), strings.Index(view, "Results (3)"); form < 0 || results < form {
 		t.Fatalf("form should sit above the results:\n%s", view)
 	}
 	m = tuitest.PressDrain(t, m, "ctrl+o")
@@ -403,7 +443,7 @@ func TestSearchAdvancedSubmit(t *testing.T) {
 func TestSearchShowsErrorsAndEmptyResults(t *testing.T) {
 	t.Parallel()
 	fb := &tuitest.Backend{FindErr: errors.New("bad JQL")}
-	m := tuitest.PressDrain(t, newTestSearch(t, fb), "ctrl+s")
+	m := tuitest.PressDrain(t, searchType(t, newTestSearch(t, fb), "demo"), "ctrl+s")
 	if !strings.Contains(ansi.Strip(m.render()), "Error: bad JQL") || !m.resultsFocused() {
 		t.Errorf("view:\n%s", ansi.Strip(m.render()))
 	}
@@ -574,7 +614,7 @@ func TestSearchResizesWithinWindow(t *testing.T) {
 func TestSearchIgnoresSubmitWhileSearching(t *testing.T) {
 	t.Parallel()
 	fb := &tuitest.Backend{Found: foundIssues()}
-	m := newTestSearch(t, fb)
+	m := searchType(t, newTestSearch(t, fb), "demo")
 	m, cmd := searchSend(m, tuitest.Key("ctrl+s"))
 	if !m.searching || cmd == nil {
 		t.Fatal("ctrl+s should start a search")
