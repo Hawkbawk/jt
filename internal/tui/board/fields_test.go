@@ -15,8 +15,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func testFields() []jira.EditField {
-	return []jira.EditField{{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true, Text: "Fix it"}}
+func testFields() []jira.IssueField {
+	return []jira.IssueField{{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true, Text: "Fix it"}}
 }
 
 func typeText(t *testing.T, m Model, s string) Model {

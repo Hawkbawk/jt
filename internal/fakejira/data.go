@@ -89,8 +89,8 @@ var priorities = []jira.Option{
 
 // fieldDefs are the editable fields, in the order the real client sorts them:
 // common system fields first, then the rest by name.
-func fieldDefs() []jira.EditField {
-	return []jira.EditField{
+func fieldDefs() []jira.IssueField {
+	return []jira.IssueField{
 		{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true},
 		{ID: "description", Name: "Description", Kind: jira.FieldTextArea},
 		{ID: "priority", Name: "Priority", Kind: jira.FieldSelect, Options: priorities},

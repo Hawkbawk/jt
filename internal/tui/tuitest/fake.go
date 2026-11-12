@@ -29,9 +29,9 @@ type Backend struct {
 	BoardIDCalls   []int
 	BoardList      []jira.BoardSummary
 	FilterCalls    []string
-	EditFieldList  []jira.EditField
+	EditFieldList  []jira.IssueField
 	EditErr        error
-	Edited         [][]jira.EditField
+	Edited         [][]jira.IssueField
 	IssueTypeList  []string
 	Found          []jira.Issue
 	FindErr        error
@@ -120,12 +120,12 @@ func (f *Backend) AddComment(key, body string) error {
 }
 
 // EditFields implements the screens' Backend.
-func (f *Backend) EditFields(jira.Issue) ([]jira.EditField, error) {
+func (f *Backend) EditFields(jira.Issue) ([]jira.IssueField, error) {
 	return f.EditFieldList, nil
 }
 
 // Edit implements the screens' Backend.
-func (f *Backend) Edit(_ string, fields []jira.EditField) error {
+func (f *Backend) Edit(_ string, fields []jira.IssueField) error {
 	if f.EditErr != nil {
 		return f.EditErr
 	}

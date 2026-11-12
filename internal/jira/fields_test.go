@@ -53,7 +53,7 @@ func TestEditFieldsFromEditMeta(t *testing.T) {
 	if err := json.Unmarshal([]byte(editMetaJSON), &r); err != nil {
 		t.Fatal(err)
 	}
-	want := []EditField{
+	want := []IssueField{
 		{ID: "summary", Name: "Summary", Kind: FieldText, Required: true, Text: "Fix the thing"},
 		{ID: "description", Name: "Description", Kind: FieldTextArea, Text: "h1. Steps"},
 		{
@@ -84,7 +84,7 @@ func TestEditFieldsFromEditMeta(t *testing.T) {
 }
 
 func TestEditPayload(t *testing.T) {
-	got, err := editPayload([]EditField{
+	got, err := editPayload([]IssueField{
 		{ID: "summary", Kind: FieldText, Text: "New"},
 		{ID: "description", Kind: FieldTextArea, Text: "  "},
 		{ID: "priority", Kind: FieldSelect, Chosen: []Option{{ID: "1"}}},
@@ -110,7 +110,7 @@ func TestEditPayload(t *testing.T) {
 }
 
 func TestEditPayloadRejectsBadNumber(t *testing.T) {
-	if _, err := editPayload([]EditField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}); err == nil {
+	if _, err := editPayload([]IssueField{{ID: "cf", Name: "Story Points", Kind: FieldNumber, Text: "lots"}}); err == nil {
 		t.Fatal("expected an error for a non-numeric value")
 	}
 }
