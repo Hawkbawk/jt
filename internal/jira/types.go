@@ -25,6 +25,12 @@ type Issue struct {
 	Priority string
 }
 
+// IssueType is a kind of issue that can be created in a project.
+type IssueType struct {
+	ID   string
+	Name string
+}
+
 // BoardSummary is a board as listed for a project, without its issues.
 type BoardSummary struct {
 	ID   int

@@ -20,9 +20,9 @@ type Map struct {
 	// Base bindings.
 	Left, Right, Up, Down, Top, Bottom key.Binding
 
-	View, Comments, Commands, Edit, Move, Assign, Yank, Open key.Binding
-	Filter, Theme, Refresh, Projects, Boards, Quit           key.Binding
-	Favorite, Reset, Undo, Help                              key.Binding
+	View, Comments, Commands, Edit, Create, Move, Assign, Yank, Open key.Binding
+	Filter, Theme, Refresh, Projects, Boards, Quit                   key.Binding
+	Favorite, Reset, Undo, Help                                      key.Binding
 
 	Dismiss, ForceQuit, Interrupt, Confirm, Deny key.Binding
 	Accept, Send, Toggle, NewLine                key.Binding
@@ -55,6 +55,7 @@ func Default() Map {
 		Comments: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comments")),
 		Commands: key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "commands")),
 		Edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
+		Create:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new issue")),
 		Move:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "move")),
 		Assign:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "assign")),
 		Yank:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yank URL")),
@@ -138,7 +139,7 @@ func Set(m Map) { current = m.Derive() }
 func (m *Map) base() []*key.Binding {
 	return []*key.Binding{
 		&m.Left, &m.Right, &m.Up, &m.Down, &m.Top, &m.Bottom,
-		&m.View, &m.Comments, &m.Commands, &m.Edit, &m.Move, &m.Assign, &m.Yank, &m.Open,
+		&m.View, &m.Comments, &m.Commands, &m.Edit, &m.Create, &m.Move, &m.Assign, &m.Yank, &m.Open,
 		&m.Filter, &m.Theme, &m.Refresh, &m.Projects, &m.Boards, &m.Quit,
 		&m.Favorite, &m.Reset, &m.Undo, &m.Help,
 		&m.Dismiss, &m.Interrupt, &m.Confirm, &m.Deny, &m.Accept, &m.Send,

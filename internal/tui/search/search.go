@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
+	"github.com/hawkbawk/jt/internal/components/issuecreate"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -146,6 +147,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	switch msg := msg.(type) {
+	case issuecreate.Created:
+		m.Status = msg.Status()
+		if m.lastJQL == "" || m.searching {
+			return m, nil
+		}
+		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
+		return m, m.search(m.lastJQL)
+
 	case tuimsg.Finished:
 		m.Status = msg.Status()
 		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
@@ -381,6 +390,8 @@ func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case key.Matches(msg, keys.Get().Theme):
 		return m, modal.Open(themepicker.New())
+	case key.Matches(msg, keys.Get().Create):
+		return m, modal.Open(issuecreate.New(m.backend, m.backend.DefaultProject()))
 	}
 	// Edits search again, which would race a search that's still running.
 	if sel := m.results.selected(); sel != nil && !m.searching {

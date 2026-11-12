@@ -10,6 +10,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
+	"github.com/hawkbawk/jt/internal/components/issuecreate"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -232,6 +233,13 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if key.Matches(msg, keys.Get().Theme) {
 		return m, modal.Open(themepicker.New())
+	}
+	if key.Matches(msg, keys.Get().Create) {
+		project := m.board.project
+		if project == "" {
+			project = m.board.backend.DefaultProject()
+		}
+		return m, modal.Open(issuecreate.New(m.board.backend, project))
 	}
 	if key.Matches(msg, keys.Get().Boards) && m.board.nav != nil {
 		return m, modal.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))

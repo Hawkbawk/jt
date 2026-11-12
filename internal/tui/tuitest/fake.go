@@ -39,6 +39,20 @@ type Backend struct {
 	Users          []jira.Option
 	UserErr        error
 	UserQueries    []string
+
+	// CreateTypes is the issue types each project can create.
+	CreateTypes     map[string][]jira.IssueType
+	CreateTypeCalls []string
+	CreateFieldList []jira.IssueField
+	CreateErr       error
+	CreatedKey      string
+	Creates         []CreateCall
+}
+
+// CreateCall is a call to Create.
+type CreateCall struct {
+	Project, IssueType string
+	Fields             []jira.IssueField
 }
 
 // DefaultProject implements the screens' Backend.
@@ -169,4 +183,30 @@ func (f *Settings) SaveBoard(id int) error {
 func (f *Settings) SaveTheme(id string) error {
 	f.Saved = append(f.Saved, id)
 	return f.Err
+}
+
+// CreateIssueTypes implements the screens' Backend.
+func (f *Backend) CreateIssueTypes(project string) ([]jira.IssueType, error) {
+	f.CreateTypeCalls = append(f.CreateTypeCalls, project)
+	return f.CreateTypes[project], nil
+}
+
+// CreateFields implements the screens' Backend.
+func (f *Backend) CreateFields(string, string) ([]jira.IssueField, error) {
+	return f.CreateFieldList, nil
+}
+
+// Create implements the screens' Backend.
+func (f *Backend) Create(project, issueType string, fields []jira.IssueField) (string, error) {
+	if f.CreateErr != nil {
+		return "", f.CreateErr
+	}
+	f.Creates = append(f.Creates, CreateCall{project, issueType, fields})
+	return f.CreatedKey, nil
+}
+
+// SearchProjectUsers implements the screens' Backend.
+func (f *Backend) SearchProjectUsers(_, query string) ([]jira.Option, error) {
+	f.UserQueries = append(f.UserQueries, query)
+	return f.Users, f.UserErr
 }

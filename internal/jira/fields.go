@@ -104,6 +104,12 @@ func (c *Client) EditFields(iss Issue) ([]IssueField, error) {
 // whose name or email match query.
 func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
 	project, _, _ := strings.Cut(issueKey, "-")
+	return c.SearchProjectUsers(project, query)
+}
+
+// SearchProjectUsers finds people who can be assigned issues in a project
+// whose name or email match query.
+func (c *Client) SearchProjectUsers(project, query string) ([]Option, error) {
 	users, err := c.jc.UserSearch(&jcli.UserSearchOptions{Project: project, Query: query, MaxResults: 20})
 	if err != nil {
 		return nil, err

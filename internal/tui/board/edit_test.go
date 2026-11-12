@@ -109,3 +109,24 @@ func TestAssignErrorKeepsModalOpenForRetry(t *testing.T) {
 		t.Fatalf("retry should assign, got %v", fb.Assigned)
 	}
 }
+
+func TestCreateOpensOnTheBoardsProject(t *testing.T) {
+	m, fb := issueModel(t)
+	fb.ProjectList = []jira.Project{{Key: "TEST", Name: "Test"}}
+	fb.CreateTypes = map[string][]jira.IssueType{"TEST": {{ID: "1", Name: "Task"}}}
+	fb.CreateFieldList = []jira.IssueField{{ID: "summary", Name: "Summary", Kind: jira.FieldText, Required: true}}
+	fb.CreatedKey = "TEST-9"
+
+	m = tuitest.PressDrain(t, m, "n")
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
+		t.Fatalf("n should open the create modal for TEST, calls = %v", fb.CreateTypeCalls)
+	}
+
+	m = tuitest.PressDrain(t, m, "enter", "enter", "enter", "N", "e", "w", "enter", "ctrl+s")
+	if m.Modal.IsOpen() || len(fb.Creates) != 1 || fb.Creates[0].Fields[0].Text != "New" {
+		t.Fatalf("creates = %+v, modal open = %v", fb.Creates, m.Modal.IsOpen())
+	}
+	if !strings.Contains(m.Status, "Created TEST-9") {
+		t.Errorf("status = %q", m.Status)
+	}
+}
