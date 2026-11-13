@@ -103,8 +103,8 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
-	case "down":
-		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "ctrl+s":
 		return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
 	}
@@ -158,7 +158,9 @@ func TestSetupFallsBackToFirstProject(t *testing.T) {
 func TestChangingProjectLoadsItsIssueTypes(t *testing.T) {
 	b := newBackend()
 	h := newHost(t, b, "DEMO")
-	h.press("down", "enter")
+	h.press("backspace", "backspace", "backspace", "backspace")
+	h.typeText("Operations")
+	h.press("enter")
 
 	if h.m.project.Key != "OPS" || h.m.itype != typeOps {
 		t.Fatalf("project = %v, type = %v", h.m.project, h.m.itype)
@@ -287,3 +289,14 @@ var errNope = errString("nope")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestUnknownProjectCannotContinue(t *testing.T) {
+	b := newBackend()
+	h := newHost(t, b, "DEMO")
+	h.press("backspace", "backspace", "backspace", "backspace")
+	h.typeText("NOPE")
+	h.press("enter")
+	if v := h.view(); !strings.Contains(v, "not a project you can see") || len(b.CreateTypeCalls) != 1 {
+		t.Fatalf("expected an error, with no issue types loaded for it:\n%s", v)
+	}
+}

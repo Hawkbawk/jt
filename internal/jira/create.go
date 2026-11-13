@@ -34,19 +34,19 @@ func (p createPage) done(got int) bool {
 
 type createTypesPage struct {
 	createPage
-	Values []struct {
+	IssueTypes []struct {
 		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Subtask bool   `json:"subtask"`
-	} `json:"values"`
+	} `json:"issueTypes"`
 }
 
 type createFieldsPage struct {
 	createPage
-	Values []struct {
+	Fields []struct {
 		FieldID string `json:"fieldId"`
 		fieldMeta
-	} `json:"values"`
+	} `json:"fields"`
 }
 
 // CreateIssueTypes lists the issue types that can be created in a project.
@@ -60,15 +60,15 @@ func (c *Client) CreateIssueTypes(project string) ([]IssueType, error) {
 		if err := c.getJSON(c.jc.GetV2, path, &res); err != nil {
 			return nil, err
 		}
-		for _, t := range res.Values {
+		for _, t := range res.IssueTypes {
 			if !t.Subtask {
 				out = append(out, IssueType{ID: t.ID, Name: t.Name})
 			}
 		}
-		if res.done(len(res.Values)) {
+		if res.done(len(res.IssueTypes)) {
 			return out, nil
 		}
-		start += len(res.Values)
+		start += len(res.IssueTypes)
 	}
 }
 
@@ -92,24 +92,24 @@ func (c *Client) CreateFields(project, issueTypeID string) ([]IssueField, error)
 		if err := c.getJSON(c.jc.GetV2, path, &res); err != nil {
 			return nil, err
 		}
-		for _, f := range res.Values {
+		for _, f := range res.Fields {
 			if _, ok := fieldKind(f.FieldID, f.fieldMeta); ok && !slices.Contains(createOnly, f.FieldID) {
 				meta[f.FieldID] = f.fieldMeta
 			}
 		}
-		if res.done(len(res.Values)) {
+		if res.done(len(res.Fields)) {
 			break
 		}
-		start += len(res.Values)
+		start += len(res.Fields)
 	}
 	fields := editFields(meta, nil)
 
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.createFields == nil {
 		c.createFields = make(map[fieldsKey][]IssueField)
 	}
 	c.createFields[k] = fields
-	c.mu.Unlock()
 	return slices.Clone(fields), nil
 }
 

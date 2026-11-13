@@ -5,6 +5,7 @@
 package issuecreate
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -116,9 +117,12 @@ type Model struct {
 	// typesFor is the project the issue types listed are for.
 	typesFor string
 	project  jira.Project
-	itype    jira.IssueType
-	typeSel  *huh.Select[jira.IssueType]
-	form     *huh.Form
+	// projectText is what's typed in the project field. It names a project by
+	// key or name, and project is the one it last resolved to.
+	projectText string
+	itype       jira.IssueType
+	typeSel     *huh.Select[jira.IssueType]
+	form        *huh.Form
 
 	fields fieldform.Editor
 	loaded bool
@@ -197,23 +201,50 @@ func (p *Model) unsaved() int { return len(p.fields.Changed()) }
 // buildForm makes the form that picks the project and issue type, with the
 // issue types in p.types listed. focusType puts the cursor on the issue type.
 func (p *Model) buildForm(focusType bool) tea.Cmd {
-	popts := make([]huh.Option[jira.Project], len(p.projects))
-	for i, pr := range p.projects {
-		popts[i] = huh.NewOption(pr.Key+" · "+pr.Name, pr)
-	}
+	p.projectText = p.project.Key
 	topts := make([]huh.Option[jira.IssueType], len(p.types))
 	for i, t := range p.types {
 		topts[i] = huh.NewOption(t.Name, t)
 	}
 	p.itype = jira.IssueType{}
 	p.typeSel = huh.NewSelect[jira.IssueType]().Title("Issue type").Options(topts...).Height(listHeight(len(topts))).Value(&p.itype)
-	projectSel := huh.NewSelect[jira.Project]().Title("Project").Options(popts...).Height(listHeight(len(popts))).Value(&p.project)
-	p.form = pane.NewForm(projectSel, p.typeSel)
+	// A site can have too many projects to list, so the project is typed and
+	// completed from suggestions.
+	projectIn := huh.NewInput().Title("Project").Value(&p.projectText).Suggestions(p.projectSuggestions()).
+		Validate(func(s string) error {
+			if _, ok := p.resolveProject(s); !ok {
+				return errors.New("not a project you can see")
+			}
+			return nil
+		})
+	p.form = pane.NewForm(projectIn, p.typeSel)
 	cmd := p.form.Init()
 	if focusType {
 		cmd = tea.Batch(cmd, p.form.NextField())
 	}
 	return cmd
+}
+
+// resolveProject maps text naming a project, by key or name, to the project.
+func (p *Model) resolveProject(text string) (jira.Project, bool) {
+	text = strings.TrimSpace(text)
+	for _, pr := range p.projects {
+		if strings.EqualFold(text, pr.Key) || strings.EqualFold(text, pr.Name) {
+			return pr, true
+		}
+	}
+	return jira.Project{}, false
+}
+
+func (p *Model) projectSuggestions() []string {
+	var out []string
+	for _, pr := range p.projects {
+		out = append(out, pr.Key)
+		if pr.Name != "" {
+			out = append(out, pr.Name)
+		}
+	}
+	return out
 }
 
 // noTypes is the error for a project that can't create anything, or nil.
@@ -379,6 +410,9 @@ func (p *Model) updateSetup(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	_, cmd := p.form.Update(msg)
+	if pr, ok := p.resolveProject(p.projectText); ok {
+		p.project = pr
+	}
 	if p.form.State == huh.StateCompleted {
 		if p.itype.ID == "" {
 			p.err = noTypes(p.project.Key, nil)

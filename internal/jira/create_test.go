@@ -12,7 +12,7 @@ import (
 	jcli "github.com/ankitpokhrel/jira-cli/pkg/jira"
 )
 
-const createFieldsJSON = `{"startAt": 0, "total": 2, "values": [
+const createFieldsJSON = `{"startAt": 0, "maxResults": 100, "total": 7, "fields": [
 	{"fieldId": "project", "name": "Project", "required": true, "schema": {"type": "project"}},
 	{"fieldId": "issuetype", "name": "Issue Type", "required": true, "schema": {"type": "issuetype"}},
 	{"fieldId": "reporter", "name": "Reporter", "required": true, "schema": {"type": "user"}},
@@ -30,10 +30,10 @@ func TestCreateIssueTypesSkipsSubtasksAndPages(t *testing.T) {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		if r.URL.Query().Get("startAt") == "0" {
-			_, _ = w.Write([]byte(`{"startAt": 0, "total": 3, "values": [{"id": "1", "name": "Bug"}, {"id": "2", "name": "Sub", "subtask": true}]}`))
+			_, _ = w.Write([]byte(`{"startAt": 0, "total": 3, "issueTypes": [{"id": "1", "name": "Bug"}, {"id": "2", "name": "Sub", "subtask": true}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"startAt": 2, "total": 3, "isLast": true, "values": [{"id": "3", "name": "Story"}]}`))
+		_, _ = w.Write([]byte(`{"startAt": 2, "total": 3, "issueTypes": [{"id": "3", "name": "Story"}]}`))
 	}))
 	defer ts.Close()
 	c := &Client{jc: jcli.NewClient(jcli.Config{Server: ts.URL})}
