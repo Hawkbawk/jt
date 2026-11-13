@@ -547,7 +547,7 @@ func TestSearchCreateOpensOnTheDefaultProject(t *testing.T) {
 		t.Fatalf("n should open the create modal on the project list")
 	}
 	m = tuitest.PressDrain(t, m, "enter")
-	if !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"DEMO"}) {
+	if !strings.Contains(m.View().Content, "Task") || !slices.Equal(fb.CreateTypeCalls, []string{"DEMO"}) {
 		t.Fatalf("n should open the create modal for DEMO, calls = %v", fb.CreateTypeCalls)
 	}
 }

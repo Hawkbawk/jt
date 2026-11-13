@@ -141,10 +141,10 @@ func TestPickerStartsOnTheGivenProject(t *testing.T) {
 	}
 	h.press("enter")
 	v := h.view()
-	if !strings.Contains(v, "Issue type") || !strings.Contains(v, "Incident") || strings.Contains(v, "Bug") {
+	if !strings.Contains(v, "Incident") || strings.Contains(v, "Bug") {
 		t.Fatalf("expected only the OPS issue types:\n%s", v)
 	}
-	if h.m.project != "OPS" || h.m.itype != typeOps || h.m.stage != stageType {
+	if h.m.project != "OPS" || h.m.stage != stageType {
 		t.Errorf("project = %v, type = %v, stage = %v", h.m.project, h.m.itype, h.m.stage)
 	}
 }
@@ -152,8 +152,8 @@ func TestPickerStartsOnTheGivenProject(t *testing.T) {
 func TestPickerFallsBackToFirstProject(t *testing.T) {
 	h := newHost(t, newBackend(), "NOPE")
 	h.press("enter")
-	if h.m.project != "DEMO" || h.m.itype != typeTask {
-		t.Fatalf("project = %v, type = %v", h.m.project, h.m.itype)
+	if h.m.project != "DEMO" || h.m.stage != stageType || h.m.list.SelectedItem() != typeItem(typeTask) {
+		t.Fatalf("project = %v, stage = %v, cursor = %v", h.m.project, h.m.stage, h.m.list.SelectedItem())
 	}
 }
 
@@ -161,8 +161,8 @@ func TestPickingProjectLoadsOnlyItsIssueTypes(t *testing.T) {
 	b := newBackend()
 	h := newHost(t, b, "DEMO")
 	h.press("j", "enter")
-	if h.m.project != "OPS" || h.m.itype != typeOps {
-		t.Fatalf("project = %v, type = %v", h.m.project, h.m.itype)
+	if h.m.project != "OPS" || h.m.list.SelectedItem() != typeItem(typeOps) {
+		t.Fatalf("project = %v, cursor = %v", h.m.project, h.m.list.SelectedItem())
 	}
 	if got := strings.Join(b.CreateTypeCalls, ","); got != "OPS" {
 		t.Errorf("issue types should load for the picked project, got %q", got)

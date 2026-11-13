@@ -10,9 +10,9 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/components/fieldform"
 	"github.com/hawkbawk/jt/internal/components/pane"
@@ -113,7 +113,7 @@ type Model struct {
 	project string
 	direct  bool
 	itype   jira.IssueType
-	form    *huh.Form
+	list    list.Model
 
 	fields fieldform.Editor
 	loaded bool
@@ -182,16 +182,41 @@ func (p *Model) loading() bool {
 
 func (p *Model) unsaved() int { return len(p.fields.Changed()) }
 
-// buildTypeForm makes the form that picks the issue type from p.types.
-func (p *Model) buildTypeForm() tea.Cmd {
-	opts := make([]huh.Option[jira.IssueType], len(p.types))
+// buildTypeList lists p.types, with the cursor on the type picked before if
+// there was one.
+func (p *Model) buildTypeList() tea.Cmd {
+	items := make([]list.Item, len(p.types))
+	selected := 0
 	for i, t := range p.types {
-		opts[i] = huh.NewOption(t.Name, t)
+		items[i] = typeItem(t)
+		if t.ID == p.itype.ID {
+			selected = i
+		}
 	}
-	p.itype = jira.IssueType{}
-	sel := huh.NewSelect[jira.IssueType]().Title("Issue type").Options(opts...).Height(listHeight(len(opts), p.height-pane.BodyLines)).Value(&p.itype)
-	p.form = pane.NewForm(sel)
-	return p.form.Init()
+	l := list.New(items, typeDelegate(), p.width, max(1, p.height-pane.BodyLines))
+	l.SetShowTitle(false)
+	l.SetShowHelp(false)
+	l.SetShowStatusBar(false)
+	l.SetShowFilter(false)
+	l.SetFilteringEnabled(false)
+	l.KeyMap.Quit = key.NewBinding()
+	l.KeyMap.ForceQuit = key.NewBinding()
+	l.Select(selected)
+	p.list = l
+	return nil
+}
+
+type typeItem jira.IssueType
+
+func (i typeItem) Title() string       { return i.Name }
+func (i typeItem) Description() string { return "" }
+func (i typeItem) FilterValue() string { return i.Name }
+
+func typeDelegate() list.DefaultDelegate {
+	d := styles.ListDelegate()
+	d.ShowDescription = false
+	d.SetSpacing(0)
+	return d
 }
 
 // noTypes is the error for a project that can't create anything, or nil.
@@ -200,15 +225,6 @@ func noTypes(project string, types []jira.IssueType) error {
 		return nil
 	}
 	return fmt.Errorf("no issue types can be created in %s", project)
-}
-
-// listHeight is the height of a select with n options and its title, which
-// shows every option when avail lines allow it.
-func listHeight(n, avail int) int {
-	if avail <= 0 {
-		avail = 7
-	}
-	return max(2, min(n+1, avail))
 }
 
 // Update implements tea.Model.
@@ -224,6 +240,7 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(pane.Tick(&p.spin, msg, p.loading()), pickerTick)
 	case tuimsg.ThemeChanged:
 		_, cmd = p.picker.Update(msg)
+		p.list.SetDelegate(typeDelegate())
 		cmd = tea.Batch(cmd, p.update(msg))
 	case tea.KeyPressMsg:
 		cmd = p.updateKey(msg)
@@ -263,7 +280,7 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 			if p.direct {
 				return tuimsg.Close()
 			}
-			p.stage, p.err, p.form = stageProject, nil, nil
+			p.stage, p.err = stageProject, nil
 			return nil
 		}
 		return p.update(km)
@@ -301,7 +318,7 @@ func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) goBack() tea.Cmd {
 	p.stage, p.loaded, p.err, p.loadingForm = stageType, false, nil, false
 	p.fields.Load(nil, nil)
-	return p.buildTypeForm()
+	return p.buildTypeList()
 }
 
 func (p *Model) update(msg tea.Msg) tea.Cmd {
@@ -322,7 +339,7 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		p.types, p.stage = msg.types, stageType
-		return p.buildTypeForm()
+		return p.buildTypeList()
 	case fieldsLoadedMsg:
 		if msg.project != p.project || msg.issueType != p.itype.ID {
 			return nil
@@ -370,18 +387,21 @@ func keepOpen(cmd tea.Cmd) tea.Cmd {
 	})
 }
 
-// updateType passes msg to the issue type form, loading the fields once it's
-// done.
+// updateType passes msg to the issue type list, loading the fields once a type
+// is picked.
 func (p *Model) updateType(msg tea.Msg) tea.Cmd {
-	if p.form == nil {
-		return nil
-	}
-	_, cmd := p.form.Update(msg)
-	if p.form.State == huh.StateCompleted {
+	if km, ok := msg.(tea.KeyPressMsg); ok && key.Matches(km, keys.Get().Accept) {
+		sel, ok := p.list.SelectedItem().(typeItem)
+		if !ok {
+			return nil
+		}
+		p.itype = jira.IssueType(sel)
 		p.err = nil
 		p.stage, p.loadingForm = stageFields, true
-		return tea.Batch(cmd, p.loadFields())
+		return p.loadFields()
 	}
+	var cmd tea.Cmd
+	p.list, cmd = p.list.Update(msg)
 	return cmd
 }
 
@@ -453,9 +473,9 @@ func (p *Model) View() tea.View {
 	lines := []string{warn}
 	var hint string
 	switch {
-	case p.stage == stageType && p.form != nil:
-		p.form.WithWidth(p.width).WithHeight(bodyH)
-		lines = append(lines, p.form.View())
+	case p.stage == stageType:
+		p.list.SetSize(p.width, bodyH)
+		lines = append(lines, p.list.View())
 	case p.loadingForm:
 		lines = append(lines, spin+" Loading fields…")
 	case p.loaded && p.fields.Len() == 0:

@@ -125,7 +125,7 @@ func TestCreateOpensOnTheBoardsProjectTypes(t *testing.T) {
 	if !m.Modal.IsOpen() || strings.Contains(m.View().Content, "Select a project") {
 		t.Fatalf("n should skip the project list")
 	}
-	if !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
+	if !strings.Contains(m.View().Content, "Task") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
 		t.Fatalf("n should open the create modal for TEST, calls = %v", fb.CreateTypeCalls)
 	}
 
