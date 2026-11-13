@@ -133,43 +133,39 @@ func (h *host) fillSummary(text string) {
 	h.press("enter")
 }
 
-func TestSetupStartsOnTheGivenProjectAndFirstIssueType(t *testing.T) {
+func TestPickerStartsOnTheGivenProject(t *testing.T) {
 	b := newBackend()
 	h := newHost(t, b, "OPS")
+	if v := h.view(); !strings.Contains(v, "Select a project") {
+		t.Fatalf("expected the project list:\n%s", v)
+	}
+	h.press("enter")
 	v := h.view()
-	if !strings.Contains(v, "Project") || !strings.Contains(v, "Issue type") || !strings.Contains(v, "Incident") {
-		t.Fatalf("expected the project and the OPS issue types:\n%s", v)
+	if !strings.Contains(v, "Issue type") || !strings.Contains(v, "Incident") || strings.Contains(v, "Bug") {
+		t.Fatalf("expected only the OPS issue types:\n%s", v)
 	}
-	if strings.Contains(v, "Bug") {
-		t.Errorf("DEMO's issue types shouldn't be listed for OPS:\n%s", v)
-	}
-	if h.m.project.Key != "OPS" || h.m.itype != typeOps {
-		t.Errorf("project = %v, type = %v", h.m.project, h.m.itype)
+	if h.m.project != "OPS" || h.m.itype != typeOps || h.m.stage != stageType {
+		t.Errorf("project = %v, type = %v, stage = %v", h.m.project, h.m.itype, h.m.stage)
 	}
 }
 
-func TestSetupFallsBackToFirstProject(t *testing.T) {
+func TestPickerFallsBackToFirstProject(t *testing.T) {
 	h := newHost(t, newBackend(), "NOPE")
-	if h.m.project.Key != "DEMO" || h.m.itype != typeTask {
+	h.press("enter")
+	if h.m.project != "DEMO" || h.m.itype != typeTask {
 		t.Fatalf("project = %v, type = %v", h.m.project, h.m.itype)
 	}
 }
 
-func TestChangingProjectLoadsItsIssueTypes(t *testing.T) {
+func TestPickingProjectLoadsOnlyItsIssueTypes(t *testing.T) {
 	b := newBackend()
 	h := newHost(t, b, "DEMO")
-	h.press("backspace", "backspace", "backspace", "backspace")
-	h.typeText("Operations")
-	h.press("enter")
-
-	if h.m.project.Key != "OPS" || h.m.itype != typeOps {
+	h.press("j", "enter")
+	if h.m.project != "OPS" || h.m.itype != typeOps {
 		t.Fatalf("project = %v, type = %v", h.m.project, h.m.itype)
 	}
-	if got := strings.Join(b.CreateTypeCalls, ","); got != "DEMO,OPS" {
-		t.Errorf("issue types should load for the new project, got %q", got)
-	}
-	if v := h.view(); !strings.Contains(v, "Incident") || strings.Contains(v, "Bug") {
-		t.Errorf("expected only OPS's issue types:\n%s", v)
+	if got := strings.Join(b.CreateTypeCalls, ","); got != "OPS" {
+		t.Errorf("issue types should load for the picked project, got %q", got)
 	}
 }
 
@@ -225,14 +221,18 @@ func TestCreateErrorKeepsValuesForRetry(t *testing.T) {
 	}
 }
 
-func TestBackReturnsToSetup(t *testing.T) {
+func TestBackReturnsToIssueTypeThenProject(t *testing.T) {
 	h := newHost(t, newBackend(), "DEMO")
 	h.press("enter", "enter", "shift+tab")
-	if h.m.stage != stageSetup || h.closed {
+	if h.m.stage != stageType || h.closed {
 		t.Fatalf("stage = %v closed = %v", h.m.stage, h.closed)
 	}
 	if v := h.view(); !strings.Contains(v, "Issue type") {
-		t.Fatalf("expected the setup form:\n%s", v)
+		t.Fatalf("expected the issue type form:\n%s", v)
+	}
+	h.press("shift+tab")
+	if h.m.stage != stageProject || !strings.Contains(h.view(), "Select a project") {
+		t.Fatalf("expected the project list, stage = %v\n%s", h.m.stage, h.view())
 	}
 }
 
@@ -249,28 +249,54 @@ func TestBackWithEnteredValuesAsksFirst(t *testing.T) {
 		t.Fatal("n should keep editing")
 	}
 	h.press("shift+tab", "y")
-	if h.m.stage != stageSetup {
+	if h.m.stage != stageType {
 		t.Fatal("y should go back")
 	}
 }
 
-func TestEscClosesAndAsksWhenValuesWereEntered(t *testing.T) {
+func TestEscGoesBackOneStageAndClosesFromTheProjectList(t *testing.T) {
 	h := newHost(t, newBackend(), "DEMO")
+	h.press("enter", "enter", "esc")
+	if h.closed || h.m.stage != stageType {
+		t.Fatalf("esc on the fields should go back to the type, closed=%v stage=%v", h.closed, h.m.stage)
+	}
+	h.press("esc")
+	if h.closed || h.m.stage != stageProject {
+		t.Fatalf("esc on the type should go back to the project, closed=%v stage=%v", h.closed, h.m.stage)
+	}
 	h.press("esc")
 	if !h.closed {
-		t.Fatal("esc should close the setup")
+		t.Fatal("esc on the project list should close")
 	}
+}
 
-	h = newHost(t, newBackend(), "DEMO")
+func TestEscAsksBeforeDroppingEnteredValues(t *testing.T) {
+	h := newHost(t, newBackend(), "DEMO")
 	h.press("enter", "enter")
 	h.fillSummary("Draft")
 	h.press("esc")
-	if h.closed || h.m.confirm != confirmClose {
+	if h.closed || h.m.confirm != confirmBack {
 		t.Fatal("esc should ask before dropping what was entered")
 	}
 	h.press("y")
+	if h.closed || h.m.stage != stageType {
+		t.Fatalf("y should go back, closed=%v stage=%v", h.closed, h.m.stage)
+	}
+}
+
+func TestQuitKeyClosesFromTheFields(t *testing.T) {
+	h := newHost(t, newBackend(), "DEMO")
+	h.press("enter", "enter", "q")
 	if !h.closed {
-		t.Fatal("y should close")
+		t.Fatal("q should close")
+	}
+}
+
+func TestHelpIsShownOnce(t *testing.T) {
+	h := newHost(t, newBackend(), "DEMO")
+	h.press("enter")
+	if n := strings.Count(h.view(), "back"); n != 1 {
+		t.Fatalf("expected the help once, found %d:\n%s", n, h.view())
 	}
 }
 
@@ -279,8 +305,8 @@ func TestProjectWithoutIssueTypesCannotContinue(t *testing.T) {
 	b.CreateTypes["DEMO"] = nil
 	h := newHost(t, b, "DEMO")
 	h.press("enter", "enter")
-	if h.m.stage != stageSetup || !strings.Contains(h.view(), "no issue types") {
-		t.Fatalf("expected an error on the setup, stage = %v\n%s", h.m.stage, h.view())
+	if h.m.stage != stageProject || !strings.Contains(h.view(), "no issue types") {
+		t.Fatalf("expected an error on the project list, stage = %v\n%s", h.m.stage, h.view())
 	}
 }
 
@@ -289,14 +315,3 @@ var errNope = errString("nope")
 type errString string
 
 func (e errString) Error() string { return string(e) }
-
-func TestUnknownProjectCannotContinue(t *testing.T) {
-	b := newBackend()
-	h := newHost(t, b, "DEMO")
-	h.press("backspace", "backspace", "backspace", "backspace")
-	h.typeText("NOPE")
-	h.press("enter")
-	if v := h.view(); !strings.Contains(v, "not a project you can see") || len(b.CreateTypeCalls) != 1 {
-		t.Fatalf("expected an error, with no issue types loaded for it:\n%s", v)
-	}
-}

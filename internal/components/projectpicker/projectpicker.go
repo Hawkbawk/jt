@@ -112,20 +112,42 @@ type Picker struct {
 	loaded      bool
 	err         error
 	width       int
+	// pending is the project to put the cursor on once the projects are listed.
+	pending string
 }
 
 // New builds a picker. It loads the projects unless it's given them. A picker
 // that isn't cancellable can only be closed by picking a project.
 func New(src Source, projects []jira.Project, cancellable bool) *Picker {
-	km := newKeyMap(cancellable)
-	return &Picker{
-		keys:        km,
+	p := &Picker{
 		src:         src,
 		spin:        spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(styles.Title())),
 		cancellable: cancellable,
-		list:        newList(km),
 		projects:    projects,
 	}
+	p.keys = newKeyMap(cancellable)
+	p.list = newList(p.keys)
+	return p
+}
+
+// Select puts the cursor on the project with the given key. If the projects
+// aren't listed yet, it does so once they are. A key that isn't listed leaves
+// the cursor where it is.
+func (p *Picker) Select(key string) {
+	p.pending = key
+	if p.loaded {
+		p.applyPending()
+	}
+}
+
+func (p *Picker) applyPending() {
+	for i, it := range p.list.Items() {
+		if it.(item).Key == p.pending {
+			p.list.Select(i)
+			break
+		}
+	}
+	p.pending = ""
 }
 
 func newList(km keyMap) list.Model {
@@ -178,7 +200,11 @@ func (p *Picker) setProjects(projects []jira.Project) tea.Cmd {
 		items[i] = item{Project: pr, isDefault: pr.Key == defaultKey}
 	}
 	p.loaded = true
-	return p.list.SetItems(items)
+	cmd := p.list.SetItems(items)
+	if p.pending != "" {
+		p.applyPending()
+	}
+	return cmd
 }
 
 func (p *Picker) loading() bool {

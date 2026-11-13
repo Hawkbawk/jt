@@ -29,8 +29,9 @@ type KeyMap struct {
 	choose, apply, cancel                          key.Binding
 	filter, next, back, toggle                     key.Binding
 
-	// SaveLabel names what Send does in the help.
-	SaveLabel string
+	// SaveLabel names what Send does in the help, and DismissLabel what the
+	// dismiss key does while browsing fields.
+	SaveLabel, DismissLabel string
 	// Extra is more keys to list while browsing fields.
 	Extra []key.Binding
 
@@ -56,7 +57,7 @@ func NewKeyMap() KeyMap {
 		next:      keys.Describe(k.Accept, "next"),
 		back:      keys.Describe(k.PrevTab, "back to search"),
 		toggle:    keys.Describe(k.Toggle, "toggles"),
-		SaveLabel: "save",
+		SaveLabel: "save", DismissLabel: "close",
 	}
 }
 
@@ -86,7 +87,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 	case HelpFilter:
 		return []key.Binding{keys.Describe(k.Accept, "apply filter"), keys.Describe(k.Blur, "clear"), save}
 	case HelpList:
-		return append([]key.Binding{keys.Describe(k.Accept, "edit"), k.Undo, k.filter}, append(k.Extra, keys.Describe(k.Blur, "close"), save)...)
+		return append([]key.Binding{keys.Describe(k.Accept, "edit"), k.Undo, k.filter}, append(k.Extra, keys.Describe(k.Blur, k.DismissLabel), save)...)
 	}
 	return []key.Binding{k.choose, k.apply, k.cancel}
 }

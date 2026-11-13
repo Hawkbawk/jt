@@ -118,11 +118,15 @@ func TestCreateOpensOnTheBoardsProject(t *testing.T) {
 	fb.CreatedKey = "TEST-9"
 
 	m = tuitest.PressDrain(t, m, "n")
-	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Select a project") {
+		t.Fatalf("n should open the create modal on the project list")
+	}
+	m = tuitest.PressDrain(t, m, "enter")
+	if !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
 		t.Fatalf("n should open the create modal for TEST, calls = %v", fb.CreateTypeCalls)
 	}
 
-	m = tuitest.PressDrain(t, m, "enter", "enter", "enter", "N", "e", "w", "enter", "ctrl+s")
+	m = tuitest.PressDrain(t, m, "enter", "enter", "N", "e", "w", "enter", "ctrl+s")
 	if m.Modal.IsOpen() || len(fb.Creates) != 1 || fb.Creates[0].Fields[0].Text != "New" {
 		t.Fatalf("creates = %+v, modal open = %v", fb.Creates, m.Modal.IsOpen())
 	}

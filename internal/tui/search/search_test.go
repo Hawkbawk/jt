@@ -543,7 +543,11 @@ func TestSearchCreateOpensOnTheDefaultProject(t *testing.T) {
 	fb.ProjectList = []jira.Project{{Key: "DEMO", Name: "Demo"}}
 	fb.CreateTypes = map[string][]jira.IssueType{"DEMO": {{ID: "1", Name: "Task"}}}
 	m = tuitest.PressDrain(t, m, "n")
-	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"DEMO"}) {
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Select a project") {
+		t.Fatalf("n should open the create modal on the project list")
+	}
+	m = tuitest.PressDrain(t, m, "enter")
+	if !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"DEMO"}) {
 		t.Fatalf("n should open the create modal for DEMO, calls = %v", fb.CreateTypeCalls)
 	}
 }
