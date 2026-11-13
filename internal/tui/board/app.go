@@ -195,14 +195,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch {
-	case key.Matches(msg, keys.Get().Projects):
-		// A modal may hold unsaved work, so it has to be closed first.
-		if m.Modal.IsOpen() {
-			return m, nil
-		}
-		return m, modal.Open(m.newProjectModal(m.board.nav != nil))
-	case m.Modal.Captures(msg):
+	if m.Modal.Captures(msg) {
 		return m, m.UpdateModal(msg)
 	}
 	return m.handleBoardKey(msg)
@@ -215,6 +208,9 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.Get().Help) {
 		m.ToggleHelp()
 		return m, nil
+	}
+	if key.Matches(msg, keys.Get().Projects) {
+		return m, modal.Open(m.newProjectModal(m.board.nav != nil))
 	}
 	if m.board.move(msg) {
 		return m, nil
@@ -251,6 +247,9 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if sel == nil {
 		return m, nil
+	}
+	if key.Matches(msg, keys.Get().Accept) {
+		return m, m.actions.View(*sel)
 	}
 	return m, m.actions.Handle(msg, *sel)
 }

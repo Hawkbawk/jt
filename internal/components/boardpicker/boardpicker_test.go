@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/modal"
 )
 
 type source []jira.BoardSummary
@@ -29,5 +30,18 @@ func TestStartsOnCurrentBoard(t *testing.T) {
 	sel, ok := cmd().(SelectedMsg)
 	if !ok || sel.Board.ID != 2 || sel.Project != "A" {
 		t.Fatalf("selected = %+v", sel)
+	}
+}
+
+func TestQAndEscapeClose(t *testing.T) {
+	for _, k := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, {Code: tea.KeyEsc}} {
+		p := loaded(t)
+		_, cmd := p.Update(k)
+		if cmd == nil {
+			t.Fatalf("%v should close the picker", k)
+		}
+		if _, ok := cmd().(modal.Closes); !ok {
+			t.Fatalf("%v should close the picker, got %T", k, cmd())
+		}
 	}
 }

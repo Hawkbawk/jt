@@ -58,7 +58,7 @@ func (a IssueActions) Handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 	b := a.backend
 	switch {
 	case key.Matches(msg, keys.Get().View):
-		return modal.Open(issuedetail.New(b, iss.Key, a.MD))
+		return a.View(iss)
 	case key.Matches(msg, keys.Get().Comments):
 		return modal.Open(issuecomments.New(b, iss.Key, a.MD))
 	case key.Matches(msg, keys.Get().Move):
@@ -73,6 +73,11 @@ func (a IssueActions) Handle(msg tea.KeyPressMsg, iss jira.Issue) tea.Cmd {
 		return runAction(a.OpenURL, b.IssueURL(iss.Key), "Opened "+iss.Key, "opening browser")
 	}
 	return nil
+}
+
+// View opens the issue in view mode.
+func (a IssueActions) View(iss jira.Issue) tea.Cmd {
+	return modal.Open(issuedetail.New(a.backend, iss.Key, a.MD))
 }
 
 // runAction calls fn with url off the update loop and reports the outcome.

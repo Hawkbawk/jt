@@ -102,11 +102,11 @@ func TestViewIgnoredOnEmptyColumn(t *testing.T) {
 	}
 }
 
-func TestCtrlPIgnoredWhileModalOpen(t *testing.T) {
+func TestPIgnoredWhileModalOpen(t *testing.T) {
 	m := loadedDetailModel(t)
-	m = tuitest.PressDrain(t, m, "v", "ctrl+p")
+	m = tuitest.PressDrain(t, m, "v", "p")
 	if _, ok := m.Modal.Content().(*issuedetail.Model); !ok {
-		t.Fatal("ctrl+p should do nothing while a modal is open")
+		t.Fatal("p should do nothing while a modal is open")
 	}
 }
 
@@ -126,5 +126,13 @@ func TestCommentsModalShowsAllComments(t *testing.T) {
 	m = tuitest.PressDrain(t, m, "q")
 	if m.Modal.IsOpen() {
 		t.Fatal("q should close the modal")
+	}
+}
+
+func TestEnterOpensIssueView(t *testing.T) {
+	m := loadedDetailModel(t)
+	m = tuitest.PressDrain(t, m, "enter")
+	if _, ok := m.Modal.Content().(*issuedetail.Model); !ok {
+		t.Fatal("enter should open the issue in view mode")
 	}
 }
