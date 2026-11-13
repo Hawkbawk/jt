@@ -28,7 +28,7 @@ func newBoardKeys() boardKeyMap {
 func (k boardKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		keys.WithIcon(k.navigate, icons.Navigate), keys.WithIcon(k.view, icons.View),
-		keys.WithIcon(k.move, icons.Move), keys.WithIcon(k.commands, icons.Commands),
+		keys.WithIcon(k.move, icons.Move), keys.WithIcon(k.filter, icons.Filter),
 		keys.WithIcon(k.help, icons.Help), keys.WithIcon(k.quit, icons.Quit),
 	}
 }

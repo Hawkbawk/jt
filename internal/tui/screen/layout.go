@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -14,6 +15,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/icons"
+	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/modal"
 )
@@ -136,6 +138,16 @@ func (c Layout) FooterView(km help.KeyMap) string {
 
 // ToggleHelp shows or hides the full key help in the footer.
 func (c *Layout) ToggleHelp() { c.Help.ShowAll = !c.Help.ShowAll }
+
+// DismissHelp collapses the full help when msg is the dismiss key and reports
+// whether it did, so the key has no other effect.
+func (c *Layout) DismissHelp(msg tea.KeyPressMsg) bool {
+	if !c.Help.ShowAll || !key.Matches(msg, keys.Get().Dismiss) {
+		return false
+	}
+	c.CollapseHelp()
+	return true
+}
 
 // CollapseHelp returns the footer to the short help.
 func (c *Layout) CollapseHelp() { c.Help.ShowAll = false }
