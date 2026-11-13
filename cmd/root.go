@@ -184,6 +184,13 @@ func fakeOptions() []fakejira.Option {
 
 // run shows m until it quits, following changes to the terminal's theme.
 func run(m tea.Model) error {
+	_, err := runModel(m)
+	return err
+}
+
+// runModel runs m and returns the model the program ended with, without the
+// graphics probe around it.
+func runModel(m tea.Model) (tea.Model, error) {
 	p := tea.NewProgram(graphicsProbe{m})
 	// Send blocks until the program reads the message, and a tint can change
 	// from inside Update, so it runs on its own goroutine.
@@ -193,11 +200,14 @@ func run(m tea.Model) error {
 		}
 	})()
 
-	_, err := p.Run()
+	final, err := p.Run()
 	if termimage.Supported() {
 		_, _ = fmt.Fprint(os.Stdout, termimage.DeleteAll())
 	}
-	return err
+	if probe, ok := final.(graphicsProbe); ok {
+		final = probe.Model
+	}
+	return final, err
 }
 
 // connect builds a Jira client from the settings and the token in the

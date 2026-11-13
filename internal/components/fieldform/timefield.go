@@ -1,4 +1,4 @@
-package issueedit
+package fieldform
 
 import (
 	"strings"

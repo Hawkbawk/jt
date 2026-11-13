@@ -8,6 +8,7 @@ package tuimsg
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +29,42 @@ func Close() tea.Cmd { return Send(Closed{}) }
 
 // Send returns the command that produces msg.
 func Send(msg tea.Msg) tea.Cmd { return func() tea.Msg { return msg } }
+
+// Map returns cmd with fn applied to each message it produces, including the
+// ones in a batch or a sequence. A component that embeds another uses it to
+// give the child's messages a meaning of its own, such as a pick that would
+// otherwise close the modal through ClosesModal. fn returns messages it doesn't
+// change as they are, and a nil cmd stays nil.
+func Map(cmd tea.Cmd, fn func(tea.Msg) tea.Msg) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			mapped := make([]tea.Cmd, len(batch))
+			for i, c := range batch {
+				mapped[i] = Map(c, fn)
+			}
+			return tea.BatchMsg(mapped)
+		}
+		// tea.Sequence's message is unexported, so it's recognized by its shape.
+		if v := reflect.ValueOf(msg); v.IsValid() && v.Kind() == reflect.Slice &&
+			v.Type().Elem() == cmdType && v.Type().PkgPath() == teaPkg {
+			mapped := make([]tea.Cmd, v.Len())
+			for i := range mapped {
+				mapped[i] = Map(v.Index(i).Interface().(tea.Cmd), fn)
+			}
+			return tea.Sequence(mapped...)()
+		}
+		return fn(msg)
+	}
+}
+
+var (
+	cmdType = reflect.TypeFor[tea.Cmd]()
+	teaPkg  = reflect.TypeFor[tea.QuitMsg]().PkgPath()
+)
 
 // ThemeChanged reports that the current tint changed outside of jt, for
 // example because the terminal's theme was edited.

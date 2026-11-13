@@ -10,6 +10,7 @@ import (
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/modal"
 	"github.com/hawkbawk/jt/internal/tui/screen"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // Model hosts content the way the modal host does: it draws the title and
@@ -20,7 +21,12 @@ type Model struct {
 	quit    screen.QuitGuard
 	layout  screen.Layout
 	width   int
+	done    tuimsg.Finished
 }
+
+// Result returns the message the content finished with, or nil if it closed
+// without one.
+func (m Model) Result() tuimsg.Finished { return m.done }
 
 // New returns a screen hosting content.
 func New(content tea.Model) Model {
@@ -44,6 +50,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case modal.Closes:
+		if f, ok := msg.(tuimsg.Finished); ok {
+			m.done = f
+		}
 		return m, tea.Quit
 	}
 	return m.forward(msg)

@@ -77,6 +77,18 @@ func TestQuitsWhenContentFinishes(t *testing.T) {
 	}
 }
 
+func TestKeepsWhatContentFinishedWith(t *testing.T) {
+	m := sized(t, issueedit.New(&tuitest.Backend{}, jira.Issue{Key: "DEMO-1"}))
+	if m.Result() != nil {
+		t.Fatal("Result should be empty before the content finishes")
+	}
+	next, _ := m.Update(issueedit.Edited{Key: "DEMO-1", Count: 1})
+	got := next.(Model).Result()
+	if got == nil || got.IssueKey() != "DEMO-1" {
+		t.Errorf("Result = %v, want the edit of DEMO-1", got)
+	}
+}
+
 func TestCtrlCAsksBeforeQuitting(t *testing.T) {
 	m := detailModel(t)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})

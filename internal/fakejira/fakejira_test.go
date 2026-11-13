@@ -172,3 +172,38 @@ func TestDemoCommands(t *testing.T) {
 		t.Fatalf("Neovim command does not show ticket details: %#v", args)
 	}
 }
+
+func TestCreateAddsIssue(t *testing.T) {
+	b := fakejira.New(fakejira.WithSeed(1))
+	types, err := b.CreateIssueTypes("DEMO")
+	if err != nil || len(types) == 0 {
+		t.Fatalf("types = %v, err = %v", types, err)
+	}
+	var bug jira.IssueType
+	for _, ty := range types {
+		if ty.Name == "Bug" {
+			bug = ty
+		}
+	}
+	fields, err := b.CreateFields("DEMO", bug.ID)
+	if err != nil || !slices.ContainsFunc(fields, func(f jira.IssueField) bool { return f.Name == "Steps to reproduce" && f.Required }) {
+		t.Fatalf("bugs should have their own required field: %v, err = %v", fields, err)
+	}
+	summary := jira.IssueField{ID: "summary", Kind: jira.FieldText, Text: "Broken"}
+	if _, err := b.Create("DEMO", bug.ID, []jira.IssueField{summary}); err == nil {
+		t.Fatal("create should need the bug's required field")
+	}
+
+	steps := jira.IssueField{ID: "customfield_10050", Kind: jira.FieldTextArea, Text: "Click it"}
+	key, err := b.Create("DEMO", bug.ID, []jira.IssueField{summary, steps})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found, err := b.Issue(key)
+	if err != nil || found.Summary != "Broken" || found.Type != "Bug" || found.Status != "To Do" {
+		t.Fatalf("created issue = %+v, err = %v", found, err)
+	}
+	if _, err := b.CreateFields("EMPTY", bug.ID); err == nil {
+		t.Error("EMPTY has no issue types to create")
+	}
+}

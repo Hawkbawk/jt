@@ -41,6 +41,9 @@ type Client struct {
 	quick     map[int][]Filter
 	fieldMeta map[fieldsKey]map[string]fieldMeta
 	moves     map[fieldsKey][]Transition
+	// createFields is the fields each project and issue type can be created
+	// with, keyed by project and issue type ID.
+	createFields map[fieldsKey][]IssueField
 	// attachments is each issue's attachment list as of the last time it was
 	// fetched, for matching the media in its comments.
 	attachments map[string]cachedAttachments

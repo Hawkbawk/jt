@@ -66,7 +66,7 @@ type fieldsKey struct {
 // fetched once per project, issue type and status; later calls only fetch the
 // values. The v2 API is used on every installation, as jira-cli's own edit
 // does, so rich text comes back as wiki markup rather than ADF.
-func (c *Client) EditFields(iss Issue) ([]EditField, error) {
+func (c *Client) EditFields(iss Issue) ([]IssueField, error) {
 	project, _, _ := strings.Cut(iss.Key, "-")
 	k := fieldsKey{project, iss.Type, iss.StatusID}
 	cacheable := iss.Type != "" && iss.StatusID != ""
@@ -104,6 +104,12 @@ func (c *Client) EditFields(iss Issue) ([]EditField, error) {
 // whose name or email match query.
 func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
 	project, _, _ := strings.Cut(issueKey, "-")
+	return c.SearchProjectUsers(project, query)
+}
+
+// SearchProjectUsers finds people who can be assigned issues in a project
+// whose name or email match query.
+func (c *Client) SearchProjectUsers(project, query string) ([]Option, error) {
 	users, err := c.jc.UserSearch(&jcli.UserSearchOptions{Project: project, Query: query, MaxResults: 20})
 	if err != nil {
 		return nil, err
@@ -120,7 +126,7 @@ func (c *Client) SearchUsers(issueKey, query string) ([]Option, error) {
 }
 
 // Edit sets the given fields on an issue to their values.
-func (c *Client) Edit(key string, fields []EditField) error {
+func (c *Client) Edit(key string, fields []IssueField) error {
 	payload, err := editPayload(fields)
 	if err != nil {
 		return err
@@ -161,11 +167,11 @@ func (r issueEditMeta) supported() map[string]fieldMeta {
 }
 
 // editFields builds the supported fields in meta, filled with their values.
-func editFields(meta map[string]fieldMeta, values map[string]json.RawMessage) []EditField {
-	var out []EditField
+func editFields(meta map[string]fieldMeta, values map[string]json.RawMessage) []IssueField {
+	var out []IssueField
 	for id, m := range meta {
 		kind, _ := fieldKind(id, m)
-		f := EditField{ID: id, Name: m.Name, Kind: kind, Required: m.Required}
+		f := IssueField{ID: id, Name: m.Name, Kind: kind, Required: m.Required}
 		f.setValue(values[id])
 		for _, v := range m.AllowedValues {
 			o := v.option()
@@ -185,7 +191,7 @@ func editFields(meta map[string]fieldMeta, values map[string]json.RawMessage) []
 		}
 		out = append(out, f)
 	}
-	slices.SortFunc(out, func(a, b EditField) int {
+	slices.SortFunc(out, func(a, b IssueField) int {
 		return cmp.Or(cmp.Compare(fieldRank(a.ID), fieldRank(b.ID)), strings.Compare(a.Name, b.Name))
 	})
 	return out
@@ -237,7 +243,7 @@ type userValue struct {
 
 // setValue reads the field's current value from the issue. A missing or null
 // value leaves the field empty.
-func (f *EditField) setValue(raw json.RawMessage) {
+func (f *IssueField) setValue(raw json.RawMessage) {
 	switch f.Kind {
 	case FieldNumber:
 		var n *float64
@@ -282,7 +288,7 @@ func (f *EditField) setValue(raw json.RawMessage) {
 
 // editPayload builds the "fields" object of an edit request. Empty values
 // clear the field. People are identified by account ID.
-func editPayload(fields []EditField) (map[string]any, error) {
+func editPayload(fields []IssueField) (map[string]any, error) {
 	out := make(map[string]any, len(fields))
 	for _, f := range fields {
 		text := strings.TrimSpace(f.Text)

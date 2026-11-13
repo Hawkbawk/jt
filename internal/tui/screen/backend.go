@@ -3,6 +3,7 @@ package screen
 import (
 	"github.com/hawkbawk/jt/internal/components/issueassign"
 	"github.com/hawkbawk/jt/internal/components/issuecomments"
+	"github.com/hawkbawk/jt/internal/components/issuecreate"
 	"github.com/hawkbawk/jt/internal/components/issueedit"
 	"github.com/hawkbawk/jt/internal/components/issuemove"
 	"github.com/hawkbawk/jt/internal/components/issueview"
@@ -16,5 +17,6 @@ type IssueBackend interface {
 	issuemove.Backend
 	issueassign.Backend
 	issueedit.Backend
+	issuecreate.Backend
 	IssueURL(key string) string
 }

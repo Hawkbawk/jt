@@ -12,7 +12,7 @@ import (
 // form field's own bindings; the other fields say which footer to show.
 type searchKeyMap struct {
 	listNavigate, topBottom, viewResult, comments, commands, move, assign key.Binding
-	edit, yank, open, refresh, theme, back, help, quit                    key.Binding
+	edit, create, yank, open, refresh, theme, back, help, quit            key.Binding
 	search, jqlSearch, switchMode, showFilters, focusResults              key.Binding
 
 	form                        []key.Binding
@@ -23,7 +23,7 @@ func newSearchKeys() searchKeyMap {
 	k := keys.Get()
 	return searchKeyMap{
 		listNavigate: k.ListNavigate, topBottom: k.TopBottom, viewResult: k.ViewResult,
-		comments: k.Comments, commands: k.Commands, move: k.Move, assign: k.Assign, edit: k.Edit, yank: k.Yank,
+		comments: k.Comments, commands: k.Commands, move: k.Move, assign: k.Assign, edit: k.Edit, create: k.Create, yank: k.Yank,
 		open: k.Open, refresh: k.Refresh, theme: k.Theme, back: k.Back, help: k.Help, quit: k.Quit,
 		search:       keys.Describe(k.Send, "search"),
 		jqlSearch:    keys.Describe(k.Accept, "search"),
@@ -59,7 +59,7 @@ func (k searchKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.listNavigate, k.topBottom, k.back},
 		{k.viewResult, k.comments, k.edit, k.move, k.assign},
-		{k.commands, k.yank, k.open, k.refresh, k.theme},
+		{k.create, k.commands, k.yank, k.open, k.refresh, k.theme},
 		{k.help, k.quit},
 	}
 }

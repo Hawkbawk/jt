@@ -10,6 +10,7 @@ import (
 	"github.com/hawkbawk/jt/internal/components/boardpicker"
 	"github.com/hawkbawk/jt/internal/components/commandpicker"
 	"github.com/hawkbawk/jt/internal/components/filterpicker"
+	"github.com/hawkbawk/jt/internal/components/issuecreate"
 	"github.com/hawkbawk/jt/internal/components/projectpicker"
 	"github.com/hawkbawk/jt/internal/components/themepicker"
 	"github.com/hawkbawk/jt/internal/config"
@@ -166,8 +167,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screen.ActionDoneMsg:
 		m.Status = msg.Display()
+		return m, nil
 	}
-	return m, nil
+	// What's left may be a result the program sends straight to the screen, such
+	// as the editor a form ran, so the open modal gets to see it.
+	return m, m.UpdateModal(msg)
 }
 
 // selectBoard opens the picked board.
@@ -232,6 +236,12 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if key.Matches(msg, keys.Get().Theme) {
 		return m, modal.Open(themepicker.New())
+	}
+	if key.Matches(msg, keys.Get().Create) {
+		if project := m.board.project; project != "" {
+			return m, modal.Open(issuecreate.NewForProject(m.board.backend, project))
+		}
+		return m, modal.Open(issuecreate.New(m.board.backend, m.board.backend.DefaultProject()))
 	}
 	if key.Matches(msg, keys.Get().Boards) && m.board.nav != nil {
 		return m, modal.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))

@@ -1,4 +1,4 @@
-package issueedit
+package fieldform
 
 import (
 	"charm.land/huh/v2"
@@ -8,11 +8,6 @@ import (
 	"github.com/hawkbawk/jt/internal/components/userselect"
 	"github.com/hawkbawk/jt/internal/jira"
 )
-
-// searchUsers looks up people who can be put on the issue.
-func searchUsers(b Backend, issueKey string) usersearch.Func {
-	return func(query string) ([]jira.Option, error) { return b.SearchUsers(issueKey, query) }
-}
 
 // isUser reports whether the field picks people by searching for them.
 func (v *fieldValue) isUser() bool {

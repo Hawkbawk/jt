@@ -2,6 +2,7 @@ package search
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -533,6 +534,21 @@ func TestSearchCommentAndEditShortcuts(t *testing.T) {
 	m = tuitest.PressDrain(t, m, "esc", "e")
 	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Edit · DEMO-2") {
 		t.Fatalf("edit shortcut should use the hovered result: %T", m.Modal.Content())
+	}
+}
+
+func TestSearchCreateOpensOnTheDefaultProject(t *testing.T) {
+	t.Parallel()
+	m, fb := searched(t)
+	fb.ProjectList = []jira.Project{{Key: "DEMO", Name: "Demo"}}
+	fb.CreateTypes = map[string][]jira.IssueType{"DEMO": {{ID: "1", Name: "Task"}}}
+	m = tuitest.PressDrain(t, m, "n")
+	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Select a project") {
+		t.Fatalf("n should open the create modal on the project list")
+	}
+	m = tuitest.PressDrain(t, m, "enter")
+	if !strings.Contains(m.View().Content, "Task") || !slices.Equal(fb.CreateTypeCalls, []string{"DEMO"}) {
+		t.Fatalf("n should open the create modal for DEMO, calls = %v", fb.CreateTypeCalls)
 	}
 }
 

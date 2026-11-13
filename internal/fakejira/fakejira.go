@@ -38,7 +38,7 @@ type Backend struct {
 	users    []user
 	projects []jira.Project
 	boards   []board
-	fields   []jira.EditField
+	fields   []jira.IssueField
 	issues   []*issue
 }
 
@@ -288,14 +288,14 @@ func (b *Backend) AddComment(key, body string) error {
 }
 
 // EditFields lists the editable fields with the issue's current values.
-func (b *Backend) EditFields(iss jira.Issue) ([]jira.EditField, error) {
+func (b *Backend) EditFields(iss jira.Issue) ([]jira.IssueField, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	stored, err := b.issue(iss.Key)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]jira.EditField, 0, len(b.fields))
+	out := make([]jira.IssueField, 0, len(b.fields))
 	for _, def := range b.fields {
 		f := def
 		f.Options = slices.Clone(def.Options)
@@ -311,7 +311,7 @@ func (b *Backend) EditFields(iss jira.Issue) ([]jira.EditField, error) {
 }
 
 // Edit sets the given fields. Nothing changes unless every value is valid.
-func (b *Backend) Edit(key string, fields []jira.EditField) error {
+func (b *Backend) Edit(key string, fields []jira.IssueField) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	iss, err := b.issue(key)
@@ -320,7 +320,7 @@ func (b *Backend) Edit(key string, fields []jira.EditField) error {
 	}
 	updates := make(map[string]value, len(fields))
 	for _, f := range fields {
-		i := slices.IndexFunc(b.fields, func(def jira.EditField) bool { return def.ID == f.ID })
+		i := slices.IndexFunc(b.fields, func(def jira.IssueField) bool { return def.ID == f.ID })
 		if i < 0 {
 			return fmt.Errorf("field %q cannot be set", f.ID)
 		}
@@ -335,7 +335,7 @@ func (b *Backend) Edit(key string, fields []jira.EditField) error {
 	return nil
 }
 
-func (b *Backend) validate(def, f jira.EditField) (value, error) {
+func (b *Backend) validate(def, f jira.IssueField) (value, error) {
 	text := strings.TrimSpace(f.Text)
 	switch def.Kind {
 	case jira.FieldText, jira.FieldTextArea:

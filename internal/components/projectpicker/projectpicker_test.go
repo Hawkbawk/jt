@@ -54,3 +54,17 @@ func TestEnterReportsSelection(t *testing.T) {
 		t.Fatal("enter did nothing")
 	}
 }
+
+func TestSelectPutsCursorOnProjectOnceLoaded(t *testing.T) {
+	p := New(fakeSource{}, nil, true)
+	p.Select("BETA")
+	p.Init()
+	p.Update(p.load()())
+	if got := p.list.Index(); got != 1 {
+		t.Fatalf("cursor at %d, want 1", got)
+	}
+	p.Select("NOPE")
+	if got := p.list.Index(); got != 1 {
+		t.Fatalf("unknown key moved the cursor to %d", got)
+	}
+}

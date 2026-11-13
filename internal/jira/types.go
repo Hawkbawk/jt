@@ -25,6 +25,12 @@ type Issue struct {
 	Priority string
 }
 
+// IssueType is a kind of issue that can be created in a project.
+type IssueType struct {
+	ID   string
+	Name string
+}
+
 // BoardSummary is a board as listed for a project, without its issues.
 type BoardSummary struct {
 	ID   int
@@ -133,11 +139,11 @@ func Names(opts []Option) []string {
 	return names
 }
 
-// EditField is a field that can be edited on an issue, with its current value.
+// IssueField is a field that can be edited on an issue, with its current value.
 // Text holds the value of text, number and date kinds. Chosen holds the
 // options picked for select and user kinds, or the labels of a labels field,
 // each label being both the ID and name of its option.
-type EditField struct {
+type IssueField struct {
 	ID       string
 	Name     string
 	Kind     FieldKind
