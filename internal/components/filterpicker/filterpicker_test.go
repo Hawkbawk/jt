@@ -33,16 +33,46 @@ func newPicker(quick, assignees []jira.Filter, active *jira.Filter) *Picker {
 	return p
 }
 
-// press sends each key to p and returns the command from the last one.
+// press sends each key to p and feeds the commands it returns back to p, so
+// searches finish. It returns a command that yields the close, if one came.
 func press(t *testing.T, p *Picker, keys ...string) tea.Cmd {
 	t.Helper()
-	var cmd tea.Cmd
+	var closed tea.Cmd
 	for _, k := range keys {
-		var m tea.Model
-		m, cmd = p.Update(keyMsg(k))
-		*p = *m.(*Picker)
+		_, cmd := p.Update(keyMsg(k))
+		if c := feed(p, cmd); c != nil {
+			closed = c
+		}
 	}
-	return cmd
+	return closed
+}
+
+// feed runs cmd and the commands it leads to, and returns a command for the
+// close if one came.
+func feed(p *Picker, cmd tea.Cmd) tea.Cmd {
+	var closed tea.Cmd
+	queue := []tea.Cmd{cmd}
+	for steps := 0; len(queue) > 0 && steps < 100; steps++ {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		msg, ok := tuitest.RunCmd(c)
+		if !ok {
+			continue
+		}
+		switch msg := msg.(type) {
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		case modal.Closes:
+			closed = func() tea.Msg { return msg }
+		default:
+			_, next := p.Update(msg)
+			queue = append(queue, next)
+		}
+	}
+	return closed
 }
 
 // settle runs cmd and the commands it leads to, feeding their messages back to
@@ -81,8 +111,8 @@ func testFilters() ([]jira.Filter, []jira.Filter) {
 func TestOpensOnActiveFilter(t *testing.T) {
 	quick, assignees := testFilters()
 	p := newPicker(quick, assignees, &assignees[0])
-	if p.tab != 1 || p.cursor != 1 {
-		t.Fatalf("tab, cursor = %d, %d; want the assignees tab on Alice", p.tab, p.cursor)
+	if p.tab != 1 || p.current().Index() != 1 {
+		t.Fatalf("tab, cursor = %d, %d; want the assignees tab on Alice", p.tab, p.current().Index())
 	}
 }
 
@@ -106,7 +136,7 @@ func TestSwitchesBetweenTabs(t *testing.T) {
 		t.Error("assignees should not show on the quick filters tab")
 	}
 
-	press(t, p, "tab")
+	press(t, p, "l")
 	if v := view(p); !strings.Contains(v, "Alice") || strings.Contains(v, "Only Bugs") {
 		t.Error("tab should switch to the assignees list")
 	}
@@ -190,30 +220,30 @@ func TestSearchNoMatchesAndCancel(t *testing.T) {
 	}
 }
 
-func TestEscapeStopsAndClearsSearch(t *testing.T) {
+func TestEscapeCancelsSearchBeforeClosing(t *testing.T) {
 	quick, assignees := testFilters()
 	p := newPicker(quick, assignees, nil)
-	press(t, p, "/", "b", "u", "g", "esc")
-	v := view(p)
-	if p.Filtering() || !strings.Contains(v, "Only Bugs") || strings.Contains(v, "Recent") {
-		t.Fatal("esc should stop editing the search and keep the matching options")
+	press(t, p, "/", "b", "u", "g")
+	if v := view(p); !strings.Contains(v, "esc cancel search") || strings.Contains(v, "esc close") {
+		t.Fatal("help should show cancel search while typing a query")
 	}
-	if !strings.Contains(v, "esc clear search") || strings.Contains(v, "esc close") {
-		t.Fatal("help should show the form's clear-search binding, not close")
-	}
-
 	if _, ok := settle(p, press(t, p, "esc")); ok {
-		t.Fatal("a second esc should clear the search without closing")
+		t.Fatal("esc should cancel the search without closing")
 	}
-	v = view(p)
-	if !strings.Contains(v, "Recent") || !strings.Contains(v, "All issues") {
-		t.Fatal("the cleared search should show every option")
-	}
-	if !strings.Contains(v, "esc close") {
-		t.Fatal("help should show close after the search is cleared")
+	v := view(p)
+	if p.Filtering() || !strings.Contains(v, "Recent") || !strings.Contains(v, "All issues") || !strings.Contains(v, "esc close") {
+		t.Fatal("cancelling should show every option and the close help")
 	}
 	if _, ok := settle(p, press(t, p, "esc")); !ok {
 		t.Fatal("esc without a search should close")
+	}
+}
+
+func TestQClosesWhenNotSearching(t *testing.T) {
+	quick, assignees := testFilters()
+	p := newPicker(quick, assignees, nil)
+	if _, ok := settle(p, press(t, p, "q")); !ok {
+		t.Fatal("q should close")
 	}
 }
 
@@ -221,15 +251,15 @@ func TestHelpFollowsSearchState(t *testing.T) {
 	quick, assignees := testFilters()
 	p := newPicker(quick, assignees, nil)
 	v := view(p)
-	for _, want := range []string{"tab next", "shift+tab prev", "/ search", "enter apply", "esc close"} {
+	for _, want := range []string{"j/k navigate", "h/l switch menu", "/ search", "enter apply", "esc close"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("help missing %q", want)
 		}
 	}
 	press(t, p, "/")
 	v = view(p)
-	if !strings.Contains(v, "esc stop search") || strings.Contains(v, "esc close") || strings.Contains(v, "/ search") {
-		t.Fatal("help should show stop-search while editing the query")
+	if !strings.Contains(v, "esc cancel search") || strings.Contains(v, "esc close") || strings.Contains(v, "/ search") {
+		t.Fatal("help should show cancel-search while editing the query")
 	}
 }
 
