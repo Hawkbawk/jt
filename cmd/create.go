@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,8 +14,8 @@ var createCmd = &cobra.Command{
 	Use:     "create [project]",
 	Aliases: []string{"new"},
 	Short:   "Create an issue.",
-	Long: `Create an issue. The project defaults to the default project, and you can
-change it, and pick the issue type, before filling in the fields.`,
+	Long: `Create an issue. Without a project, you pick one from a list that starts on
+the default project. Then pick the issue type and fill in the fields.`,
 	Example: "  jt create\n  jt create ABC",
 	Args:    cobra.MaximumNArgs(1),
 	RunE:    runCreate,
@@ -24,14 +25,21 @@ func init() {
 	rootCmd.AddCommand(createCmd)
 }
 
-func runCreate(_ *cobra.Command, args []string) error {
+func runCreate(cmd *cobra.Command, args []string) error {
 	backend, _, err := openBackend()
 	if err != nil {
 		return err
 	}
-	project := backend.DefaultProject()
+	content := issuecreate.New(backend, backend.DefaultProject())
 	if len(args) == 1 {
-		project = strings.ToUpper(args[0])
+		content = issuecreate.NewForProject(backend, strings.ToUpper(args[0]))
 	}
-	return run(standalone.New(issuecreate.New(backend, project)))
+	final, err := runModel(standalone.New(content))
+	if err != nil {
+		return err
+	}
+	if s, ok := final.(standalone.Model); ok && s.Result() != nil {
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), s.Result().Status())
+	}
+	return err
 }

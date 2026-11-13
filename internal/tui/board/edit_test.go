@@ -114,7 +114,7 @@ func TestAssignErrorKeepsModalOpenForRetry(t *testing.T) {
 	}
 }
 
-func TestCreateOpensOnTheBoardsProject(t *testing.T) {
+func TestCreateOpensOnTheBoardsProjectTypes(t *testing.T) {
 	m, fb := issueModel(t)
 	fb.ProjectList = []jira.Project{{Key: "TEST", Name: "Test"}}
 	fb.CreateTypes = map[string][]jira.IssueType{"TEST": {{ID: "1", Name: "Task"}}}
@@ -122,10 +122,9 @@ func TestCreateOpensOnTheBoardsProject(t *testing.T) {
 	fb.CreatedKey = "TEST-9"
 
 	m = tuitest.PressDrain(t, m, "n")
-	if !m.Modal.IsOpen() || !strings.Contains(m.View().Content, "Select a project") {
-		t.Fatalf("n should open the create modal on the project list")
+	if !m.Modal.IsOpen() || strings.Contains(m.View().Content, "Select a project") {
+		t.Fatalf("n should skip the project list")
 	}
-	m = tuitest.PressDrain(t, m, "enter")
 	if !strings.Contains(m.View().Content, "Issue type") || !slices.Equal(fb.CreateTypeCalls, []string{"TEST"}) {
 		t.Fatalf("n should open the create modal for TEST, calls = %v", fb.CreateTypeCalls)
 	}

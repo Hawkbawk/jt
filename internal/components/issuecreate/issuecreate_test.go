@@ -308,3 +308,24 @@ var errNope = errString("nope")
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestNewForProjectSkipsProjectList(t *testing.T) {
+	d := &host{t: t, m: NewForProject(newBackend(), "DEMO")}
+	d.send(tea.WindowSizeMsg{Width: 96, Height: 28})
+	d.drain(d.m.Init())
+	if d.m.stage != stageType || d.m.project != "DEMO" {
+		t.Fatalf("stage = %v, project = %q, want the type stage in DEMO", d.m.stage, d.m.project)
+	}
+	d.send(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !d.closed {
+		t.Error("esc on the type stage should close, not return to the project list")
+	}
+
+	d = &host{t: t, m: NewForProject(newBackend(), "DEMO")}
+	d.send(tea.WindowSizeMsg{Width: 96, Height: 28})
+	d.drain(d.m.Init())
+	d.send(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if !d.closed {
+		t.Error("q on the type stage should close")
+	}
+}

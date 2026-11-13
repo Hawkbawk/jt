@@ -238,11 +238,10 @@ func (m Model) handleBoardKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, modal.Open(themepicker.New())
 	}
 	if key.Matches(msg, keys.Get().Create) {
-		project := m.board.project
-		if project == "" {
-			project = m.board.backend.DefaultProject()
+		if project := m.board.project; project != "" {
+			return m, modal.Open(issuecreate.NewForProject(m.board.backend, project))
 		}
-		return m, modal.Open(issuecreate.New(m.board.backend, project))
+		return m, modal.Open(issuecreate.New(m.board.backend, m.board.backend.DefaultProject()))
 	}
 	if key.Matches(msg, keys.Get().Boards) && m.board.nav != nil {
 		return m, modal.Open(boardpicker.New(m.board.backend, m.board.project, m.board.nav.board.ID))

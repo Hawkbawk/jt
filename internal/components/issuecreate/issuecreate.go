@@ -111,6 +111,7 @@ type Model struct {
 
 	types   []jira.IssueType
 	project string
+	direct  bool
 	itype   jira.IssueType
 	form    *huh.Form
 
@@ -135,8 +136,21 @@ func New(b Backend, project string) *Model {
 	return m
 }
 
+// NewForProject returns the modal that creates an issue in project, skipping
+// the project list. It loads the issue types when it opens.
+func NewForProject(b Backend, project string) *Model {
+	m := New(b, project)
+	m.direct, m.project, m.loadingTypes = true, project, true
+	return m
+}
+
 // Init implements tea.Model.
-func (p *Model) Init() tea.Cmd { return p.picker.Init() }
+func (p *Model) Init() tea.Cmd {
+	if p.direct {
+		return tea.Batch(p.loadTypes(p.project), p.spin.Tick)
+	}
+	return p.picker.Init()
+}
 
 func (p *Model) loadTypes(project string) tea.Cmd {
 	b := p.backend
@@ -175,7 +189,7 @@ func (p *Model) buildTypeForm() tea.Cmd {
 		opts[i] = huh.NewOption(t.Name, t)
 	}
 	p.itype = jira.IssueType{}
-	sel := huh.NewSelect[jira.IssueType]().Title("Issue type").Options(opts...).Height(listHeight(len(opts))).Value(&p.itype)
+	sel := huh.NewSelect[jira.IssueType]().Title("Issue type").Options(opts...).Height(listHeight(len(opts), p.height-pane.BodyLines)).Value(&p.itype)
 	p.form = pane.NewForm(sel)
 	return p.form.Init()
 }
@@ -188,8 +202,14 @@ func noTypes(project string, types []jira.IssueType) error {
 	return fmt.Errorf("no issue types can be created in %s", project)
 }
 
-// listHeight is the height of a select with n options and its title.
-func listHeight(n int) int { return min(max(n, 1), 6) + 1 }
+// listHeight is the height of a select with n options and its title, which
+// shows every option when avail lines allow it.
+func listHeight(n, avail int) int {
+	if avail <= 0 {
+		avail = 7
+	}
+	return max(2, min(n+1, avail))
+}
 
 // Update implements tea.Model.
 func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -219,6 +239,12 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 	}
 	switch p.stage {
 	case stageProject:
+		if p.direct {
+			if key.Matches(km, p.keys.Blur) || key.Matches(km, keys.Get().Quit) {
+				return tuimsg.Close()
+			}
+			return nil
+		}
 		if p.loadingTypes {
 			if key.Matches(km, p.keys.Blur) {
 				return tuimsg.Close()
@@ -231,7 +257,12 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 		return p.update(km)
 	case stageType:
 		switch {
+		case p.direct && key.Matches(km, keys.Get().Quit):
+			return tuimsg.Close()
 		case key.Matches(km, p.keys.Blur):
+			if p.direct {
+				return tuimsg.Close()
+			}
 			p.stage, p.err, p.form = stageProject, nil, nil
 			return nil
 		}
@@ -368,6 +399,9 @@ func (p *Model) submit() tea.Cmd {
 
 // Title implements modal.Titled.
 func (p *Model) Title() string {
+	if p.direct && p.stage == stageProject {
+		return "Create · " + p.project
+	}
 	switch p.stage {
 	case stageType:
 		return "Create · " + p.project
@@ -399,7 +433,10 @@ func (p *Model) View() tea.View {
 	p.help.SetWidth(p.width)
 	spin := p.spin.View()
 	if p.stage == stageProject {
-		lines := []string{p.picker.View().Content}
+		var lines []string
+		if !p.direct {
+			lines = append(lines, p.picker.View().Content)
+		}
 		if p.err != nil || p.loadingTypes {
 			lines = append(lines, pane.StatusLine(spin, p.width, p.err, p.loadingTypes, "Loading issue types…", ""))
 		}
