@@ -87,7 +87,6 @@ type confirmKind int
 
 const (
 	confirmNone confirmKind = iota
-	confirmClose
 	confirmBack
 )
 
@@ -96,7 +95,6 @@ const (
 type Model struct {
 	keys     fieldform.KeyMap
 	typeKeys pane.KeyMap
-	back     key.Binding
 	backend  Backend
 	picker   *projectpicker.Picker
 	spin     spinner.Model
@@ -126,14 +124,14 @@ func New(b Backend, project string) *Model {
 	k := keys.Get()
 	m := &Model{
 		backend: b, spin: pane.NewSpinner(), help: styles.Help(),
-		keys: fieldform.NewKeyMap(), back: keys.Describe(k.PrevTab, "back"),
+		keys: fieldform.NewKeyMap(),
 	}
 	m.picker = projectpicker.New(b, nil, true)
 	m.picker.Select(project)
 	m.keys.SaveLabel, m.keys.DismissLabel = "create", "back"
 	m.typeKeys = pane.NewKeyMap(keys.Describe(k.Dismiss, "back")).
 		WithLead(k.ListNavigate, keys.Describe(k.Accept, "continue"))
-	m.fields.Help("create", m.back)
+	m.fields.Help("create", "back")
 	return m
 }
 
@@ -227,14 +225,15 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 			}
 			return nil
 		}
+		if key.Matches(km, keys.Get().Quit) && !p.picker.Filtering() {
+			return tuimsg.Close()
+		}
 		return p.update(km)
 	case stageType:
 		switch {
-		case key.Matches(km, p.keys.Blur), key.Matches(km, p.back):
+		case key.Matches(km, p.keys.Blur):
 			p.stage, p.err, p.form = stageProject, nil, nil
 			return nil
-		case key.Matches(km, p.keys.Close):
-			return tuimsg.Close()
 		}
 		return p.update(km)
 	}
@@ -243,18 +242,12 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 	}
 	switch {
 	case p.fields.Capturing():
-	case key.Matches(km, p.keys.Blur), key.Matches(km, p.back):
+	case key.Matches(km, p.keys.Blur):
 		if p.unsaved() > 0 {
 			p.confirm = confirmBack
 			return nil
 		}
 		return p.goBack()
-	case key.Matches(km, p.keys.Close):
-		if p.unsaved() > 0 {
-			p.confirm = confirmClose
-			return nil
-		}
-		return tuimsg.Close()
 	}
 	return p.update(km)
 }
@@ -262,12 +255,8 @@ func (p *Model) updateKey(km tea.KeyPressMsg) tea.Cmd {
 func (p *Model) updateConfirm(km tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(km, p.keys.Confirm):
-		was := p.confirm
 		p.confirm = confirmNone
-		if was == confirmBack {
-			return p.goBack()
-		}
-		return tuimsg.Close()
+		return p.goBack()
 	case key.Matches(km, p.keys.Deny):
 		p.confirm = confirmNone
 	case key.Matches(km, p.keys.Send):

@@ -154,6 +154,7 @@ func newList(km keyMap) list.Model {
 	l := list.New(nil, styles.ListDelegate(), 0, 0)
 	l.Title = "Select a project"
 	l.Styles.Title = styles.Title()
+	l.Help = styles.Help()
 	// The list re-enables its own bindings, so quitting is removed by giving
 	// those bindings no keys; jt handles quitting itself.
 	l.KeyMap.Quit = key.NewBinding()
@@ -227,6 +228,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, cmd
 	case tuimsg.ThemeChanged:
 		p.list.Styles.Title = styles.Title()
+		p.list.Help = styles.Help()
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
 	case DefaultChanged:

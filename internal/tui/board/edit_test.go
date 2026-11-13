@@ -6,7 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/hawkbawk/jt/internal/jira"
+	"github.com/hawkbawk/jt/internal/tui/modal"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 	"github.com/hawkbawk/jt/internal/tui/tuitest"
 )
 
@@ -132,5 +136,28 @@ func TestCreateOpensOnTheBoardsProject(t *testing.T) {
 	}
 	if !strings.Contains(m.Status, "Created TEST-9") {
 		t.Errorf("status = %q", m.Status)
+	}
+}
+
+type recorder struct{ got []tea.Msg }
+
+func (r *recorder) Init() tea.Cmd { return nil }
+
+func (r *recorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	r.got = append(r.got, msg)
+	return r, nil
+}
+
+func (r *recorder) View() tea.View { return tea.NewView("") }
+
+type stray struct{}
+
+func TestMessagesTheScreenDoesNotHandleReachTheModal(t *testing.T) {
+	m, _ := issueModel(t)
+	rec := &recorder{}
+	m = tuitest.Drain(t, m, modal.Open(rec))
+	tuitest.Drain(t, m, tuimsg.Send(stray{}))
+	if !slices.Contains(rec.got, tea.Msg(stray{})) {
+		t.Fatalf("modal got %v", rec.got)
 	}
 }

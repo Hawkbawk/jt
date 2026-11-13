@@ -207,8 +207,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Status = msg.Display()
 		return m, nil
 	}
+	// What's left may be a result the program sends straight to the screen, such
+	// as the editor a form ran, so the open modal gets to see it too.
 	cmd := m.updateForm(msg)
-	return m, cmd
+	return m, tea.Batch(cmd, m.UpdateModal(msg))
 }
 
 func (m Model) currentJQL() (string, error) {

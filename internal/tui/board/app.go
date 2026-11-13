@@ -167,8 +167,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screen.ActionDoneMsg:
 		m.Status = msg.Display()
+		return m, nil
 	}
-	return m, nil
+	// What's left may be a result the program sends straight to the screen, such
+	// as the editor a form ran, so the open modal gets to see it.
+	return m, m.UpdateModal(msg)
 }
 
 // selectBoard opens the picked board.

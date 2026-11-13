@@ -221,26 +221,41 @@ func TestCreateErrorKeepsValuesForRetry(t *testing.T) {
 	}
 }
 
-func TestBackReturnsToIssueTypeThenProject(t *testing.T) {
+func TestShiftTabDoesNotChangeScreens(t *testing.T) {
 	h := newHost(t, newBackend(), "DEMO")
-	h.press("enter", "enter", "shift+tab")
-	if h.m.stage != stageType || h.closed {
+	h.press("enter", "shift+tab")
+	if h.m.stage != stageType {
+		t.Fatalf("stage = %v", h.m.stage)
+	}
+	h.press("enter", "shift+tab")
+	if h.m.stage != stageFields || h.closed {
 		t.Fatalf("stage = %v closed = %v", h.m.stage, h.closed)
-	}
-	if v := h.view(); !strings.Contains(v, "Issue type") {
-		t.Fatalf("expected the issue type form:\n%s", v)
-	}
-	h.press("shift+tab")
-	if h.m.stage != stageProject || !strings.Contains(h.view(), "Select a project") {
-		t.Fatalf("expected the project list, stage = %v\n%s", h.m.stage, h.view())
 	}
 }
 
-func TestBackWithEnteredValuesAsksFirst(t *testing.T) {
+func TestQClosesOnlyTheProjectList(t *testing.T) {
+	h := newHost(t, newBackend(), "DEMO")
+	h.press("enter", "q")
+	if h.closed || h.m.stage != stageType {
+		t.Fatalf("q shouldn't close the issue type screen, closed=%v stage=%v", h.closed, h.m.stage)
+	}
+	h.press("enter", "q")
+	if h.closed || h.m.stage != stageFields {
+		t.Fatalf("q shouldn't close the fields, closed=%v stage=%v", h.closed, h.m.stage)
+	}
+
+	h = newHost(t, newBackend(), "DEMO")
+	h.press("q")
+	if !h.closed {
+		t.Fatal("q should close the project list")
+	}
+}
+
+func TestEscWithEnteredValuesAsksFirst(t *testing.T) {
 	h := newHost(t, newBackend(), "DEMO")
 	h.press("enter", "enter")
 	h.fillSummary("Draft")
-	h.press("shift+tab")
+	h.press("esc")
 	if h.m.stage != stageFields || h.m.confirm != confirmBack {
 		t.Fatalf("expected a confirmation, stage = %v confirm = %v", h.m.stage, h.m.confirm)
 	}
@@ -248,7 +263,7 @@ func TestBackWithEnteredValuesAsksFirst(t *testing.T) {
 	if h.m.stage != stageFields || h.m.confirm != confirmNone {
 		t.Fatal("n should keep editing")
 	}
-	h.press("shift+tab", "y")
+	h.press("esc", "y")
 	if h.m.stage != stageType {
 		t.Fatal("y should go back")
 	}
@@ -267,28 +282,6 @@ func TestEscGoesBackOneStageAndClosesFromTheProjectList(t *testing.T) {
 	h.press("esc")
 	if !h.closed {
 		t.Fatal("esc on the project list should close")
-	}
-}
-
-func TestEscAsksBeforeDroppingEnteredValues(t *testing.T) {
-	h := newHost(t, newBackend(), "DEMO")
-	h.press("enter", "enter")
-	h.fillSummary("Draft")
-	h.press("esc")
-	if h.closed || h.m.confirm != confirmBack {
-		t.Fatal("esc should ask before dropping what was entered")
-	}
-	h.press("y")
-	if h.closed || h.m.stage != stageType {
-		t.Fatalf("y should go back, closed=%v stage=%v", h.closed, h.m.stage)
-	}
-}
-
-func TestQuitKeyClosesFromTheFields(t *testing.T) {
-	h := newHost(t, newBackend(), "DEMO")
-	h.press("enter", "enter", "q")
-	if !h.closed {
-		t.Fatal("q should close")
 	}
 }
 

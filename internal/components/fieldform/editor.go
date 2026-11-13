@@ -36,11 +36,11 @@ type Editor struct {
 	formH int
 }
 
-// Help sets what the save key is called and which keys besides the usual ones
-// the help lists while browsing fields.
-func (e *Editor) Help(saveLabel string, extra ...key.Binding) {
+// Help sets what the save and dismiss keys are called and which keys besides
+// the usual ones the help lists while browsing fields.
+func (e *Editor) Help(saveLabel, dismissLabel string, extra ...key.Binding) {
 	e.keys = NewKeyMap()
-	e.keys.SaveLabel, e.keys.Extra = saveLabel, extra
+	e.keys.SaveLabel, e.keys.DismissLabel, e.keys.Extra = saveLabel, dismissLabel, extra
 }
 
 // Load replaces the fields with fields. search finds the people for user

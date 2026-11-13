@@ -104,6 +104,7 @@ func New(src Source, project string, current int) *Picker {
 	l := list.New(nil, styles.ListDelegate(), 0, 0)
 	l.Title = "Select a board"
 	l.Styles.Title = styles.Title()
+	l.Help = styles.Help()
 	l.KeyMap.Quit = key.NewBinding()
 	l.KeyMap.ForceQuit = key.NewBinding()
 	l.AdditionalShortHelpKeys = func() []key.Binding {
@@ -168,6 +169,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, cmd
 	case tuimsg.ThemeChanged:
 		p.list.Styles.Title = styles.Title()
+		p.list.Help = styles.Help()
 		p.list.SetDelegate(styles.ListDelegate())
 		return p, nil
 	case loadedMsg:
