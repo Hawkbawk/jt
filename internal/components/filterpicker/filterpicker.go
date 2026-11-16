@@ -8,8 +8,8 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -32,14 +32,19 @@ func (SelectedMsg) ClosesModal() {}
 // keyMap is the picker's key bindings.
 type keyMap struct {
 	pane.KeyMap
-	nextTab, prevTab, left, right, blur key.Binding
+	nextTab, prevTab, left, right, stop key.Binding
+	tabs, navigate, apply, search       key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
+	apply := keys.Describe(k.Accept, "apply")
+	search := keys.Describe(k.ListFilter, "search")
 	return keyMap{
-		KeyMap:  pane.NewKeyMap(k.Close).WithLead(k.NextTab, k.PrevTab),
-		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right, blur: k.Dismiss,
+		KeyMap:  pane.NewKeyMap(k.Close),
+		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right,
+		stop: keys.Describe(k.Dismiss, "cancel search"),
+		tabs: k.SwitchTab, navigate: k.ListNavigate, apply: apply, search: search,
 	}
 }
 
@@ -47,15 +52,13 @@ type tab struct {
 	name    string
 	empty   string
 	filters []jira.Filter
+	list    list.Model
 }
 
 // Picker lists the board's quick filters and assignees on separate tabs. Each
 // tab starts with an entry that clears the filter.
 type Picker struct {
 	keys          keyMap
-	cursor        int
-	selectField   *huh.Select[int]
-	form          *huh.Form
 	tabs          []tab
 	tab           int
 	active        *jira.Filter
@@ -72,10 +75,22 @@ func New(quick, assignees []jira.Filter, active *jira.Filter) *Picker {
 		},
 		active: active,
 	}
+	for i := range p.tabs {
+		p.tabs[i].list = p.newList(p.tabs[i])
+	}
 	// Open on the tab holding the active filter, else the first with options.
 	p.tab = p.tabWithActive()
-	p.buildForm()
 	return p
+}
+
+func (p *Picker) newList(t tab) list.Model {
+	names := []string{"All issues"}
+	for _, f := range t.filters {
+		names = append(names, f.Name)
+	}
+	l := pane.NewLabelList(pane.Labels(names), 0, 0)
+	l.Select(p.activeIn(t))
+	return l
 }
 
 func (p *Picker) tabWithActive() int {
@@ -102,70 +117,82 @@ func (p *Picker) activeIn(t tab) int {
 
 func (p *Picker) switchTab(delta int) {
 	p.tab = (p.tab + delta + len(p.tabs)) % len(p.tabs)
-	p.buildForm()
+	t := &p.tabs[p.tab]
+	t.list = p.newList(*t)
+	p.sizeLists()
 }
 
-func (p *Picker) buildForm() {
-	t := p.tabs[p.tab]
-	p.cursor = p.activeIn(t)
-	opts := []huh.Option[int]{huh.NewOption("All issues", 0)}
-	for i, f := range t.filters {
-		opts = append(opts, huh.NewOption(f.Name, i+1))
+func (p *Picker) sizeLists() {
+	for i := range p.tabs {
+		p.tabs[i].list.SetSize(p.width, max(1, p.height-3))
 	}
-	p.selectField = huh.NewSelect[int]().Title("Select a filter").Options(opts...).Value(&p.cursor)
-	if len(t.filters) == 0 {
-		p.selectField.Description(t.empty)
-	}
-	p.form = pane.NewForm(p.selectField)
-	km := huh.NewDefaultKeyMap()
-	km.Quit = key.NewBinding(key.WithDisabled())
-	km.Select.Filter.SetHelp("/", "search")
-	km.Select.SetFilter.SetHelp("esc", "stop search")
-	km.Select.ClearFilter.SetHelp("esc", "clear search")
-	km.Select.Submit.SetHelp("enter", "apply")
-	p.form.WithKeyMap(km)
 }
+
+func (p *Picker) current() *list.Model { return &p.tabs[p.tab].list }
 
 // Filtering reports whether the user is typing a search.
-func (p *Picker) Filtering() bool { return p.selectField.GetFiltering() }
+func (p *Picker) Filtering() bool { return p.current().FilterState() == list.Filtering }
 
 // Init implements tea.Model.
-func (p *Picker) Init() tea.Cmd { return p.form.Init() }
+func (p *Picker) Init() tea.Cmd { return nil }
 
 // Update implements tea.Model.
 func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if size, ok := msg.(tea.WindowSizeMsg); ok {
-		p.width, p.height = size.Width, size.Height
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.width, p.height = msg.Width, msg.Height
+		p.sizeLists()
 		return p, nil
-	}
-	if km, ok := msg.(tea.KeyPressMsg); ok {
-		switch {
-		case key.Matches(km, p.keys.blur) && p.consumesEsc():
-			_, cmd := p.form.Update(msg)
-			return p, cmd
-		case !p.Filtering() && key.Matches(km, p.keys.Close()):
-			return p, tuimsg.Close()
-		case key.Matches(km, p.keys.nextTab) || (!p.Filtering() && key.Matches(km, p.keys.right)):
-			p.switchTab(1)
-			return p, p.form.Init()
-		case key.Matches(km, p.keys.prevTab) || (!p.Filtering() && key.Matches(km, p.keys.left)):
-			p.switchTab(-1)
-			return p, p.form.Init()
+	case tuimsg.ThemeChanged:
+		for i := range p.tabs {
+			p.tabs[i].list.SetDelegate(pane.LabelDelegate())
 		}
+		return p, nil
+	case tea.KeyPressMsg:
+		return p.handleKey(msg)
 	}
-	_, cmd := p.form.Update(msg)
-	if p.form.State == huh.StateCompleted {
-		var sel *jira.Filter
-		if p.cursor > 0 {
-			sel = &p.tabs[p.tab].filters[p.cursor-1]
-		}
-		return p, tuimsg.Send(SelectedMsg{Filter: sel})
-	}
-	return p, cmd
+	return p, p.forward(msg)
 }
 
-func (p *Picker) consumesEsc() bool {
-	return key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.selectField.KeyBinds()...)
+func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	l := p.current()
+	switch {
+	case key.Matches(msg, p.keys.nextTab) || (!p.Filtering() && key.Matches(msg, p.keys.right)):
+		p.switchTab(1)
+		return p, nil
+	case key.Matches(msg, p.keys.prevTab) || (!p.Filtering() && key.Matches(msg, p.keys.left)):
+		p.switchTab(-1)
+		return p, nil
+	case p.Filtering() && key.Matches(msg, p.keys.apply):
+		return p, p.apply()
+	case p.Filtering():
+		return p, p.forward(msg)
+	case key.Matches(msg, p.keys.Close()) && !l.IsFiltered():
+		return p, tuimsg.Close()
+	case key.Matches(msg, p.keys.apply):
+		return p, p.apply()
+	}
+	return p, p.forward(msg)
+}
+
+// apply reports the highlighted row. Searching with no matches has no row, so
+// nothing is applied.
+func (p *Picker) apply() tea.Cmd {
+	l := p.current()
+	if l.SelectedItem() == nil {
+		return nil
+	}
+	var sel *jira.Filter
+	if row := l.GlobalIndex(); row > 0 {
+		sel = &p.tabs[p.tab].filters[row-1]
+	}
+	return tuimsg.Send(SelectedMsg{Filter: sel})
+}
+
+func (p *Picker) forward(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	*p.current(), cmd = p.current().Update(msg)
+	return cmd
 }
 
 // View implements tea.Model.
@@ -178,11 +205,20 @@ func (p *Picker) View() tea.View {
 		}
 		tabs[i] = style.Render(t.name)
 	}
-	p.form.WithWidth(p.width).WithHeight(max(1, p.height-2))
-	return tea.NewView(strings.Join([]string{strings.Join(tabs, ""), "", p.form.View()}, "\n"))
+	t := p.tabs[p.tab]
+	lines := []string{strings.Join(tabs, ""), ""}
+	if len(t.filters) == 0 {
+		lines = append(lines, styles.Dim().Render(t.empty))
+	}
+	lines = append(lines, t.list.View())
+	return tea.NewView(strings.Join(lines, "\n"))
 }
 
 // Footer implements modal.Footed.
 func (p *Picker) Footer() (string, help.KeyMap) {
-	return "", p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
+	k := p.keys.KeyMap
+	if p.Filtering() {
+		return "", k.WithLead(p.keys.stop, p.keys.apply).WithCloseShown(false)
+	}
+	return "", k.WithLead(p.keys.navigate, p.keys.tabs, p.keys.apply, p.keys.search)
 }

@@ -8,9 +8,9 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/huh/v2"
 
 	"github.com/hawkbawk/jt/internal/components/pane"
 	"github.com/hawkbawk/jt/internal/jira"
@@ -45,8 +45,19 @@ func (m Moved) IssueKey() string { return m.Key }
 // Status implements tuimsg.Finished.
 func (m Moved) Status() string { return "Moved " + m.Key + " to " + m.To }
 
-func newKeyMap() pane.KeyMap {
-	return pane.NewKeyMap(keys.Describe(keys.Get().Close, "cancel"))
+// keyMap is the modal's key bindings.
+type keyMap struct {
+	pane.KeyMap
+	navigate, apply, search, stop key.Binding
+}
+
+func newKeyMap() keyMap {
+	k := keys.Get()
+	return keyMap{
+		KeyMap:   pane.NewKeyMap(keys.Describe(k.Close, "cancel")),
+		navigate: k.ListNavigate, apply: keys.Describe(k.Accept, "apply"),
+		search: keys.Describe(k.ListFilter, "search"), stop: keys.Describe(k.Dismiss, "cancel search"),
+	}
 }
 
 type transitionsLoadedMsg struct {
@@ -70,16 +81,14 @@ func loadTransitions(b Backend, iss jira.Issue) tea.Cmd {
 
 // Model lists the transitions available for an issue.
 type Model struct {
-	keys    pane.KeyMap
+	keys    keyMap
 	issue   jira.Issue
 	backend Backend
 	spin    spinner.Model
 
 	width, height int
 	transitions   []jira.Transition
-	choice        int
-	selectField   *huh.Select[int]
-	form          *huh.Form
+	list          list.Model
 	loaded        bool
 	applying      bool
 	err           error
@@ -99,21 +108,19 @@ func (p *Model) loading() bool {
 	return (!p.loaded && p.err == nil) || p.applying
 }
 
-func (p *Model) buildForm() {
-	opts := make([]huh.Option[int], len(p.transitions))
+func (p *Model) buildList() {
+	labels := make([]string, len(p.transitions))
 	for i, t := range p.transitions {
-		opts[i] = huh.NewOption(t.Label(), i)
+		labels[i] = t.Label()
 	}
-	p.selectField = huh.NewSelect[int]().Title("Select a transition").Options(opts...).Value(&p.choice)
-	p.form = pane.NewForm(p.selectField)
-	km := huh.NewDefaultKeyMap()
-	km.Quit = key.NewBinding(key.WithDisabled())
-	km.Select.Filter.SetHelp("/", "search")
-	km.Select.SetFilter.SetHelp("esc", "stop search")
-	km.Select.ClearFilter.SetHelp("esc", "clear search")
-	km.Select.Submit.SetHelp("enter", "apply")
-	p.form.WithKeyMap(km)
+	p.list = pane.NewLabelList(pane.Labels(labels), p.width, p.listHeight())
 }
+
+func (p *Model) listHeight() int { return max(1, p.height-pane.BodyLines) }
+
+func (p *Model) hasList() bool { return len(p.transitions) > 0 }
+
+func (p *Model) filtering() bool { return p.hasList() && p.list.FilterState() == list.Filtering }
 
 // Update implements tea.Model.
 func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -126,49 +133,56 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		p.width, p.height = msg.Width, msg.Height
+		if p.hasList() {
+			p.list.SetSize(p.width, p.listHeight())
+		}
 		return nil
 	case spinner.TickMsg:
 		return pane.Tick(&p.spin, msg, p.loading())
 	case transitionsLoadedMsg:
 		p.transitions, p.err, p.loaded = msg.transitions, msg.err, true
-		if len(p.transitions) == 0 {
-			return nil
+		if p.hasList() {
+			p.buildList()
 		}
-		p.buildForm()
-		return p.form.Init()
+		return nil
 	case transitionDoneMsg:
 		p.applying, p.err = false, msg.err
 		if msg.err == nil {
 			return tuimsg.Send(Moved{Key: msg.key, To: msg.to})
 		}
-		// The form finished to send the move, so a retry needs a new one.
-		p.buildForm()
-		return p.form.Init()
+		return nil
 	case tea.KeyPressMsg:
-		if p.form == nil || (!p.consumesEsc() && key.Matches(msg, p.keys.Close())) {
-			if key.Matches(msg, p.keys.Close()) {
-				return tuimsg.Close()
+		if p.filtering() && !key.Matches(msg, p.keys.apply) {
+			return p.forward(msg)
+		}
+		switch {
+		case key.Matches(msg, p.keys.Close()) && (!p.hasList() || !p.list.IsFiltered()):
+			return tuimsg.Close()
+		case key.Matches(msg, p.keys.apply) && p.hasList() && !p.applying:
+			if p.list.SelectedItem() == nil {
+				return nil
 			}
-			return nil
+			return p.apply(p.transitions[p.list.GlobalIndex()])
 		}
 	}
-	if p.form == nil || p.applying {
+	return p.forward(msg)
+}
+
+func (p *Model) forward(msg tea.Msg) tea.Cmd {
+	if !p.hasList() || p.applying {
 		return nil
 	}
-	_, cmd := p.form.Update(msg)
-	if p.form.State != huh.StateCompleted {
-		return cmd
-	}
+	var cmd tea.Cmd
+	p.list, cmd = p.list.Update(msg)
+	return cmd
+}
+
+func (p *Model) apply(t jira.Transition) tea.Cmd {
 	p.applying, p.err = true, nil
-	t := p.transitions[p.choice]
 	b, issueKey := p.backend, p.issue.Key
 	return func() tea.Msg {
 		return transitionDoneMsg{key: issueKey, to: t.To, err: b.Transition(issueKey, t.ID)}
 	}
-}
-
-func (p *Model) consumesEsc() bool {
-	return p.selectField != nil && key.Matches(tea.KeyPressMsg{Code: tea.KeyEsc}, p.selectField.KeyBinds()...)
 }
 
 // Title implements modal.Titled.
@@ -176,10 +190,13 @@ func (p *Model) Title() string { return pane.Title("Move", p.issue.Key) }
 
 // Footer implements modal.Footed.
 func (p *Model) Footer() (string, help.KeyMap) {
-	if p.form == nil {
-		return "", p.keys
+	switch {
+	case p.filtering():
+		return "", p.keys.WithLead(p.keys.stop, p.keys.apply).WithCloseShown(false)
+	case p.hasList():
+		return "", p.keys.WithLead(p.keys.navigate, p.keys.apply, p.keys.search)
 	}
-	return "", p.keys.WithForm(p.selectField.KeyBinds(), p.consumesEsc())
+	return "", p.keys.KeyMap
 }
 
 // View implements tea.Model.
@@ -188,11 +205,10 @@ func (p *Model) View() tea.View {
 	switch {
 	case !p.loaded && p.err == nil:
 		body = append(body, p.spin.View()+" Loading transitions…")
-	case p.form == nil && p.err == nil:
+	case !p.hasList() && p.err == nil:
 		body = append(body, styles.Dim().Render("No transitions available."))
-	case p.form != nil:
-		p.form.WithWidth(p.width).WithHeight(max(1, p.height-pane.BodyLines))
-		body = append(body, p.form.View())
+	case p.hasList():
+		body = append(body, p.list.View())
 	}
 	body = append(body, "", pane.StatusLine(p.spin.View(), p.width, p.err, p.applying, "Moving…", ""))
 	return tea.NewView(strings.Join(body, "\n"))

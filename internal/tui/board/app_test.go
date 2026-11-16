@@ -307,3 +307,12 @@ func TestHelpKeyTogglesFullHelp(t *testing.T) {
 		t.Fatal("second ? should hide the full help")
 	}
 }
+
+func TestEscapeClosesFullHelpOnly(t *testing.T) {
+	m, _ := loadedModel(t)
+	m, _ = press(t, m, "?")
+	m, cmd := press(t, m, "esc")
+	if m.Help.ShowAll || cmd != nil {
+		t.Fatal("esc should only close the full help")
+	}
+}

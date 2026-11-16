@@ -32,6 +32,7 @@ type Map struct {
 	// Derived by Derive; changes to them are overwritten.
 	Close                                          key.Binding // Dismiss, plus Quit
 	Navigate, ListNavigate, TopBottom, Scroll      key.Binding // help summaries of movement
+	SwitchTab                                      key.Binding // help summary of changing tabs
 	Back, ViewResult                               key.Binding
 	ToList, ToSearch, ListUp, ListDown, ToggleUser key.Binding // the user search field
 
@@ -63,8 +64,8 @@ func Default() Map {
 		Filter:   key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
 		Theme:    key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Refresh:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		Projects: key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "projects")),
-		Boards:   key.NewBinding(key.WithKeys("ctrl+b"), key.WithHelp("ctrl+b", "boards")),
+		Projects: key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "projects")),
+		Boards:   key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "boards")),
 		Quit:     key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		Favorite: key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "favorite")),
 		Reset:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reset")),
@@ -112,6 +113,7 @@ func (m Map) Derive() Map {
 
 	m.Navigate = summary(label(m.Left)+label(m.Down)+label(m.Up)+label(m.Right), "navigate", m.Left, m.Down, m.Up, m.Right)
 	m.ListNavigate = summary(label(m.Down)+"/"+label(m.Up), "navigate", m.Down, m.Up)
+	m.SwitchTab = summary(label(m.Left)+"/"+label(m.Right), "switch menu", m.Left, m.Right, m.PrevTab, m.NextTab)
 	m.TopBottom = summary(label(m.Top)+"/"+label(m.Bottom), "top/bottom", m.Top, m.Bottom)
 	m.Scroll = summary(arrow(m.Up)+arrow(m.Down), "scroll", m.Up, m.Down)
 

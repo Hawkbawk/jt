@@ -370,6 +370,10 @@ func (m *Model) updateForm(msg tea.Msg) tea.Cmd {
 }
 
 func (m Model) handleResultsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.DismissHelp(msg) {
+		m.fit()
+		return m, nil
+	}
 	switch {
 	case key.Matches(msg, keys.Get().Quit):
 		return m, tea.Quit

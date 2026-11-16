@@ -57,16 +57,16 @@ func TestCtrlPFromBoardIsCancellable(t *testing.T) {
 	m := newTestModel(t, "TEST", fb)
 	m = tuitest.Drain(t, m, m.Init())
 
-	m = tuitest.PressDrain(t, m, "ctrl+p")
+	m = tuitest.PressDrain(t, m, "p")
 	if !projects(t, m).Cancellable() {
-		t.Fatal("ctrl+p should open a cancellable picker")
+		t.Fatal("p should open a cancellable picker")
 	}
 	m = tuitest.PressDrain(t, m, "esc")
 	if m.Modal.IsOpen() || m.board.nav == nil || m.board.project != "TEST" {
 		t.Fatal("esc should return to the current board")
 	}
 
-	m, _ = pressOpen(t, m, "ctrl+p")
+	m, _ = pressOpen(t, m, "p")
 	if !projects(t, m).Loaded() {
 		t.Fatal("projects should be cached after the first load")
 	}
@@ -92,7 +92,7 @@ func TestFilterThenOpen(t *testing.T) {
 
 func TestKeysIgnoredWhileProjectsLoad(t *testing.T) {
 	m := newTestModel(t, "", pickerBackend())
-	m, _ = pressOpen(t, m, "ctrl+p")
+	m, _ = pressOpen(t, m, "p")
 	m, _ = press(t, m, "/", "x")
 	if projects(t, m).Filtering() {
 		t.Fatal("filter started before projects loaded")

@@ -57,7 +57,7 @@ type keyMap struct {
 func newKeyMap() keyMap {
 	k := keys.Get()
 	open := keys.Describe(k.Accept, "open")
-	return keyMap{KeyMap: pane.NewKeyMap(k.Dismiss).WithLead(open, k.Favorite), open: open, favorite: k.Favorite}
+	return keyMap{KeyMap: pane.NewKeyMap(k.Close).WithLead(open, k.Favorite), open: open, favorite: k.Favorite}
 }
 
 type item struct {

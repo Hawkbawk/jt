@@ -193,14 +193,9 @@ func (p *Model) buildTypeList() tea.Cmd {
 			selected = i
 		}
 	}
-	l := list.New(items, typeDelegate(), p.width, max(1, p.height-pane.BodyLines))
-	l.SetShowTitle(false)
-	l.SetShowHelp(false)
-	l.SetShowStatusBar(false)
+	l := pane.NewLabelList(items, p.width, max(1, p.height-pane.BodyLines))
 	l.SetShowFilter(false)
 	l.SetFilteringEnabled(false)
-	l.KeyMap.Quit = key.NewBinding()
-	l.KeyMap.ForceQuit = key.NewBinding()
 	l.Select(selected)
 	p.list = l
 	return nil
@@ -211,13 +206,6 @@ type typeItem jira.IssueType
 func (i typeItem) Title() string       { return i.Name }
 func (i typeItem) Description() string { return "" }
 func (i typeItem) FilterValue() string { return i.Name }
-
-func typeDelegate() list.DefaultDelegate {
-	d := styles.ListDelegate()
-	d.ShowDescription = false
-	d.SetSpacing(0)
-	return d
-}
 
 // noTypes is the error for a project that can't create anything, or nil.
 func noTypes(project string, types []jira.IssueType) error {
@@ -240,7 +228,7 @@ func (p *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(pane.Tick(&p.spin, msg, p.loading()), pickerTick)
 	case tuimsg.ThemeChanged:
 		_, cmd = p.picker.Update(msg)
-		p.list.SetDelegate(typeDelegate())
+		p.list.SetDelegate(pane.LabelDelegate())
 		cmd = tea.Batch(cmd, p.update(msg))
 	case tea.KeyPressMsg:
 		cmd = p.updateKey(msg)
