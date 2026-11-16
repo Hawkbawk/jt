@@ -55,15 +55,6 @@ type tab struct {
 	list    list.Model
 }
 
-// item is a row: a filter, or the entry that clears it when filter is nil.
-type item struct {
-	name string
-}
-
-func (i item) Title() string       { return i.name }
-func (i item) Description() string { return "" }
-func (i item) FilterValue() string { return i.name }
-
 // Picker lists the board's quick filters and assignees on separate tabs. Each
 // tab starts with an entry that clears the filter.
 type Picker struct {
@@ -93,19 +84,11 @@ func New(quick, assignees []jira.Filter, active *jira.Filter) *Picker {
 }
 
 func (p *Picker) newList(t tab) list.Model {
-	items := []list.Item{item{name: "All issues"}}
+	names := []string{"All issues"}
 	for _, f := range t.filters {
-		items = append(items, item{name: f.Name})
+		names = append(names, f.Name)
 	}
-	d := styles.ListDelegate()
-	d.ShowDescription = false
-	d.SetSpacing(0)
-	l := list.New(items, d, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowHelp(false)
-	l.SetShowStatusBar(false)
-	l.KeyMap.Quit = key.NewBinding()
-	l.KeyMap.ForceQuit = key.NewBinding()
+	l := pane.NewLabelList(pane.Labels(names), 0, 0)
 	l.Select(p.activeIn(t))
 	return l
 }
@@ -162,10 +145,7 @@ func (p *Picker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return p, nil
 	case tuimsg.ThemeChanged:
 		for i := range p.tabs {
-			d := styles.ListDelegate()
-			d.ShowDescription = false
-			d.SetSpacing(0)
-			p.tabs[i].list.SetDelegate(d)
+			p.tabs[i].list.SetDelegate(pane.LabelDelegate())
 		}
 		return p, nil
 	case tea.KeyPressMsg:
@@ -199,7 +179,7 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // nothing is applied.
 func (p *Picker) apply() tea.Cmd {
 	l := p.current()
-	if _, ok := l.SelectedItem().(item); !ok {
+	if l.SelectedItem() == nil {
 		return nil
 	}
 	var sel *jira.Filter

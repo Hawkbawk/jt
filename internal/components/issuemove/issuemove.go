@@ -60,14 +60,6 @@ func newKeyMap() keyMap {
 	}
 }
 
-type item struct {
-	transition jira.Transition
-}
-
-func (i item) Title() string       { return i.transition.Label() }
-func (i item) Description() string { return "" }
-func (i item) FilterValue() string { return i.transition.Label() }
-
 type transitionsLoadedMsg struct {
 	key         string
 	transitions []jira.Transition
@@ -117,20 +109,11 @@ func (p *Model) loading() bool {
 }
 
 func (p *Model) buildList() {
-	items := make([]list.Item, len(p.transitions))
+	labels := make([]string, len(p.transitions))
 	for i, t := range p.transitions {
-		items[i] = item{transition: t}
+		labels[i] = t.Label()
 	}
-	d := styles.ListDelegate()
-	d.ShowDescription = false
-	d.SetSpacing(0)
-	l := list.New(items, d, p.width, p.listHeight())
-	l.SetShowTitle(false)
-	l.SetShowHelp(false)
-	l.SetShowStatusBar(false)
-	l.KeyMap.Quit = key.NewBinding()
-	l.KeyMap.ForceQuit = key.NewBinding()
-	p.list = l
+	p.list = pane.NewLabelList(pane.Labels(labels), p.width, p.listHeight())
 }
 
 func (p *Model) listHeight() int { return max(1, p.height-pane.BodyLines) }
@@ -176,11 +159,10 @@ func (p *Model) update(msg tea.Msg) tea.Cmd {
 		case key.Matches(msg, p.keys.Close()) && (!p.hasList() || !p.list.IsFiltered()):
 			return tuimsg.Close()
 		case key.Matches(msg, p.keys.apply) && p.hasList() && !p.applying:
-			sel, ok := p.list.SelectedItem().(item)
-			if !ok {
+			if p.list.SelectedItem() == nil {
 				return nil
 			}
-			return p.apply(sel.transition)
+			return p.apply(p.transitions[p.list.GlobalIndex()])
 		}
 	}
 	return p.forward(msg)
