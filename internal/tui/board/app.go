@@ -85,8 +85,7 @@ func (m Model) busy() bool {
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, status, handled := commandpicker.Handle(m.board.backend, msg); handled {
-		m.Status = status
-		return m, cmd
+		return m, m.CommandStatus(msg, status, cmd)
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(k)
@@ -96,8 +95,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tuimsg.Finished:
-		m.Status = msg.Status()
-		return m, m.RunWithSpinner(m.board.reload(msg.IssueKey()))
+		notify := m.Notify(msg.Status(), screen.StatusTime)
+		return m, tea.Batch(notify, m.RunWithSpinner(m.board.reload(msg.IssueKey())))
 
 	case tea.WindowSizeMsg:
 		return m, m.Resize(msg, m.keys)
@@ -110,7 +109,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.SelectTheme(msg)
 
 	case screen.ThemeSavedMsg:
-		m.OnThemeSaved(msg)
+		return m, m.OnThemeSaved(msg)
+
+	case screen.StatusExpiredMsg:
+		m.ExpireStatus(msg)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -131,31 +133,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case boardpicker.FavoriteMsg:
 		if m.board.project != m.board.backend.DefaultProject() {
-			m.Status = styles.Warn().Render("Only the default project's board can be the default")
-			return m, nil
+			return m, m.Notify(styles.Warn().Render("Only the default project's board can be the default"), screen.StatusTime)
 		}
 		return m, saveBoard(m.settings, msg.ID)
 
 	case boardSavedMsg:
 		if msg.err != nil {
-			m.Status = styles.Error().Render("saving board: " + msg.err.Error())
-		} else {
-			m.board.backend.SetDefaultBoard(msg.id)
-			m.Status = styles.Dim().Render("Saved as the default board")
+			return m, m.Notify(styles.Error().Render("saving board: "+msg.err.Error()), screen.StatusTime)
 		}
-		return m, nil
+		m.board.backend.SetDefaultBoard(msg.id)
+		return m, m.Notify(styles.Dim().Render("Saved as the default board"), screen.StatusTime)
 
 	case projectpicker.FavoriteMsg:
 		return m, saveProject(m.settings, msg.Key)
 
 	case projectSavedMsg:
 		if msg.err != nil {
-			m.Status = styles.Error().Render("saving project: " + msg.err.Error())
-			return m, nil
+			return m, m.Notify(styles.Error().Render("saving project: "+msg.err.Error()), screen.StatusTime)
 		}
 		m.board.backend.SetDefaultProject(msg.key)
-		m.Status = styles.Dim().Render("Saved " + msg.key + " as the default project")
-		return m, m.UpdateModal(projectpicker.DefaultChanged{})
+		notify := m.Notify(styles.Dim().Render("Saved "+msg.key+" as the default project"), screen.StatusTime)
+		return m, tea.Batch(notify, m.UpdateModal(projectpicker.DefaultChanged{}))
 
 	case boardLoadedMsg:
 		m.board.update(msg)
@@ -166,8 +164,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.RunWithSpinner(m.board.setFilter(msg.Filter))
 
 	case screen.ActionDoneMsg:
-		m.Status = msg.Display()
-		return m, nil
+		return m, m.Notify(msg.Display(), screen.StatusTime)
 	}
 	// What's left may be a result the program sends straight to the screen, such
 	// as the editor a form ran, so the open modal gets to see it.

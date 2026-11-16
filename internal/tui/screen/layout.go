@@ -4,6 +4,7 @@ package screen
 
 import (
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -18,6 +19,7 @@ import (
 	"github.com/hawkbawk/jt/internal/keys"
 	"github.com/hawkbawk/jt/internal/styles"
 	"github.com/hawkbawk/jt/internal/tui/modal"
+	"github.com/hawkbawk/jt/internal/tui/tuimsg"
 )
 
 // Layout is the state and behavior the jt screens share: the window size,
@@ -28,6 +30,7 @@ type Layout struct {
 	Width, Height int
 	Spinner       spinner.Model
 	Status        string
+	statusSeq     int
 	Help          help.Model
 
 	Modal modal.Model
@@ -41,6 +44,44 @@ func NewLayout(settings Settings) Layout {
 		Spinner:  pane.NewSpinner(),
 		Help:     styles.Help(),
 		Modal:    modal.New(modal.WithStyle(styles.Modal), modal.WithTitleStyle(styles.Title), modal.WithHelp(styles.Help)),
+	}
+}
+
+// StatusTime is how long a routine status stays in the footer.
+const StatusTime = 5 * time.Second
+
+// StatusExpiredMsg tells the screen that the timer for a status ran out. Screens
+// pass it to Layout.ExpireStatus.
+type StatusExpiredMsg struct{ seq int }
+
+// Notify shows text in the status line and returns the command that clears it
+// after d.
+func (c *Layout) Notify(text string, d time.Duration) tea.Cmd {
+	c.Status = text
+	c.statusSeq++
+	if text == "" {
+		return nil
+	}
+	seq := c.statusSeq
+	return tea.Tick(d, func(time.Time) tea.Msg { return StatusExpiredMsg{seq: seq} })
+}
+
+// CommandStatus shows the status a command message produced next to the
+// command it started. The progress shown while a command loads stays until the
+// result replaces it, and any other status expires.
+func (c *Layout) CommandStatus(msg tea.Msg, status string, cmd tea.Cmd) tea.Cmd {
+	if _, preparing := msg.(tuimsg.CommandSelected); preparing || status == "" {
+		c.Status = status
+		c.statusSeq++
+		return cmd
+	}
+	return tea.Batch(cmd, c.Notify(status, StatusTime))
+}
+
+// ExpireStatus clears the status if the timer is the latest one set.
+func (c *Layout) ExpireStatus(msg StatusExpiredMsg) {
+	if c.statusSeq == msg.seq {
+		c.Status = ""
 	}
 }
 
@@ -78,10 +119,11 @@ func (c *Layout) SelectTheme(msg themepicker.SelectedMsg) tea.Cmd {
 }
 
 // OnThemeSaved handles the outcome of saving the theme.
-func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) {
+func (c *Layout) OnThemeSaved(msg ThemeSavedMsg) tea.Cmd {
 	if msg.Err != nil {
-		c.Status = styles.Error().Render("saving theme: " + msg.Err.Error())
+		return c.Notify(styles.Error().Render("saving theme: "+msg.Err.Error()), StatusTime)
 	}
+	return nil
 }
 
 // UpdateModal passes msg to the modal host, which gives the content anything

@@ -132,8 +132,7 @@ func (m *Model) fit() {
 // Update implements tea.Model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, status, handled := commandpicker.Handle(m.backend, msg); handled {
-		m.Status = status
-		return m, cmd
+		return m, m.CommandStatus(msg, status, cmd)
 	}
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		return m.handleKey(k)
@@ -148,17 +147,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case issuecreate.Created:
-		m.Status = msg.Status()
+		notify := m.Notify(msg.Status(), screen.StatusTime)
 		if m.lastJQL == "" || m.searching {
-			return m, nil
+			return m, notify
 		}
 		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
-		return m, m.search(m.lastJQL)
+		return m, tea.Batch(notify, m.search(m.lastJQL))
 
 	case tuimsg.Finished:
-		m.Status = msg.Status()
+		notify := m.Notify(msg.Status(), screen.StatusTime)
 		m.refocus = &resultCursor{key: msg.IssueKey(), index: m.results.table.GetHighlightedRowIndex()}
-		return m, m.search(m.lastJQL)
+		return m, tea.Batch(notify, m.search(m.lastJQL))
 
 	case tea.WindowSizeMsg:
 		modalCmd := m.Resize(msg, m.helpView())
@@ -175,7 +174,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case screen.ThemeSavedMsg:
-		m.OnThemeSaved(msg)
+		return m, m.OnThemeSaved(msg)
+
+	case screen.StatusExpiredMsg:
+		m.ExpireStatus(msg)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -183,8 +185,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case issueTypesLoadedMsg:
 		if msg.err != nil {
-			m.Status = styles.Error().Render("loading issue types: " + msg.err.Error())
-			return m, nil
+			return m, m.Notify(styles.Error().Render("loading issue types: "+msg.err.Error()), screen.StatusTime)
 		}
 		m.form.setIssueTypes(msg.types)
 		cmd := m.form.update(nil)
@@ -192,8 +193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectpicker.LoadedMsg:
 		if msg.Err != nil {
-			m.Status = styles.Error().Render("loading projects: " + msg.Err.Error())
-			return m, nil
+			return m, m.Notify(styles.Error().Render("loading projects: "+msg.Err.Error()), screen.StatusTime)
 		}
 		m.form.setProjects(msg.Projects)
 		cmd := m.form.update(nil)
@@ -204,8 +204,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case screen.ActionDoneMsg:
-		m.Status = msg.Display()
-		return m, nil
+		return m, m.Notify(msg.Display(), screen.StatusTime)
 	}
 	// What's left may be a result the program sends straight to the screen, such
 	// as the editor a form ran, so the open modal gets to see it too.
@@ -249,8 +248,7 @@ func (m *Model) submit() tea.Cmd {
 	}
 	jql, err := m.currentJQL()
 	if err != nil {
-		m.Status = styles.Error().Render(err.Error())
-		return nil
+		return m.Notify(styles.Error().Render(err.Error()), screen.StatusTime)
 	}
 	m.Status = ""
 	return m.search(jql)
