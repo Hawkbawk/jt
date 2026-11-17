@@ -165,6 +165,18 @@ func TestApplyReportsFilterAndClears(t *testing.T) {
 	}
 }
 
+func TestResetClearsActiveFilter(t *testing.T) {
+	quick, assignees := testFilters()
+	p := newPicker(quick, assignees, &assignees[0])
+	closed, ok := settle(p, press(t, p, "r"))
+	if !ok {
+		t.Fatal("r should close the modal")
+	}
+	if msg := closed.(SelectedMsg); msg.Filter != nil {
+		t.Fatalf("reset should clear the filter, got %+v", msg.Filter)
+	}
+}
+
 func TestSearchesBothLists(t *testing.T) {
 	for _, tt := range []struct {
 		name, query string
