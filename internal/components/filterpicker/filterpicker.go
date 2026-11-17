@@ -32,19 +32,20 @@ func (SelectedMsg) ClosesModal() {}
 // keyMap is the picker's key bindings.
 type keyMap struct {
 	pane.KeyMap
-	nextTab, prevTab, left, right, stop key.Binding
-	tabs, navigate, apply, search       key.Binding
+	nextTab, prevTab, left, right, stop  key.Binding
+	tabs, navigate, apply, search, reset key.Binding
 }
 
 func newKeyMap() keyMap {
 	k := keys.Get()
 	apply := keys.Describe(k.Accept, "apply")
 	search := keys.Describe(k.ListFilter, "search")
+	reset := keys.Describe(k.Reset, "reset")
 	return keyMap{
 		KeyMap:  pane.NewKeyMap(k.Close),
 		nextTab: k.NextTab, prevTab: k.PrevTab, left: k.Left, right: k.Right,
 		stop: keys.Describe(k.Dismiss, "cancel search"),
-		tabs: k.SwitchTab, navigate: k.ListNavigate, apply: apply, search: search,
+		tabs: k.SwitchTab, navigate: k.ListNavigate, apply: apply, search: search, reset: reset,
 	}
 }
 
@@ -171,6 +172,8 @@ func (p *Picker) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return p, tuimsg.Close()
 	case key.Matches(msg, p.keys.apply):
 		return p, p.apply()
+	case key.Matches(msg, p.keys.reset):
+		return p, tuimsg.Send(SelectedMsg{})
 	}
 	return p, p.forward(msg)
 }
@@ -220,5 +223,5 @@ func (p *Picker) Footer() (string, help.KeyMap) {
 	if p.Filtering() {
 		return "", k.WithLead(p.keys.stop, p.keys.apply).WithCloseShown(false)
 	}
-	return "", k.WithLead(p.keys.navigate, p.keys.tabs, p.keys.apply, p.keys.search)
+	return "", k.WithLead(p.keys.navigate, p.keys.tabs, p.keys.apply, p.keys.search, p.keys.reset)
 }
