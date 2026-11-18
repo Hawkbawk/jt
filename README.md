@@ -46,6 +46,35 @@ The flake is configured with a Cachix cache, so prebuilt binaries are available 
 
 Nix only applies a flake's cache settings for trusted users. If you see a warning about an untrusted substituter, Nix is building from source instead. To use the cache, either add your user to `trusted-users` in your Nix config and accept the flake's settings when prompted (or pass `--accept-flake-config`), or run `cachix use hawkbawk-jt` as root to add the cache system-wide.
 
+#### Home Manager
+
+The flake exports a Home Manager module:
+
+```nix
+{
+  inputs.jt.url = "github:Hawkbawk/jt";
+
+  # In your Home Manager configuration:
+  imports = [ inputs.jt.homeManagerModules.default ];
+
+  programs.jt = {
+    enable = true;
+    settings = {
+      theme = "dracula";
+      jira = {
+        server = "https://example.atlassian.net";
+        login = "you@example.com";
+        project = "ABC";
+      };
+    };
+  };
+}
+```
+
+`settings` maps to `jt.yaml`. The API token isn't part of it, so run `jt init` once to save it to the keyring.
+
+jt writes the theme, default project and board back to its settings file, so by default the module keeps the file writable. On each activation it merges `settings` into the existing file: values you declare win, and keys you don't declare (like a theme picked in jt) stay. Set `programs.jt.mutableSettings = false` to link a read-only file from the Nix store instead. jt can't save changes in that mode.
+
 ### From a release tarball
 
 Each [release](https://github.com/Hawkbawk/jt/releases) has tarballs for linux-amd64, linux-arm64, and darwin-arm64, plus a `checksums.txt`. Download the one for your platform, verify it, and put `jt` on your `PATH`:
