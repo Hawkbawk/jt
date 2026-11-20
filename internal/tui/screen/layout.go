@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	tint "github.com/lrstanley/bubbletint/v2"
 
 	"github.com/hawkbawk/jt/internal/components/pane"
@@ -160,22 +161,28 @@ func (c Layout) WithView(content string) tea.View {
 	return v
 }
 
-// HeaderView renders the title bar with the screen's parts after the name.
+// HeaderView renders the title bar with the screen's parts after the name,
+// then the status.
 func (c Layout) HeaderView(parts []string) string {
 	parts = append([]string{styles.Brand(icons.Label(icons.Jira, "jt"))}, parts...)
-	return styles.Header().Width(c.Width).Render(strings.Join(parts, styles.Dim().Render(" · ")))
+	sep := styles.Dim().Render(" · ")
+	line := strings.Join(parts, sep)
+	if c.Status != "" {
+		room := c.Width - 2 - lipgloss.Width(line) - lipgloss.Width(sep)
+		if room > 0 {
+			status := ansi.Truncate(strings.Join(strings.Fields(c.Status), " "), room, "…")
+			line += sep + styles.Notice().Render(status)
+		}
+	}
+	return styles.Header().Width(c.Width).Render(line)
 }
 
-// FooterView renders the quit prompt, or else the status and key help.
+// FooterView renders the quit prompt, or else the key help.
 func (c Layout) FooterView(km help.KeyMap) string {
 	if c.Quit.Confirming {
 		return c.Quit.View()
 	}
-	prefix := ""
-	if c.Status != "" {
-		prefix = c.Status + styles.Dim().Render(" · ")
-	}
-	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + c.helpText(km, lipgloss.Width(prefix)))
+	return styles.Dim().Padding(0, 1).Width(c.Width).Render(c.helpText(km))
 }
 
 // ToggleHelp shows or hides the full key help in the footer.
@@ -194,8 +201,8 @@ func (c *Layout) DismissHelp(msg tea.KeyPressMsg) bool {
 // CollapseHelp returns the footer to the short help.
 func (c *Layout) CollapseHelp() { c.Help.ShowAll = false }
 
-func (c Layout) helpText(km help.KeyMap, prefixWidth int) string {
+func (c Layout) helpText(km help.KeyMap) string {
 	h := c.Help
-	h.SetWidth(max(0, c.Width-2-prefixWidth))
+	h.SetWidth(max(0, c.Width-2))
 	return h.View(km)
 }
