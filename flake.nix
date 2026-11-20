@@ -28,7 +28,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         go = pkgs.go_latest or pkgs.go;
         buildGoModule = pkgs.buildGoModule.override { inherit go; };
-        version = "0.3.0";
+        version = "0.3.1";
       in
       {
         packages.default = buildGoModule {
