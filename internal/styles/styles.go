@@ -26,9 +26,9 @@ import (
 type set struct {
 	tint *tint.Tint
 
-	title, brand, dim, errStyle, warn, key, header lipgloss.Style
-	columnHeader, focusedColumnHeader              lipgloss.Style
-	card, selectedCard, modal, input               lipgloss.Style
+	title, brand, dim, errStyle, warn, notice, key, header lipgloss.Style
+	columnHeader, focusedColumnHeader                      lipgloss.Style
+	card, selectedCard, modal, input                       lipgloss.Style
 
 	highlight, muted, grid, accent color.Color
 	markdown                       ansi.StyleConfig
@@ -75,6 +75,7 @@ func build(t *tint.Tint) *set {
 		dim:                 lipgloss.NewStyle().Foreground(subtle),
 		errStyle:            lipgloss.NewStyle().Foreground(danger),
 		warn:                lipgloss.NewStyle().Foreground(highlight),
+		notice:              lipgloss.NewStyle().Bold(true).Foreground(accent),
 		key:                 lipgloss.NewStyle().Bold(true).Foreground(accent),
 		header:              lipgloss.NewStyle().Bold(true).Padding(0, 1),
 		highlight:           highlight,
@@ -126,6 +127,9 @@ func Error() lipgloss.Style { return get().errStyle }
 
 // Warn styles warnings and unsaved-change notices.
 func Warn() lipgloss.Style { return get().warn }
+
+// Notice styles the status line's notifications.
+func Notice() lipgloss.Style { return get().notice }
 
 // Key styles issue keys.
 func Key() lipgloss.Style { return get().key }

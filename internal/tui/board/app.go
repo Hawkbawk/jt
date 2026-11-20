@@ -142,7 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.Notify(styles.Error().Render("saving board: "+msg.err.Error()), screen.StatusTime)
 		}
 		m.board.backend.SetDefaultBoard(msg.id)
-		return m, m.Notify(styles.Dim().Render("Saved as the default board"), screen.StatusTime)
+		return m, m.Notify("Saved as the default board", screen.StatusTime)
 
 	case projectpicker.FavoriteMsg:
 		return m, saveProject(m.settings, msg.Key)
@@ -152,7 +152,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.Notify(styles.Error().Render("saving project: "+msg.err.Error()), screen.StatusTime)
 		}
 		m.board.backend.SetDefaultProject(msg.key)
-		notify := m.Notify(styles.Dim().Render("Saved "+msg.key+" as the default project"), screen.StatusTime)
+		notify := m.Notify("Saved "+msg.key+" as the default project", screen.StatusTime)
 		return m, tea.Batch(notify, m.UpdateModal(projectpicker.DefaultChanged{}))
 
 	case boardLoadedMsg:

@@ -193,7 +193,7 @@ func Handle(b Backend, msg tea.Msg) (tea.Cmd, string, bool) {
 		if msg.Err != nil {
 			return nil, styles.Error().Render(msg.Status()), true
 		}
-		return nil, styles.Dim().Render(msg.Status()), true
+		return nil, msg.Status(), true
 	default:
 		return nil, "", false
 	}

@@ -173,7 +173,7 @@ func (c Layout) FooterView(km help.KeyMap) string {
 	}
 	prefix := ""
 	if c.Status != "" {
-		prefix = c.Status + styles.Dim().Render(" · ")
+		prefix = styles.Notice().Render(c.Status) + styles.Dim().Render(" · ")
 	}
 	return styles.Dim().Padding(0, 1).Width(c.Width).Render(prefix + c.helpText(km, lipgloss.Width(prefix)))
 }
